@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { CheckCircle, AlertCircle, Wallet, CreditCard, Shield, UserCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
+import { getMinimumCautionAmount } from '@shared/utils';
 import Checkout from './Checkout';
 
 interface WalletInfo {
@@ -30,20 +31,8 @@ export default function KYCOnboarding() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   
-  // Helper function to get minimum amount based on user profile
-  const getMinimumAmount = (profileType: string): number => {
-    switch (profileType) {
-      case 'creator':      // Porteurs
-      case 'admin':        // Infoporteurs
-        return 10;
-      case 'investor':     // Investisseurs  
-      case 'invested_reader': // Investi-lecteurs
-      default:
-        return 20;
-    }
-  };
-
-  const minimumAmount = getMinimumAmount(user?.profileType || 'investor');
+  // Function getMinimumCautionAmount is now imported from @shared/utils
+  const minimumAmount = getMinimumCautionAmount(user?.profileType || 'investor');
   const [depositAmount, setDepositAmount] = useState(minimumAmount.toString());
   const [currentStep, setCurrentStep] = useState(1);
   const [showStripeCheckout, setShowStripeCheckout] = useState(false);

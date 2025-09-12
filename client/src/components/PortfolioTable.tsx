@@ -1,4 +1,5 @@
 import React from 'react';
+import { getCategoryColor, getStatusColor, getStatusLabel } from '@shared/utils';
 import type { Investment, Project } from '@shared/schema';
 
 interface PortfolioTableProps {
@@ -11,32 +12,7 @@ export default function PortfolioTable({ investments, projects }: PortfolioTable
     return projects.find(p => p.id === projectId);
   };
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      'active': 'bg-accent/10 text-accent',
-      'completed': 'bg-secondary/10 text-secondary',
-      'pending': 'bg-muted text-muted-foreground',
-    };
-    return colors[status] || 'bg-muted text-muted-foreground';
-  };
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      'active': 'En production',
-      'completed': 'Publié',
-      'pending': 'Finalisation',
-    };
-    return labels[status] || 'Inconnu';
-  };
-
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      'documentaire': 'bg-secondary/10 text-secondary',
-      'court-métrage': 'bg-chart-4/10 text-purple-600',
-      'clip': 'bg-accent/10 text-accent',
-    };
-    return colors[category?.toLowerCase()] || 'bg-muted text-muted-foreground';
-  };
+  // Functions getStatusColor, getStatusLabel, and getCategoryColor are now imported from @shared/utils
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">

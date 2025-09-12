@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/modal';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { getMinimumCautionAmount } from '@shared/utils';
 import type { Project } from '@shared/schema';
 
 interface InvestmentModalProps {
@@ -21,18 +22,7 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
   const [amount, setAmount] = useState(10);
   const [isInvesting, setIsInvesting] = useState(false);
 
-  // Helper function to get minimum caution amount based on user profile
-  const getMinimumCautionAmount = (profileType: string): number => {
-    switch (profileType) {
-      case 'creator':      // Porteurs
-      case 'admin':        // Infoporteurs
-        return 10;
-      case 'investor':     // Investisseurs  
-      case 'invested_reader': // Investi-lecteurs
-      default:
-        return 20;
-    }
-  };
+  // Function getMinimumCautionAmount is now imported from @shared/utils
 
   const handleInvestment = async () => {
     if (!project || !user) return;
