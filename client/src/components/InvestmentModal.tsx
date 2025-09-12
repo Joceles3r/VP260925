@@ -21,6 +21,19 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
   const [amount, setAmount] = useState(10);
   const [isInvesting, setIsInvesting] = useState(false);
 
+  // Helper function to get minimum caution amount based on user profile
+  const getMinimumCautionAmount = (profileType: string): number => {
+    switch (profileType) {
+      case 'creator':      // Porteurs
+      case 'admin':        // Infoporteurs
+        return 10;
+      case 'investor':     // Investisseurs  
+      case 'invested_reader': // Investi-lecteurs
+      default:
+        return 20;
+    }
+  };
+
   const handleInvestment = async () => {
     if (!project || !user) return;
 
@@ -33,10 +46,12 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
       return;
     }
 
-    if (parseFloat(user.cautionEUR) < 20) {
+    const minimumCaution = getMinimumCautionAmount(user.profileType || 'investor');
+    const userCaution = parseFloat(String(user.cautionEUR ?? '0'));
+    if (userCaution < minimumCaution) {
       toast({
         title: "Caution insuffisante",
-        description: "Une caution minimale de €20 est requise pour investir",
+        description: `Une caution minimale de €${minimumCaution} est requise pour investir`,
         variant: "destructive",
       });
       return;
@@ -51,7 +66,7 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
       return;
     }
 
-    const userBalance = parseFloat(user.balanceEUR);
+    const userBalance = parseFloat(String(user.balanceEUR ?? '0'));
     if (userBalance < amount) {
       toast({
         title: "Solde insuffisant",
@@ -102,7 +117,7 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
                 <span className="text-sm font-medium text-accent">Mode Simulation</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Portefeuille virtuel: €{parseFloat(user.balanceEUR).toLocaleString()}
+                Portefeuille virtuel: €{parseFloat(String(user.balanceEUR ?? '0')).toLocaleString()}
               </p>
             </div>
           )}
@@ -111,8 +126,8 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
           <div className="bg-muted/30 rounded-lg p-3">
             <h4 className="font-medium text-foreground" data-testid="project-title">{project.title}</h4>
             <p className="text-sm text-muted-foreground" data-testid="project-category">{project.category}</p>
-            {project.roiEstimated && (
-              <p className="text-sm text-secondary">ROI estimé: {parseFloat(project.roiEstimated).toFixed(1)}%</p>
+            {project.roiEstimated != null && (
+              <p className="text-sm text-secondary">ROI estimé: {Number.parseFloat(String(project.roiEstimated)).toFixed(1)}%</p>
             )}
           </div>
 
