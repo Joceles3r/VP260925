@@ -77,7 +77,7 @@ export default function PortfolioTable({ investments, projects }: PortfolioTable
           <tbody className="divide-y divide-border">
             {investments.map((investment) => {
               const project = getProjectInfo(investment.projectId);
-              const roi = parseFloat(investment.roi);
+              const roi = parseFloat(investment.roi || '0');
               const roiColor = roi >= 0 ? 'text-secondary' : 'text-destructive';
               
               return (

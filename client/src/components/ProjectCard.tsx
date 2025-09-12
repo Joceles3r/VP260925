@@ -10,7 +10,7 @@ interface ProjectCardProps {
 
 export default function ProjectCard({ project, onInvest }: ProjectCardProps) {
   const progressPercentage = project.targetAmount 
-    ? (parseFloat(project.currentAmount) / parseFloat(project.targetAmount)) * 100
+    ? (parseFloat(project.currentAmount || '0') / parseFloat(project.targetAmount)) * 100
     : 0;
 
   const getCategoryColor = (category: string) => {
@@ -91,7 +91,7 @@ export default function ProjectCard({ project, onInvest }: ProjectCardProps) {
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Collecté:</span>
             <span className="font-medium text-foreground" data-testid="current-amount">
-              €{parseFloat(project.currentAmount).toLocaleString()}
+              €{parseFloat(project.currentAmount || '0').toLocaleString()}
             </span>
           </div>
           
