@@ -1,4 +1,5 @@
 import type { InsertProject } from "@shared/schema";
+import { getCategoryScore } from "@shared/utils";
 
 interface MLScoreFactors {
   categoryScore: number;
@@ -50,17 +51,7 @@ export async function mlScoreProject(project: InsertProject): Promise<number> {
   }
 }
 
-function getCategoryScore(category: string): number {
-  const categoryScores: Record<string, number> = {
-    'documentaire': 0.8,
-    'court-métrage': 0.7,
-    'clip': 0.6,
-    'animation': 0.75,
-    'live': 0.5,
-  };
-  
-  return categoryScores[category.toLowerCase()] || 0.5;
-}
+// Function getCategoryScore is now imported from @shared/utils
 
 function getTitleScore(title: string): number {
   const length = title.length;
