@@ -5,6 +5,8 @@ import {
   transactions,
   liveShows,
   complianceReports,
+  notifications,
+  notificationPreferences,
   type User,
   type UpsertUser,
   type Project,
@@ -12,9 +14,13 @@ import {
   type Transaction,
   type LiveShow,
   type ComplianceReport,
+  type Notification,
+  type NotificationPreference,
   type InsertProject,
   type InsertInvestment,
   type InsertTransaction,
+  type InsertNotification,
+  type InsertNotificationPreference,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql } from "drizzle-orm";
@@ -55,6 +61,13 @@ export interface IStorage {
   // Compliance operations
   createComplianceReport(report: Omit<ComplianceReport, 'id' | 'createdAt'>): Promise<ComplianceReport>;
   getComplianceReports(limit?: number): Promise<ComplianceReport[]>;
+  
+  // Notification operations
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: string, limit?: number, offset?: number, unreadOnly?: boolean): Promise<Notification[]>;
+  markNotificationAsRead(notificationId: string, userId: string): Promise<void>;
+  getUserNotificationPreferences(userId: string): Promise<NotificationPreference[]>;
+  updateNotificationPreferences(userId: string, preferences: Partial<NotificationPreference>[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -292,6 +305,67 @@ export class DatabaseStorage implements IStorage {
       .from(complianceReports)
       .orderBy(desc(complianceReports.createdAt))
       .limit(limit);
+  }
+
+  // Notification operations
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db.insert(notifications).values(notification).returning();
+    return newNotification;
+  }
+
+  async getUserNotifications(userId: string, limit = 50, offset = 0, unreadOnly = false): Promise<Notification[]> {
+    const query = db
+      .select()
+      .from(notifications)
+      .where(
+        unreadOnly 
+          ? and(eq(notifications.userId, userId), eq(notifications.isRead, false))
+          : eq(notifications.userId, userId)
+      )
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return await query;
+  }
+
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
+  }
+
+  async getUserNotificationPreferences(userId: string): Promise<NotificationPreference[]> {
+    return await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+  }
+
+  async updateNotificationPreferences(userId: string, preferences: Partial<NotificationPreference>[]): Promise<void> {
+    for (const pref of preferences) {
+      await db
+        .insert(notificationPreferences)
+        .values({
+          userId,
+          notificationType: pref.notificationType!,
+          enabled: pref.enabled ?? true,
+          emailEnabled: pref.emailEnabled ?? false,
+          pushEnabled: pref.pushEnabled ?? true,
+          threshold: pref.threshold
+        })
+        .onConflictDoUpdate({
+          target: [notificationPreferences.userId, notificationPreferences.notificationType],
+          set: {
+            enabled: pref.enabled,
+            emailEnabled: pref.emailEnabled,
+            pushEnabled: pref.pushEnabled,
+            threshold: pref.threshold,
+            updatedAt: new Date()
+          }
+        });
+    }
   }
 }
 

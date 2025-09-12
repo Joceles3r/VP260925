@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { Play, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import NotificationPanel from './NotificationPanel';
 
 export default function Navigation() {
   const [location] = useLocation();
@@ -68,6 +69,10 @@ export default function Navigation() {
                 </div>
               )}
             </div>
+            
+            {/* Notifications */}
+            <NotificationPanel />
+            
             <button 
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
               data-testid="settings-button"

@@ -1,13 +1,15 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, getSession } from "./replitAuth";
 import { insertProjectSchema, insertInvestmentSchema, insertTransactionSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import { mlScoreProject } from "./services/mlScoring";
 import { generateComplianceReport } from "./services/compliance";
+import { initializeWebSocket } from "./websocket";
+import { notificationService } from "./services/notificationService";
 
 // File upload configuration
 const upload = multer({
@@ -166,6 +168,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Trigger notifications
+      await notificationService.notifyNewInvestment({
+        projectId: req.body.projectId,
+        userId,
+        amount: amount.toString()
+      });
+
+      // Check for milestone notifications
+      const project = await storage.getProject(req.body.projectId);
+      if (project) {
+        const currentAmount = parseFloat(project.currentAmount || '0') + amount;
+        const targetAmount = parseFloat(project.targetAmount);
+        const percentage = (currentAmount / targetAmount) * 100;
+        
+        // Update project current amount
+        await storage.updateProject(project.id, {
+          currentAmount: currentAmount.toString(),
+          investorCount: (project.investorCount || 0) + 1
+        });
+
+        // Check for milestone notifications (25%, 50%, 75%, 100%)
+        const milestones = [25, 50, 75, 100];
+        const reachedMilestone = milestones.find(m => 
+          percentage >= m && (percentage - (amount / targetAmount) * 100) < m
+        );
+
+        if (reachedMilestone) {
+          await notificationService.notifyInvestmentMilestone({
+            projectId: req.body.projectId,
+            percentage: reachedMilestone,
+            currentAmount: currentAmount.toString(),
+            targetAmount: project.targetAmount
+          });
+
+          if (reachedMilestone === 100) {
+            await notificationService.notifyFundingGoalReached({
+              projectId: req.body.projectId
+            });
+          }
+        }
+      }
+
       res.status(201).json(investment);
     } catch (error) {
       console.error("Error creating investment:", error);
@@ -250,6 +294,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: investmentAmount.toString(),
         commission: commission.toString(),
         metadata: { liveShowId, artist, type: 'live_show' },
+      });
+
+      // Trigger notification for live show investment
+      await notificationService.notifyNewInvestment({
+        projectId: liveShowId,
+        userId: userId,
+        amount: investmentAmount.toString(),
+        metadata: { projectTitle: `Live Show Battle`, projectType: 'live_show' }
       });
 
       res.json({ success: true, message: "Investment recorded successfully" });
@@ -341,7 +393,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid status" });
       }
 
+      const project = await storage.getProject(projectId);
+      const oldStatus = project?.status || 'unknown';
+      
       const updatedProject = await storage.updateProject(projectId, { status });
+      
+      // Trigger notification for status change
+      await notificationService.notifyProjectStatusChange({
+        projectId,
+        oldStatus,
+        newStatus: status
+      });
+      
       res.json(updatedProject);
     } catch (error) {
       console.error("Error updating project status:", error);
@@ -412,5 +475,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket for real-time notifications with session middleware
+  const sessionMiddleware = getSession();
+  console.log('[VISUAL] Initializing WebSocket notification service...');
+  const wsService = initializeWebSocket(httpServer, sessionMiddleware);
+  console.log('[VISUAL] WebSocket service initialized successfully, connected users:', wsService.getConnectedUsersCount());
+  
+  // Notification routes
+  app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { limit = 50, offset = 0, unreadOnly = false } = req.query;
+      
+      const notifications = await storage.getUserNotifications(
+        userId,
+        parseInt(limit as string),
+        parseInt(offset as string),
+        unreadOnly === 'true'
+      );
+      
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notificationId = req.params.id;
+      
+      await storage.markNotificationAsRead(notificationId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.get('/api/notifications/preferences', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const preferences = await storage.getUserNotificationPreferences(userId);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+      res.status(500).json({ message: "Failed to fetch notification preferences" });
+    }
+  });
+
+  app.patch('/api/notifications/preferences', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updates = req.body;
+      
+      // Convert object updates to array format expected by storage
+      const preferencesArray = Object.keys(updates).map(notificationType => ({
+        notificationType,
+        enabled: updates[notificationType].enabled ?? true,
+        emailEnabled: updates[notificationType].emailEnabled ?? false,
+        pushEnabled: updates[notificationType].pushEnabled ?? true,
+        threshold: updates[notificationType].threshold
+      }));
+      
+      await storage.updateNotificationPreferences(userId, preferencesArray);
+      
+      // Return updated preferences
+      const updatedPreferences = await storage.getUserNotificationPreferences(userId);
+      res.json(updatedPreferences);
+    } catch (error) {
+      console.error("Error updating notification preferences:", error);
+      res.status(500).json({ message: "Failed to update notification preferences" });
+    }
+  });
+
+  
   return httpServer;
 }
