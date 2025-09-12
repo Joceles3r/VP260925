@@ -19,6 +19,19 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-06-20",
 });
 
+// Helper function to get minimum caution amount based on user profile
+function getMinimumCautionAmount(profileType: string): number {
+  switch (profileType) {
+    case 'creator':      // Porteurs
+    case 'admin':        // Infoporteurs
+      return 10;
+    case 'investor':     // Investisseurs  
+    case 'invested_reader': // Investi-lecteurs
+    default:
+      return 20;
+  }
+}
+
 // File upload configuration
 const upload = multer({
   dest: 'uploads/',
@@ -251,8 +264,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "KYC verification required for investments" });
       }
 
-      if (parseFloat(user.cautionEUR || '0') < 20) {
-        return res.status(403).json({ message: "Minimum caution of €20 required" });
+      const minimumCaution = getMinimumCautionAmount(user.profileType);
+      if (parseFloat(user.cautionEUR || '0') < minimumCaution) {
+        return res.status(403).json({ message: `Minimum caution of €${minimumCaution} required` });
       }
 
       const investmentData = insertInvestmentSchema.parse({
@@ -753,17 +767,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const depositAmount = parseFloat(amount);
       
-      if (depositAmount < 20) {
-        return res.status(400).json({ message: "Minimum deposit amount is €20" });
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const minimumAmount = getMinimumCautionAmount(user.profileType);
+      if (depositAmount < minimumAmount) {
+        return res.status(400).json({ message: `Minimum deposit amount is €${minimumAmount}` });
       }
 
       if (depositAmount > 1000) {
         return res.status(400).json({ message: "Maximum deposit amount is €1000" });
-      }
-
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
       }
 
       // Create Stripe Payment Intent
@@ -857,17 +872,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const depositAmount = parseFloat(amount);
       
-      if (depositAmount < 20) {
-        return res.status(400).json({ message: "Minimum deposit amount is €20" });
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const minimumAmount = getMinimumCautionAmount(user.profileType);
+      if (depositAmount < minimumAmount) {
+        return res.status(400).json({ message: `Minimum deposit amount is €${minimumAmount}` });
       }
 
       if (depositAmount > 1000) {
         return res.status(400).json({ message: "Maximum deposit amount is €1000" });
-      }
-
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
       }
 
       // In simulation mode, allow unlimited deposits from virtual balance
@@ -929,7 +945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalGains: parseFloat(user.totalGains || '0'),
         simulationMode: user.simulationMode,
         kycVerified: user.kycVerified,
-        canInvest: user.kycVerified && parseFloat(user.cautionEUR || '0') >= 20
+        canInvest: user.kycVerified && parseFloat(user.cautionEUR || '0') >= getMinimumCautionAmount(user.profileType)
       };
 
       res.json(walletInfo);

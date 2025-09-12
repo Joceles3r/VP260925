@@ -29,7 +29,22 @@ export default function KYCOnboarding() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const [depositAmount, setDepositAmount] = useState('20');
+  
+  // Helper function to get minimum amount based on user profile
+  const getMinimumAmount = (profileType: string): number => {
+    switch (profileType) {
+      case 'creator':      // Porteurs
+      case 'admin':        // Infoporteurs
+        return 10;
+      case 'investor':     // Investisseurs  
+      case 'invested_reader': // Investi-lecteurs
+      default:
+        return 20;
+    }
+  };
+
+  const minimumAmount = getMinimumAmount(user?.profileType || 'investor');
+  const [depositAmount, setDepositAmount] = useState(minimumAmount.toString());
   const [currentStep, setCurrentStep] = useState(1);
   const [showStripeCheckout, setShowStripeCheckout] = useState(false);
 
@@ -118,6 +133,7 @@ export default function KYCOnboarding() {
         description: "Votre profil a été mis à jour avec succès.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/wallet/balance'] });
     },
     onError: (error: any) => {
       toast({
@@ -134,10 +150,11 @@ export default function KYCOnboarding() {
 
   const handleDepositCaution = () => {
     const amount = parseFloat(depositAmount);
-    if (amount < 20) {
+    
+    if (amount < minimumAmount) {
       toast({
         title: "Montant insuffisant",
-        description: "Le montant minimum de caution est de €20.",
+        description: `Le montant minimum de caution est de €${minimumAmount}.`,
         variant: "destructive",
       });
       return;
@@ -226,7 +243,7 @@ export default function KYCOnboarding() {
               <div className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
                 <span className="font-medium">Caution</span>
-                <Badge variant={walletInfo?.cautionEUR && walletInfo.cautionEUR >= 20 ? "default" : "secondary"}>
+                <Badge variant={walletInfo?.cautionEUR && walletInfo.cautionEUR >= minimumAmount ? "default" : "secondary"}>
                   €{walletInfo?.cautionEUR?.toFixed(2) || '0.00'}
                 </Badge>
               </div>
@@ -287,7 +304,7 @@ export default function KYCOnboarding() {
           </Card>
 
           {/* Step 2: Caution Deposit */}
-          <Card className={walletInfo?.cautionEUR && walletInfo.cautionEUR >= 20 ? "border-green-200 bg-green-50 dark:bg-green-950" : ""}>
+          <Card className={walletInfo?.cautionEUR && walletInfo.cautionEUR >= minimumAmount ? "border-green-200 bg-green-50 dark:bg-green-950" : ""}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
@@ -295,7 +312,7 @@ export default function KYCOnboarding() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {walletInfo?.cautionEUR && walletInfo.cautionEUR >= 20 ? (
+              {walletInfo?.cautionEUR && walletInfo.cautionEUR >= minimumAmount ? (
                 <div className="text-center py-4">
                   <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-2" />
                   <p className="text-green-700 dark:text-green-300 font-medium">
@@ -305,7 +322,7 @@ export default function KYCOnboarding() {
               ) : (
                 <div className="space-y-4">
                   <p className="text-muted-foreground">
-                    Déposez une caution minimum de €20 pour commencer à investir. 
+                    Déposez une caution minimum de €{minimumAmount} pour commencer à investir. 
                     En mode simulation, les fonds sont prélevés de votre solde virtuel.
                   </p>
                   
@@ -314,7 +331,7 @@ export default function KYCOnboarding() {
                     <Input
                       id="caution-amount"
                       type="number"
-                      min="20"
+                      min={minimumAmount.toString()}
                       max="1000"
                       step="10"
                       value={depositAmount}
