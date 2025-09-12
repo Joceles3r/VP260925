@@ -85,7 +85,7 @@ export const documentUpload = multer({
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only PDF and image files are allowed.'), false);
+      cb(null, false);
     }
   },
   limits: {

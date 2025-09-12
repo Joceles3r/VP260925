@@ -110,7 +110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "KYC verification required for investments" });
       }
 
-      if (user.cautionEUR < 20) {
+      if (parseFloat(user.cautionEUR || '0') < 20) {
         return res.status(403).json({ message: "Minimum caution of €20 required" });
       }
 
@@ -128,7 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if user has sufficient balance
-      if (parseFloat(user.balanceEUR) < amount) {
+      if (parseFloat(user.balanceEUR || '0') < amount) {
         return res.status(400).json({ message: "Insufficient balance" });
       }
 
@@ -148,11 +148,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update user balance (only in simulation mode for now)
       if (user.simulationMode) {
-        const newBalance = parseFloat(user.balanceEUR) - amount;
+        const newBalance = parseFloat(user.balanceEUR || '0') - amount;
         await storage.upsertUser({
           ...user,
           balanceEUR: newBalance.toString(),
-          totalInvested: (parseFloat(user.totalInvested) + amount).toString(),
+          totalInvested: (parseFloat(user.totalInvested || '0') + amount).toString(),
         });
       }
 

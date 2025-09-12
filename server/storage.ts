@@ -81,13 +81,17 @@ export class DatabaseStorage implements IStorage {
 
   // Project operations
   async getProjects(limit = 50, offset = 0, category?: string): Promise<Project[]> {
-    let query = db.select().from(projects);
+    const baseQuery = db.select().from(projects);
     
     if (category) {
-      query = query.where(eq(projects.category, category));
+      return await baseQuery
+        .where(eq(projects.category, category))
+        .orderBy(desc(projects.createdAt))
+        .limit(limit)
+        .offset(offset);
     }
     
-    return await query
+    return await baseQuery
       .orderBy(desc(projects.createdAt))
       .limit(limit)
       .offset(offset);
