@@ -1,5 +1,6 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
+import { getCategoryColor } from '@shared/utils';
 import type { Project } from '@shared/schema';
 import { Button } from '@/components/ui/button';
 
@@ -13,16 +14,7 @@ export default function ProjectCard({ project, onInvest }: ProjectCardProps) {
     ? (parseFloat(project.currentAmount || '0') / parseFloat(project.targetAmount)) * 100
     : 0;
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      'documentaire': 'bg-secondary/10 text-secondary',
-      'court-métrage': 'bg-chart-4/10 text-purple-600',
-      'clip': 'bg-accent/10 text-accent',
-      'animation': 'bg-primary/10 text-primary',
-      'live': 'bg-chart-2/10 text-emerald-600',
-    };
-    return colors[category.toLowerCase()] || 'bg-muted text-muted-foreground';
-  };
+  // Function getCategoryColor is now imported from @shared/utils
 
   const getTimeRemaining = () => {
     if (!project.endDate) return 'Temps illimité';
