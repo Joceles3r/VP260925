@@ -35,6 +35,21 @@ export const projectStatusEnum = pgEnum('project_status', ['pending', 'active', 
 // Transaction type enum
 export const transactionTypeEnum = pgEnum('transaction_type', ['investment', 'withdrawal', 'commission', 'redistribution']);
 
+// Notification type enum
+export const notificationTypeEnum = pgEnum('notification_type', [
+  'investment_milestone', 
+  'funding_goal_reached', 
+  'project_status_change',
+  'roi_update',
+  'new_investment',
+  'live_show_started',
+  'battle_result',
+  'performance_alert'
+]);
+
+// Notification priority enum
+export const notificationPriorityEnum = pgEnum('notification_priority', ['low', 'medium', 'high', 'urgent']);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -126,12 +141,41 @@ export const complianceReports = pgTable("compliance_reports", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Notifications table for real-time project performance alerts
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  projectId: varchar("project_id").references(() => projects.id),
+  type: notificationTypeEnum("type").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  priority: notificationPriorityEnum("priority").default('medium'),
+  isRead: boolean("is_read").default(false),
+  data: jsonb("data"), // Additional context data for the notification
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// User notification preferences table
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  notificationType: notificationTypeEnum("notification_type").notNull(),
+  enabled: boolean("enabled").default(true),
+  emailEnabled: boolean("email_enabled").default(false),
+  pushEnabled: boolean("push_enabled").default(true),
+  threshold: decimal("threshold", { precision: 10, scale: 2 }), // For percentage-based notifications
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   investments: many(investments),
   transactions: many(transactions),
   complianceReports: many(complianceReports),
+  notifications: many(notifications),
+  notificationPreferences: many(notificationPreferences),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -140,6 +184,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     references: [users.id],
   }),
   investments: many(investments),
+  notifications: many(notifications),
 }));
 
 export const investmentsRelations = relations(investments, ({ one }) => ({
@@ -168,6 +213,24 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
 }));
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+  project: one(projects, {
+    fields: [notifications.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -191,6 +254,17 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   createdAt: true,
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -199,7 +273,11 @@ export type Investment = typeof investments.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type LiveShow = typeof liveShows.$inferSelect;
 export type ComplianceReport = typeof complianceReports.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
