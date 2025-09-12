@@ -150,9 +150,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user.simulationMode) {
         const newBalance = parseFloat(user.balanceEUR || '0') - amount;
         await storage.upsertUser({
-          ...user,
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profileImageUrl: user.profileImageUrl,
+          profileType: user.profileType,
+          kycVerified: user.kycVerified,
           balanceEUR: newBalance.toString(),
+          simulationMode: user.simulationMode,
+          cautionEUR: user.cautionEUR,
           totalInvested: (parseFloat(user.totalInvested || '0') + amount).toString(),
+          totalGains: user.totalGains,
+          rankGlobal: user.rankGlobal,
         });
       }
 
@@ -223,12 +233,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const newInvestmentA = artist === 'A' 
-        ? (parseFloat(currentShow.investmentA) + investmentAmount).toString()
-        : currentShow.investmentA;
+        ? (parseFloat(currentShow.investmentA || '0') + investmentAmount).toString()
+        : (currentShow.investmentA || '0');
       
       const newInvestmentB = artist === 'B'
-        ? (parseFloat(currentShow.investmentB) + investmentAmount).toString()
-        : currentShow.investmentB;
+        ? (parseFloat(currentShow.investmentB || '0') + investmentAmount).toString()
+        : (currentShow.investmentB || '0');
 
       await storage.updateLiveShowInvestments(liveShowId, newInvestmentA, newInvestmentB);
 
