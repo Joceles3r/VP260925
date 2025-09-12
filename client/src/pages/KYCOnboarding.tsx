@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { CheckCircle, AlertCircle, Wallet, CreditCard, Shield, UserCheck } from 'lucide-react';
 import { useLocation } from 'wouter';
+import Checkout from './Checkout';
 
 interface WalletInfo {
   balanceEUR: number;
@@ -30,6 +31,7 @@ export default function KYCOnboarding() {
   const [, setLocation] = useLocation();
   const [depositAmount, setDepositAmount] = useState('20');
   const [currentStep, setCurrentStep] = useState(1);
+  const [showStripeCheckout, setShowStripeCheckout] = useState(false);
 
   // Fetch wallet information
   const { data: walletInfo, isLoading: walletLoading } = useQuery<WalletInfo>({
@@ -140,7 +142,30 @@ export default function KYCOnboarding() {
       });
       return;
     }
-    depositMutation.mutate(depositAmount);
+    
+    // Check if user is in simulation mode
+    if (walletInfo?.simulationMode) {
+      // Use simulation deposit
+      depositMutation.mutate(depositAmount);
+    } else {
+      // Use Stripe checkout for real payments
+      setShowStripeCheckout(true);
+    }
+  };
+
+  const handleStripeSuccess = () => {
+    setShowStripeCheckout(false);
+    // Refresh wallet info
+    queryClient.invalidateQueries({ queryKey: ['/api/wallet/balance'] });
+    toast({
+      title: "Paiement réussi",
+      description: "Votre caution a été déposée avec succès !",
+    });
+    setCurrentStep(3);
+  };
+
+  const handleStripeCancel = () => {
+    setShowStripeCheckout(false);
   };
 
   const handleUpgradeToCreator = () => {
@@ -394,6 +419,20 @@ export default function KYCOnboarding() {
           </Card>
         )}
       </div>
+
+      {/* Stripe Checkout Modal */}
+      {showStripeCheckout && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <Checkout
+              amount={parseFloat(depositAmount)}
+              type="caution"
+              onSuccess={handleStripeSuccess}
+              onCancel={handleStripeCancel}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

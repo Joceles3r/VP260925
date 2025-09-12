@@ -210,6 +210,15 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
+  async getTransactionByPaymentIntent(paymentIntentId: string): Promise<Transaction | null> {
+    const [transaction] = await db
+      .select()
+      .from(transactions)
+      .where(sql`metadata->>'paymentIntentId' = ${paymentIntentId}`)
+      .limit(1);
+    return transaction || null;
+  }
+
   // Live shows operations
   async getActiveLiveShows(): Promise<LiveShow[]> {
     return await db

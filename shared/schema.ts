@@ -33,7 +33,7 @@ export const profileTypeEnum = pgEnum('profile_type', ['investor', 'invested_rea
 export const projectStatusEnum = pgEnum('project_status', ['pending', 'active', 'completed', 'rejected']);
 
 // Transaction type enum
-export const transactionTypeEnum = pgEnum('transaction_type', ['investment', 'withdrawal', 'commission', 'redistribution']);
+export const transactionTypeEnum = pgEnum('transaction_type', ['investment', 'withdrawal', 'commission', 'redistribution', 'deposit']);
 
 // Notification type enum
 export const notificationTypeEnum = pgEnum('notification_type', [
