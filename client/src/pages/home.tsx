@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Navigate } from 'wouter';
+import { Redirect } from 'wouter';
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -14,8 +14,8 @@ export default function Home() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Redirect to="/dashboard" />;
   }
 
-  return <Navigate to="/dashboard" replace />;
+  return <Redirect to="/dashboard" />;
 }
