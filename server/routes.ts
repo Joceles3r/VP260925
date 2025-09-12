@@ -532,13 +532,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates = req.body;
       
       // Convert object updates to array format expected by storage
-      const preferencesArray = Object.keys(updates).map(notificationType => ({
-        notificationType,
-        enabled: updates[notificationType].enabled ?? true,
-        emailEnabled: updates[notificationType].emailEnabled ?? false,
-        pushEnabled: updates[notificationType].pushEnabled ?? true,
-        threshold: updates[notificationType].threshold
-      }));
+      const validNotificationTypes = [
+        'investment_milestone', 'funding_goal_reached', 'project_status_change',
+        'roi_update', 'new_investment', 'live_show_started', 'battle_result', 'performance_alert'
+      ];
+      
+      const preferencesArray = Object.keys(updates)
+        .filter(key => validNotificationTypes.includes(key))
+        .map(notificationType => ({
+          notificationType: notificationType as any,
+          enabled: updates[notificationType].enabled ?? true,
+          emailEnabled: updates[notificationType].emailEnabled ?? false,
+          pushEnabled: updates[notificationType].pushEnabled ?? true,
+          threshold: updates[notificationType].threshold
+        }));
       
       await storage.updateNotificationPreferences(userId, preferencesArray);
       
@@ -548,6 +555,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating notification preferences:", error);
       res.status(500).json({ message: "Failed to update notification preferences" });
+    }
+  });
+
+  // KYC and Wallet endpoints
+  app.post('/api/kyc/verify', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { documents } = req.body;
+      
+      // In simulation mode, automatically approve KYC
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Simulate KYC verification process
+      const kycData = {
+        documents: documents || {},
+        verificationDate: new Date(),
+        status: 'verified',
+        documentTypes: ['identity', 'address_proof'],
+        simulationMode: user.simulationMode
+      };
+
+      // Update user as KYC verified
+      await storage.updateUser(userId, {
+        kycVerified: true,
+        kycDocuments: kycData
+      });
+
+      res.json({ 
+        success: true, 
+        message: "KYC verification completed successfully",
+        kycVerified: true
+      });
+    } catch (error) {
+      console.error("Error during KYC verification:", error);
+      res.status(500).json({ message: "KYC verification failed" });
+    }
+  });
+
+  app.post('/api/wallet/deposit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { amount, type = 'caution' } = req.body;
+      
+      const depositAmount = parseFloat(amount);
+      
+      if (depositAmount < 20) {
+        return res.status(400).json({ message: "Minimum deposit amount is €20" });
+      }
+
+      if (depositAmount > 1000) {
+        return res.status(400).json({ message: "Maximum deposit amount is €1000" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // In simulation mode, allow unlimited deposits from virtual balance
+      if (user.simulationMode) {
+        const currentBalance = parseFloat(user.balanceEUR || '0');
+        if (currentBalance < depositAmount) {
+          return res.status(400).json({ message: "Insufficient simulation balance" });
+        }
+
+        // Update caution and reduce balance
+        const newCaution = parseFloat(user.cautionEUR || '0') + depositAmount;
+        const newBalance = currentBalance - depositAmount;
+
+        await storage.updateUser(userId, {
+          cautionEUR: newCaution.toString(),
+          balanceEUR: newBalance.toString()
+        });
+
+        // Create transaction record
+        await storage.createTransaction({
+          userId,
+          type: 'investment',
+          amount: depositAmount.toString(),
+          metadata: { type: 'caution_deposit', simulationMode: true }
+        });
+
+        res.json({
+          success: true,
+          message: "Caution deposit successful",
+          cautionEUR: newCaution,
+          balanceEUR: newBalance
+        });
+      } else {
+        // In real mode, this would integrate with payment processor
+        res.status(501).json({ message: "Real money deposits not implemented yet" });
+      }
+    } catch (error) {
+      console.error("Error during wallet deposit:", error);
+      res.status(500).json({ message: "Deposit failed" });
+    }
+  });
+
+  app.get('/api/wallet/balance', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const walletInfo = {
+        balanceEUR: parseFloat(user.balanceEUR || '0'),
+        cautionEUR: parseFloat(user.cautionEUR || '0'),
+        totalInvested: parseFloat(user.totalInvested || '0'),
+        totalGains: parseFloat(user.totalGains || '0'),
+        simulationMode: user.simulationMode,
+        kycVerified: user.kycVerified,
+        canInvest: user.kycVerified && parseFloat(user.cautionEUR || '0') >= 20
+      };
+
+      res.json(walletInfo);
+    } catch (error) {
+      console.error("Error fetching wallet balance:", error);
+      res.status(500).json({ message: "Failed to fetch wallet balance" });
+    }
+  });
+
+  app.patch('/api/users/:id/role', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const targetUserId = req.params.id;
+      const { profileType } = req.body;
+
+      // Only allow users to update their own role, or admins to update any role
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (userId !== targetUserId && user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Not authorized to update this user's role" });
+      }
+
+      const allowedRoles = ['investor', 'invested_reader', 'creator'];
+      if (!allowedRoles.includes(profileType)) {
+        return res.status(400).json({ message: "Invalid profile type" });
+      }
+
+      // For creator role, require KYC verification
+      if (profileType === 'creator') {
+        const targetUser = await storage.getUser(targetUserId);
+        if (!targetUser?.kycVerified) {
+          return res.status(400).json({ 
+            message: "KYC verification required to become a creator" 
+          });
+        }
+      }
+
+      await storage.updateUser(targetUserId, { profileType });
+
+      const updatedUser = await storage.getUser(targetUserId);
+      res.json({
+        success: true,
+        user: updatedUser
+      });
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update user role" });
     }
   });
 
