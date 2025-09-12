@@ -34,7 +34,7 @@ interface AdminState {
   setTransactions: (transactions: Transaction[]) => void;
   setActiveTab: (tab: string) => void;
   setLoading: (loading: boolean) => void;
-  updateProjectStatus: (projectId: string, status: string) => void;
+  updateProjectStatus: (projectId: string, status: "pending" | "active" | "completed" | "rejected" | null) => void;
   updateUserKyc: (userId: string, verified: boolean) => void;
 }
 
