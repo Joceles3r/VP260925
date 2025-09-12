@@ -165,6 +165,7 @@ export async function auditUserActivity(userId: string): Promise<{
     
     // High volume in short time
     const recentTransactions = userTransactions.filter(t => {
+      if (!t.createdAt) return false;
       const daysDiff = (Date.now() - new Date(t.createdAt).getTime()) / (1000 * 60 * 60 * 24);
       return daysDiff <= 7;
     });
@@ -189,7 +190,7 @@ export async function auditUserActivity(userId: string): Promise<{
     if (!user.kycVerified) {
       recommendations.push("Complete KYC verification");
     }
-    if (parseFloat(user.cautionEUR) < 20) {
+    if (parseFloat(user.cautionEUR || '0') < 20) {
       recommendations.push("Increase caution deposit to minimum €20");
     }
     
