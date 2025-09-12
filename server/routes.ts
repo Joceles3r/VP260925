@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, getSession } from "./replitAuth";
 import { insertProjectSchema, insertInvestmentSchema, insertTransactionSchema } from "@shared/schema";
+import { getMinimumCautionAmount } from "@shared/utils";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -19,18 +20,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-06-20",
 });
 
-// Helper function to get minimum caution amount based on user profile
-function getMinimumCautionAmount(profileType: string): number {
-  switch (profileType) {
-    case 'creator':      // Porteurs
-    case 'admin':        // Infoporteurs
-      return 10;
-    case 'investor':     // Investisseurs  
-    case 'invested_reader': // Investi-lecteurs
-    default:
-      return 20;
-  }
-}
+// Function getMinimumCautionAmount is now imported from @shared/utils
 
 // File upload configuration
 const upload = multer({
