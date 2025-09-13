@@ -20,7 +20,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil",
+  apiVersion: "2024-06-20",
 });
 
 // Function getMinimumCautionAmount is now imported from @shared/utils
@@ -29,10 +29,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
+    fileSize: 5 * 1024 * 1024 * 1024, // 5GB limit to match VideoDepositService specs
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+    const allowedTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
