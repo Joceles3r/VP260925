@@ -1,0 +1,78 @@
+Protection_Videos_VISUAL.txt
+📑 Module — Protection des vidéos sur VISUAL
+🎯 Objectif
+
+Assurer aux porteurs que leurs vidéos déposées sur VISUAL sont sécurisées, moins exposées au piratage, et que cela garantit une meilleure juste répartition des droits.
+
+🔒 Principes de sécurité mis en place
+
+URLs signées et temporaires (Token)
+
+Chaque visionnage passe par un jeton unique généré automatiquement.
+
+Le lien est valable quelques minutes seulement, puis devient inutilisable.
+
+Authentification stricte
+
+Jetons liés au compte utilisateur.
+
+Impossible de partager un lien public réutilisable.
+
+Chiffrement HLS
+
+Les vidéos sont découpées en segments chiffrés.
+
+La clé de déchiffrement est délivrée uniquement avec un jeton valide.
+
+Contrôles d’accès avancés
+
+Limite d’appareils et de sessions simultanées.
+
+Blocage possible par domaine, IP ou zone géographique.
+
+Filigrane dynamique (optionnel)
+
+Chaque session de lecture peut ajouter un watermark personnalisé (ex. ID utilisateur).
+
+Dissuasion contre les re-upload sauvages.
+
+❓ FAQ — Questions fréquentes
+
+Comment le système Token limite-t-il le piratage ?
+
+Les liens expirent rapidement et ne peuvent pas être partagés.
+
+Le contenu chiffré reste illisible hors de VISUAL.
+
+Les tentatives de scraping sont bloquées.
+
+En cas de fuite, un watermark peut identifier la source.
+
+En quoi cela augmente mes droits ?
+
+Les vues piratées ne siphonnent plus vos revenus.
+
+Toutes les lectures sont traçables et comptabilisées.
+
+Les répartitions financières (40/30/23/7 en classique, 40/30/20/10 en Live Show) sont basées sur des données fiables.
+
+Moins de perte = plus de droits reversés aux porteurs et investisseurs.
+
+⚠️ Note réaliste : aucune protection n’est parfaite à 100 %.
+Mais la combinaison token + chiffrement + contrôles d’accès + watermark rend le piratage très difficile et garantit une rémunération plus juste.
+
+📌 Encart UI (prêt à l’emploi)
+
+Vos vidéos sont protégées.
+Lecture via token sécurisé, HLS chiffré et contrôles anti-piratage.
+👉 Moins de fuite = plus de revenus reversés pour vous. 🎬
+
+✅ Résumé du module
+
+Protection basée sur tokens temporaires et HLS chiffré.
+
+Contrôles avancés pour limiter le piratage.
+
+Traçabilité maximale des vues.
+
+Impact direct : droits plus élevés pour les porteurs.
