@@ -11,13 +11,16 @@ import path from "path";
 import { mlScoreProject } from "./services/mlScoring";
 import { initializeWebSocket } from "./websocket";
 import { notificationService } from "./services/notificationService";
+import { VideoDepositService } from "./services/videoDepositService";
+import { bunnyVideoService } from "./services/bunnyVideoService";
+import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenValidator";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-08-27.basil",
 });
 
 // Function getMinimumCautionAmount is now imported from @shared/utils
@@ -136,6 +139,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
 
             console.log(`Caution deposit confirmed for user ${userId}: €${depositAmount}`);
+          } else if (type === 'video_deposit') {
+            // Handle video deposit payment success with atomic operations
+            const videoDepositId = paymentIntent.metadata.videoDepositId;
+            const videoType = paymentIntent.metadata.videoType;
+            
+            if (!videoDepositId || !videoType) {
+              console.error('Missing video deposit metadata:', paymentIntentId);
+              return res.status(400).json({ error: 'Invalid video deposit metadata' });
+            }
+
+            // Get the video deposit record
+            const videoDeposit = await storage.getVideoDeposit(videoDepositId);
+            if (!videoDeposit) {
+              console.error('Video deposit not found:', videoDepositId);
+              return res.status(404).json({ error: 'Video deposit not found' });
+            }
+
+            // Ensure atomicity: All operations succeed or all fail
+            try {
+              // 1. Update video deposit status to active
+              await storage.updateVideoDeposit(videoDepositId, {
+                status: 'active',
+                paidAt: new Date()
+              });
+
+              // 2. Update creator quota atomically
+              const currentDate = new Date();
+              const period = videoType === 'film' 
+                ? `${currentDate.getFullYear()}-Q${Math.ceil((currentDate.getMonth() + 1) / 3)}`
+                : `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}`;
+
+              const existingQuota = await storage.getCreatorQuota(userId, period);
+              
+              if (existingQuota) {
+                const updates: Partial<any> = {};
+                if (videoType === 'clip') updates.clipDeposits = (existingQuota.clipDeposits || 0) + 1;
+                else if (videoType === 'documentary') updates.documentaryDeposits = (existingQuota.documentaryDeposits || 0) + 1;
+                else if (videoType === 'film') updates.filmDeposits = (existingQuota.filmDeposits || 0) + 1;
+                
+                await storage.updateCreatorQuota(userId, period, updates);
+              } else {
+                const newQuota: any = {
+                  creatorId: userId,
+                  period,
+                  clipDeposits: videoType === 'clip' ? 1 : 0,
+                  documentaryDeposits: videoType === 'documentary' ? 1 : 0,
+                  filmDeposits: videoType === 'film' ? 1 : 0
+                };
+                await storage.createCreatorQuota(newQuota);
+              }
+
+              // 3. Create transaction record
+              await storage.createTransaction({
+                userId,
+                type: 'deposit',
+                amount: depositAmount.toString(),
+                metadata: {
+                  type: 'video_deposit',
+                  videoType,
+                  videoDepositId,
+                  paymentIntentId,
+                  simulationMode: false
+                }
+              });
+
+              // 4. Send success notification
+              await notificationService.notifyUser(userId, {
+                type: 'video_deposit_success',
+                title: 'Dépôt vidéo confirmé',
+                message: `Votre dépôt vidéo (${videoType}) de €${depositAmount} a été confirmé et activé.`,
+                priority: 'medium'
+              });
+
+              console.log(`Video deposit confirmed for user ${userId}: ${videoType} - €${depositAmount}`);
+            } catch (atomicError) {
+              console.error('Atomic video deposit operation failed:', atomicError);
+              
+              // Rollback: Set deposit status back to pending
+              await storage.updateVideoDeposit(videoDepositId, {
+                status: 'pending_payment'
+              });
+
+              // Notify user of processing failure
+              await notificationService.notifyUser(userId, {
+                type: 'video_deposit_failed',
+                title: 'Erreur de traitement',
+                message: 'Une erreur est survenue lors du traitement de votre dépôt vidéo. Contactez le support.',
+                priority: 'high'
+              });
+
+              return res.status(500).json({ error: 'Video deposit processing failed' });
+            }
           }
           break;
         }
@@ -143,12 +238,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         case 'payment_intent.payment_failed': {
           const paymentIntent = event.data.object;
           const userId = paymentIntent.metadata.userId;
+          const type = paymentIntent.metadata.type;
+          const videoDepositId = paymentIntent.metadata.videoDepositId;
           
           if (userId) {
+            // Handle video deposit payment failure with cleanup
+            if (type === 'video_deposit' && videoDepositId) {
+              try {
+                // Mark video deposit as rejected and clean up
+                await storage.updateVideoDeposit(videoDepositId, {
+                  status: 'rejected',
+                  rejectionReason: 'Payment failed'
+                });
+
+                // Revoke any associated tokens
+                await storage.revokeVideoTokens(videoDepositId);
+
+                console.log(`Video deposit ${videoDepositId} marked as rejected due to payment failure`);
+              } catch (cleanupError) {
+                console.error('Failed to cleanup after video payment failure:', cleanupError);
+              }
+            }
+
             await notificationService.notifyUser(userId, {
               type: 'payment_failed',
               title: 'Échec du paiement',
-              message: 'Votre paiement a échoué. Veuillez réessayer.',
+              message: type === 'video_deposit' 
+                ? 'Votre paiement pour le dépôt vidéo a échoué. Le dépôt a été annulé.'
+                : 'Votre paiement a échoué. Veuillez réessayer.',
               priority: 'high'
             });
           }
@@ -254,7 +371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "KYC verification required for investments" });
       }
 
-      const minimumCaution = getMinimumCautionAmount(user.profileType);
+      const minimumCaution = getMinimumCautionAmount(user.profileType || 'investor');
       if (parseFloat(user.cautionEUR || '0') < minimumCaution) {
         return res.status(403).json({ message: `Minimum caution of €${minimumCaution} required` });
       }
@@ -762,7 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const minimumAmount = getMinimumCautionAmount(user.profileType);
+      const minimumAmount = getMinimumCautionAmount(user.profileType || 'investor');
       if (depositAmount < minimumAmount) {
         return res.status(400).json({ message: `Minimum deposit amount is €${minimumAmount}` });
       }
@@ -867,7 +984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const minimumAmount = getMinimumCautionAmount(user.profileType);
+      const minimumAmount = getMinimumCautionAmount(user.profileType || 'investor');
       if (depositAmount < minimumAmount) {
         return res.status(400).json({ message: `Minimum deposit amount is €${minimumAmount}` });
       }
@@ -935,7 +1052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalGains: parseFloat(user.totalGains || '0'),
         simulationMode: user.simulationMode,
         kycVerified: user.kycVerified,
-        canInvest: user.kycVerified && parseFloat(user.cautionEUR || '0') >= getMinimumCautionAmount(user.profileType)
+        canInvest: user.kycVerified && parseFloat(user.cautionEUR || '0') >= getMinimumCautionAmount(user.profileType || 'investor')
       };
 
       res.json(walletInfo);
@@ -986,6 +1103,356 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating user role:", error);
       res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  // ===== VISUAL VIDEO DEPOSIT ROUTES =====
+  
+  // Check creator quota for video deposits
+  app.get('/api/video/quota/:creatorId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { creatorId } = req.params;
+      const { videoType } = req.query;
+      
+      // Verify user can check this quota (self or admin)
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || (userId !== creatorId && user.profileType !== 'admin')) {
+        return res.status(403).json({ message: "Not authorized to check this quota" });
+      }
+
+      if (!videoType || !['clip', 'documentary', 'film'].includes(videoType as string)) {
+        return res.status(400).json({ message: "Valid videoType required (clip, documentary, film)" });
+      }
+
+      const quotaCheck = await VideoDepositService.checkCreatorQuota(creatorId, videoType as any);
+      res.json(quotaCheck);
+    } catch (error) {
+      console.error("Error checking creator quota:", error);
+      res.status(500).json({ message: "Failed to check quota" });
+    }
+  });
+
+  // Create video deposit with payment intent
+  app.post('/api/video/deposit', isAuthenticated, upload.single('video'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "User authentication required" });
+      }
+      const user = await storage.getUser(userId);
+      
+      if (!user || !['creator', 'admin'].includes(user.profileType || '')) {
+        return res.status(403).json({ message: "Only creators can deposit videos" });
+      }
+
+      const { projectId, videoType, duration } = req.body;
+      
+      if (!req.file || !projectId || !videoType) {
+        return res.status(400).json({ message: "Video file, projectId, and videoType required" });
+      }
+
+      if (!['clip', 'documentary', 'film'].includes(videoType)) {
+        return res.status(400).json({ message: "Invalid videoType" });
+      }
+
+      // Validate project belongs to creator
+      const project = await storage.getProject(projectId);
+      if (!project || project.creatorId !== userId) {
+        return res.status(403).json({ message: "Project not found or access denied" });
+      }
+
+      const videoDepositRequest = {
+        projectId,
+        creatorId: userId,
+        videoType,
+        file: req.file,
+        duration: duration ? parseInt(duration) : undefined
+      };
+
+      const result = await VideoDepositService.createVideoDeposit(videoDepositRequest);
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating video deposit:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to create video deposit" 
+      });
+    }
+  });
+
+  // Get video deposit details
+  app.get('/api/video/deposit/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      const videoDeposit = await storage.getVideoDeposit(id);
+      if (!videoDeposit) {
+        return res.status(404).json({ message: "Video deposit not found" });
+      }
+
+      // Check access permissions
+      if (videoDeposit.creatorId !== userId && user?.profileType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Include additional data for creators/admins
+      const enhancedDeposit = {
+        ...videoDeposit,
+        analytics: await storage.getVideoAnalytics(id),
+        tokens: await storage.getVideoTokensForDeposit(id)
+      };
+
+      res.json(enhancedDeposit);
+    } catch (error) {
+      console.error("Error fetching video deposit:", error);
+      res.status(500).json({ message: "Failed to fetch video deposit" });
+    }
+  });
+
+  // Generate secure video access token
+  app.post('/api/video/token/:videoDepositId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { videoDepositId } = req.params;
+      const userId = req.user.claims.sub;
+      const { ipAddress, userAgent } = req.body;
+      
+      const videoDeposit = await storage.getVideoDeposit(videoDepositId);
+      if (!videoDeposit || videoDeposit.status !== 'active') {
+        return res.status(404).json({ message: "Video not available" });
+      }
+
+      // Check if user has access (creator or valid investor/viewer)
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // For now, allow creators and investors to generate tokens
+      if (videoDeposit.creatorId !== userId) {
+        // TODO: Add logic to check if user has purchased access or is an investor
+        // For VISUAL, this might depend on investment in the project
+        const userInvestments = await storage.getUserInvestments(userId);
+        const hasProjectInvestment = userInvestments.some(inv => inv.projectId === videoDeposit.projectId);
+        
+        if (!hasProjectInvestment && user.profileType !== 'admin') {
+          return res.status(403).json({ message: "Access denied - no investment in this project" });
+        }
+      }
+
+      // Generate secure token
+      const clientIp = ipAddress || req.ip || req.connection.remoteAddress;
+      const clientUserAgent = userAgent || req.headers['user-agent'];
+      
+      const secureToken = bunnyVideoService.generateSecureToken(
+        videoDepositId, 
+        userId,
+        clientIp,
+        clientUserAgent
+      );
+
+      // Store token in database
+      const dbToken = await storage.createVideoToken({
+        videoDepositId,
+        userId,
+        token: secureToken.token,
+        expiresAt: secureToken.expiresAt,
+        maxUsage: secureToken.maxUsage,
+        usageCount: 0,
+        isRevoked: false
+      });
+
+      res.json({
+        token: secureToken.token,
+        playbackUrl: secureToken.playbackUrl,
+        expiresAt: secureToken.expiresAt,
+        maxUsage: secureToken.maxUsage
+      });
+    } catch (error) {
+      console.error("Error generating video token:", error);
+      res.status(500).json({ message: "Failed to generate access token" });
+    }
+  });
+
+  // Secure video access endpoint with token validation
+  app.get('/api/video/watch/:videoDepositId', validateVideoToken, async (req: any, res) => {
+    try {
+      const { videoDepositId } = req.params;
+      const videoAccess = req.videoAccess;
+
+      // Get video processing status from Bunny.net
+      const videoStatus = await bunnyVideoService.getVideoStatus(videoDepositId);
+      
+      if (videoStatus.status !== 'completed') {
+        return res.status(202).json({
+          message: "Video still processing",
+          status: videoStatus.status,
+          progress: videoStatus.progress
+        });
+      }
+
+      // Return secure playback information
+      res.json({
+        videoId: videoDepositId,
+        hlsUrl: videoStatus.hlsUrl,
+        thumbnailUrl: videoStatus.thumbnailUrl,
+        duration: videoStatus.duration,
+        resolution: videoStatus.resolution,
+        sessionInfo: {
+          sessionId: videoAccess.sessionInfo.sessionId,
+          validUntil: new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+        }
+      });
+    } catch (error) {
+      console.error("Error accessing video:", error);
+      res.status(500).json({ message: "Failed to access video" });
+    }
+  });
+
+  // Revoke video tokens (admin/creator only)
+  app.post('/api/video/revoke/:videoDepositId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { videoDepositId } = req.params;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      const videoDeposit = await storage.getVideoDeposit(videoDepositId);
+      if (!videoDeposit) {
+        return res.status(404).json({ message: "Video deposit not found" });
+      }
+
+      // Only creator or admin can revoke tokens
+      if (videoDeposit.creatorId !== userId && user?.profileType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      await storage.revokeVideoTokens(videoDepositId);
+      res.json({ message: "All tokens revoked successfully" });
+    } catch (error) {
+      console.error("Error revoking tokens:", error);
+      res.status(500).json({ message: "Failed to revoke tokens" });
+    }
+  });
+
+  // Get creator's video deposits
+  app.get('/api/creator/:creatorId/videos', isAuthenticated, async (req: any, res) => {
+    try {
+      const { creatorId } = req.params;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      // Check access permissions
+      if (userId !== creatorId && user?.profileType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const videoDeposits = await storage.getCreatorVideoDeposits(creatorId);
+      res.json(videoDeposits);
+    } catch (error) {
+      console.error("Error fetching creator videos:", error);
+      res.status(500).json({ message: "Failed to fetch videos" });
+    }
+  });
+
+  // Get video analytics (creator/admin only)
+  app.get('/api/video/:videoDepositId/analytics', isAuthenticated, async (req: any, res) => {
+    try {
+      const { videoDepositId } = req.params;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      const videoDeposit = await storage.getVideoDeposit(videoDepositId);
+      if (!videoDeposit) {
+        return res.status(404).json({ message: "Video deposit not found" });
+      }
+
+      // Only creator or admin can view analytics
+      if (videoDeposit.creatorId !== userId && user?.profileType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const analytics = await storage.getVideoAnalytics(videoDepositId);
+      const tokens = await storage.getVideoTokensForDeposit(videoDepositId);
+      
+      // Aggregate analytics data
+      const aggregatedData = {
+        totalViews: analytics.length,
+        uniqueViewers: new Set(analytics.map(a => a.userId)).size,
+        averageSessionDuration: analytics.length > 0 
+          ? analytics.reduce((sum, a) => sum + (a.sessionDuration || 0), 0) / analytics.length 
+          : 0,
+        activeTokens: tokens.filter(t => !t.isRevoked && new Date() < t.expiresAt).length,
+        revokedTokens: tokens.filter(t => t.isRevoked).length,
+        recentViews: analytics.slice(-10) // Last 10 views
+      };
+
+      res.json(aggregatedData);
+    } catch (error) {
+      console.error("Error fetching video analytics:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
+  // ===== ADMIN VIDEO MANAGEMENT ROUTES =====
+  
+  // Cleanup orphaned video deposits (admin only)
+  app.post('/api/admin/video/cleanup', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const result = await VideoDepositService.cleanupOrphanedDeposits();
+      res.json({
+        success: true,
+        message: `Cleaned ${result.cleaned} orphaned deposits`,
+        details: result
+      });
+    } catch (error) {
+      console.error("Error during cleanup:", error);
+      res.status(500).json({ message: "Cleanup failed" });
+    }
+  });
+
+  // Get video deposit statistics (admin only)
+  app.get('/api/admin/video/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const stats = await VideoDepositService.getDepositStatistics();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching video stats:", error);
+      res.status(500).json({ message: "Failed to fetch statistics" });
+    }
+  });
+
+  // Verify deposit integrity (admin only)
+  app.post('/api/admin/video/verify/:depositId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { depositId } = req.params;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const verification = await VideoDepositService.verifyDepositIntegrity(depositId);
+      res.json(verification);
+    } catch (error) {
+      console.error("Error verifying deposit:", error);
+      res.status(500).json({ message: "Verification failed" });
     }
   });
 

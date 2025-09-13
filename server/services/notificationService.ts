@@ -312,6 +312,26 @@ export class NotificationService {
       }
     });
   }
+
+  // Generic notification method for direct notifications
+  async notifyUser(userId: string, notification: {
+    type: string;
+    title: string;
+    message: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    projectId?: string;
+    data?: Record<string, any>;
+  }): Promise<void> {
+    await this.createAndSendNotification({
+      userId,
+      projectId: notification.projectId,
+      type: notification.type as any, // Type assertion since it's a generic method
+      title: notification.title,
+      message: notification.message,
+      priority: notification.priority || 'medium',
+      data: notification.data
+    });
+  }
 }
 
 // Singleton instance

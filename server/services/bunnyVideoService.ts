@@ -6,11 +6,11 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { nanoid } from 'nanoid';
 
-// Environment validation for Bunny.net credentials
+// Environment validation for Bunny.net credentials  
 const bunnyEnvSchema = z.object({
-  BUNNY_API_KEY: z.string().min(1, 'BUNNY_API_KEY is required'),
-  BUNNY_LIBRARY_ID: z.string().min(1, 'BUNNY_LIBRARY_ID is required'),
-  BUNNY_STREAM_API_KEY: z.string().min(1, 'BUNNY_STREAM_API_KEY is required'),
+  BUNNY_API_KEY: z.string().min(1, 'BUNNY_API_KEY is required').optional(),
+  BUNNY_LIBRARY_ID: z.string().min(1, 'BUNNY_LIBRARY_ID is required').optional(),
+  BUNNY_STREAM_API_KEY: z.string().min(1, 'BUNNY_STREAM_API_KEY is required').optional(),
 });
 
 export interface VideoUploadResult {
@@ -50,9 +50,18 @@ export class BunnyVideoService {
     // Validate environment variables
     const env = bunnyEnvSchema.parse(process.env);
     
-    this.apiKey = env.BUNNY_API_KEY;
-    this.libraryId = env.BUNNY_LIBRARY_ID;
-    this.streamApiKey = env.BUNNY_STREAM_API_KEY;
+    // Handle missing credentials for development mode
+    if (!env.BUNNY_API_KEY || !env.BUNNY_LIBRARY_ID || !env.BUNNY_STREAM_API_KEY) {
+      console.warn('[BUNNY] Environment variables not configured - running in development mode');
+      this.apiKey = 'dev-mode';
+      this.libraryId = 'dev-library';
+      this.streamApiKey = 'dev-stream-key';
+    } else {
+      this.apiKey = env.BUNNY_API_KEY;
+      this.libraryId = env.BUNNY_LIBRARY_ID;
+      this.streamApiKey = env.BUNNY_STREAM_API_KEY;
+    }
+    
     this.baseUrl = BUNNY_CONFIG.baseUrl;
     this.streamApiUrl = `${BUNNY_CONFIG.streamApiUrl}/${this.libraryId}`;
   }

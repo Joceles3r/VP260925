@@ -7,9 +7,11 @@ import { Button } from '@/components/ui/button';
 interface ProjectCardProps {
   project: Project;
   onInvest?: (project: Project) => void;
+  onVideoDeposit?: (project: Project) => void;
+  isCreator?: boolean;
 }
 
-export default function ProjectCard({ project, onInvest }: ProjectCardProps) {
+export default function ProjectCard({ project, onInvest, onVideoDeposit, isCreator }: ProjectCardProps) {
   const progressPercentage = project.targetAmount 
     ? (parseFloat(project.currentAmount || '0') / parseFloat(project.targetAmount)) * 100
     : 0;
@@ -119,6 +121,17 @@ export default function ProjectCard({ project, onInvest }: ProjectCardProps) {
             data-testid="invest-button"
           >
             Investir maintenant
+          </Button>
+        )}
+        
+        {isCreator && onVideoDeposit && (
+          <Button 
+            className="w-full mt-4"
+            variant="outline"
+            onClick={() => onVideoDeposit(project)}
+            data-testid="video-deposit-button"
+          >
+            Déposer une vidéo
           </Button>
         )}
 

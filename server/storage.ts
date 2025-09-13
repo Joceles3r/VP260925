@@ -7,6 +7,10 @@ import {
   complianceReports,
   notifications,
   notificationPreferences,
+  videoDeposits,
+  videoTokens,
+  creatorQuotas,
+  videoAnalytics,
   type User,
   type UpsertUser,
   type Project,
@@ -16,11 +20,19 @@ import {
   type ComplianceReport,
   type Notification,
   type NotificationPreference,
+  type VideoDeposit,
+  type VideoToken,
+  type CreatorQuota,
+  type VideoAnalytics,
   type InsertProject,
   type InsertInvestment,
   type InsertTransaction,
   type InsertNotification,
   type InsertNotificationPreference,
+  type InsertVideoDeposit,
+  type InsertVideoToken,
+  type InsertCreatorQuota,
+  type InsertVideoAnalytics,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql } from "drizzle-orm";
@@ -68,6 +80,32 @@ export interface IStorage {
   markNotificationAsRead(notificationId: string, userId: string): Promise<void>;
   getUserNotificationPreferences(userId: string): Promise<NotificationPreference[]>;
   updateNotificationPreferences(userId: string, preferences: Partial<NotificationPreference>[]): Promise<void>;
+  
+  // Video deposit operations
+  createVideoDeposit(deposit: InsertVideoDeposit): Promise<string>;
+  getVideoDeposit(id: string): Promise<VideoDeposit | undefined>;
+  getVideoDepositByPaymentIntent(paymentIntentId: string): Promise<VideoDeposit | undefined>;
+  getProjectVideoDeposits(projectId: string): Promise<VideoDeposit[]>;
+  getCreatorVideoDeposits(creatorId: string): Promise<VideoDeposit[]>;
+  updateVideoDeposit(id: string, updates: Partial<VideoDeposit>): Promise<VideoDeposit>;
+  
+  // Video token operations
+  createVideoToken(token: InsertVideoToken): Promise<VideoToken>;
+  getVideoToken(token: string): Promise<VideoToken | undefined>;
+  getVideoTokensForDeposit(videoDepositId: string): Promise<VideoToken[]>;
+  updateVideoToken(id: string, updates: Partial<VideoToken>): Promise<VideoToken>;
+  revokeVideoTokens(videoDepositId: string): Promise<void>;
+  
+  // Creator quota operations
+  getCreatorQuota(creatorId: string, period: string): Promise<CreatorQuota | undefined>;
+  createCreatorQuota(quota: InsertCreatorQuota): Promise<CreatorQuota>;
+  updateCreatorQuota(creatorId: string, period: string, updates: Partial<CreatorQuota>): Promise<CreatorQuota>;
+  getCreatorQuotaHistory(creatorId: string): Promise<CreatorQuota[]>;
+  
+  // Video analytics operations
+  createVideoAnalytics(analytics: InsertVideoAnalytics): Promise<VideoAnalytics>;
+  getVideoAnalytics(videoDepositId: string): Promise<VideoAnalytics[]>;
+  getPopularVideos(limit?: number): Promise<{ deposit: VideoDeposit; viewCount: number }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -384,6 +422,154 @@ export class DatabaseStorage implements IStorage {
           }
         });
     }
+  }
+
+  // Video deposit operations
+  async createVideoDeposit(deposit: InsertVideoDeposit): Promise<string> {
+    const [newDeposit] = await db.insert(videoDeposits).values(deposit).returning({ id: videoDeposits.id });
+    return newDeposit.id;
+  }
+
+  async getVideoDeposit(id: string): Promise<VideoDeposit | undefined> {
+    const [deposit] = await db
+      .select()
+      .from(videoDeposits)
+      .where(eq(videoDeposits.id, id));
+    return deposit;
+  }
+
+  async getVideoDepositByPaymentIntent(paymentIntentId: string): Promise<VideoDeposit | undefined> {
+    const [deposit] = await db
+      .select()
+      .from(videoDeposits)
+      .where(eq(videoDeposits.paymentIntentId, paymentIntentId));
+    return deposit;
+  }
+
+  async getProjectVideoDeposits(projectId: string): Promise<VideoDeposit[]> {
+    return await db
+      .select()
+      .from(videoDeposits)
+      .where(eq(videoDeposits.projectId, projectId))
+      .orderBy(desc(videoDeposits.createdAt));
+  }
+
+  async getCreatorVideoDeposits(creatorId: string): Promise<VideoDeposit[]> {
+    return await db
+      .select()
+      .from(videoDeposits)
+      .where(eq(videoDeposits.creatorId, creatorId))
+      .orderBy(desc(videoDeposits.createdAt));
+  }
+
+  async updateVideoDeposit(id: string, updates: Partial<VideoDeposit>): Promise<VideoDeposit> {
+    const [updatedDeposit] = await db
+      .update(videoDeposits)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(videoDeposits.id, id))
+      .returning();
+    return updatedDeposit;
+  }
+
+  // Video token operations
+  async createVideoToken(token: InsertVideoToken): Promise<VideoToken> {
+    const [newToken] = await db.insert(videoTokens).values(token).returning();
+    return newToken;
+  }
+
+  async getVideoToken(token: string): Promise<VideoToken | undefined> {
+    const [videoToken] = await db
+      .select()
+      .from(videoTokens)
+      .where(eq(videoTokens.token, token));
+    return videoToken;
+  }
+
+  async getVideoTokensForDeposit(videoDepositId: string): Promise<VideoToken[]> {
+    return await db
+      .select()
+      .from(videoTokens)
+      .where(eq(videoTokens.videoDepositId, videoDepositId))
+      .orderBy(desc(videoTokens.createdAt));
+  }
+
+  async updateVideoToken(id: string, updates: Partial<VideoToken>): Promise<VideoToken> {
+    const [updatedToken] = await db
+      .update(videoTokens)
+      .set(updates)
+      .where(eq(videoTokens.id, id))
+      .returning();
+    return updatedToken;
+  }
+
+  async revokeVideoTokens(videoDepositId: string): Promise<void> {
+    await db
+      .update(videoTokens)
+      .set({ isRevoked: true })
+      .where(eq(videoTokens.videoDepositId, videoDepositId));
+  }
+
+  // Creator quota operations
+  async getCreatorQuota(creatorId: string, period: string): Promise<CreatorQuota | undefined> {
+    const [quota] = await db
+      .select()
+      .from(creatorQuotas)
+      .where(and(eq(creatorQuotas.creatorId, creatorId), eq(creatorQuotas.period, period)));
+    return quota;
+  }
+
+  async createCreatorQuota(quota: InsertCreatorQuota): Promise<CreatorQuota> {
+    const [newQuota] = await db.insert(creatorQuotas).values(quota).returning();
+    return newQuota;
+  }
+
+  async updateCreatorQuota(creatorId: string, period: string, updates: Partial<CreatorQuota>): Promise<CreatorQuota> {
+    const [updatedQuota] = await db
+      .update(creatorQuotas)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(creatorQuotas.creatorId, creatorId), eq(creatorQuotas.period, period)))
+      .returning();
+    return updatedQuota;
+  }
+
+  async getCreatorQuotaHistory(creatorId: string): Promise<CreatorQuota[]> {
+    return await db
+      .select()
+      .from(creatorQuotas)
+      .where(eq(creatorQuotas.creatorId, creatorId))
+      .orderBy(desc(creatorQuotas.period));
+  }
+
+  // Video analytics operations
+  async createVideoAnalytics(analytics: InsertVideoAnalytics): Promise<VideoAnalytics> {
+    const [newAnalytics] = await db.insert(videoAnalytics).values(analytics).returning();
+    return newAnalytics;
+  }
+
+  async getVideoAnalytics(videoDepositId: string): Promise<VideoAnalytics[]> {
+    return await db
+      .select()
+      .from(videoAnalytics)
+      .where(eq(videoAnalytics.videoDepositId, videoDepositId))
+      .orderBy(desc(videoAnalytics.viewDate));
+  }
+
+  async getPopularVideos(limit = 10): Promise<{ deposit: VideoDeposit; viewCount: number }[]> {
+    const result = await db
+      .select({
+        deposit: videoDeposits,
+        viewCount: sql<number>`count(${videoAnalytics.id})`,
+      })
+      .from(videoDeposits)
+      .leftJoin(videoAnalytics, eq(videoDeposits.id, videoAnalytics.videoDepositId))
+      .groupBy(videoDeposits.id)
+      .orderBy(desc(sql<number>`count(${videoAnalytics.id})`), desc(videoDeposits.createdAt))
+      .limit(limit);
+    
+    return result.map(r => ({
+      deposit: r.deposit,
+      viewCount: r.viewCount || 0
+    }));
   }
 }
 
