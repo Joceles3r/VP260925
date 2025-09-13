@@ -6,7 +6,6 @@ import { bunnyVideoService } from './bunnyVideoService';
 import { storage } from '../storage';
 import { z } from 'zod';
 import Stripe from 'stripe';
-import { nanoid } from 'nanoid';
 import type { 
   InsertVideoDeposit, 
   InsertCreatorQuota, 
@@ -15,6 +14,7 @@ import type {
   CreatorQuota
 } from '@shared/schema';
 
+// Initialize Stripe for video deposits
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2024-06-20",
 });
@@ -393,6 +393,210 @@ export class VideoDepositService {
       return new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
     }
   }
-}
 
-export { VideoDepositService };
+  /**
+   * Cleanup orphaned video deposits (failed payments or abandoned uploads)
+   * Should be called periodically via cron job or admin action
+   */
+  static async cleanupOrphanedDeposits(): Promise<{
+    cleaned: number;
+    errors: string[];
+  }> {
+    const errors: string[] = [];
+    let cleaned = 0;
+
+    try {
+      const cutoffDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
+
+      // Find deposits that are still pending payment after 24 hours
+      // For now, we'll implement a simple approach by checking recent deposits
+      // TODO: Add proper storage method for querying deposits by status and date
+      console.log('[CLEANUP] Starting orphaned deposits cleanup...');
+      
+      // Simple implementation - get all deposits and filter 
+      // In production, this should be a proper database query
+      const orphanedDeposits: any[] = []; // Placeholder for now
+
+      for (const deposit of orphanedDeposits) {
+        try {
+          // Check payment status on Stripe
+          const paymentIntent = await stripe.paymentIntents.retrieve(deposit.paymentIntentId);
+          
+          if (paymentIntent.status === 'requires_payment_method' || 
+              paymentIntent.status === 'canceled' ||
+              paymentIntent.status === 'payment_failed') {
+            
+            // Mark deposit as rejected
+            await storage.updateVideoDeposit(deposit.id, {
+              status: 'rejected',
+              rejectionReason: `Cleanup: ${paymentIntent.status}`,
+              updatedAt: new Date()
+            });
+
+            // Revoke associated tokens
+            await storage.revokeVideoTokens(deposit.id);
+
+            // Delete Bunny.net video if created
+            if (deposit.bunnyVideoId) {
+              try {
+                await bunnyVideoService.deleteVideo(deposit.bunnyVideoId);
+              } catch (bunnyError) {
+                console.warn(`Failed to delete Bunny video ${deposit.bunnyVideoId}:`, bunnyError);
+                errors.push(`Bunny deletion failed for ${deposit.id}: ${bunnyError}`);
+              }
+            }
+
+            cleaned++;
+            console.log(`[CLEANUP] Orphaned deposit ${deposit.id} cleaned up`);
+          }
+        } catch (paymentError) {
+          console.error(`Error checking payment intent for deposit ${deposit.id}:`, paymentError);
+          errors.push(`Payment check failed for ${deposit.id}: ${paymentError}`);
+        }
+      }
+
+      console.log(`[CLEANUP] Processed ${orphanedDeposits.length} deposits, cleaned ${cleaned}`);
+      return { cleaned, errors };
+
+    } catch (error) {
+      console.error('Error during orphaned deposits cleanup:', error);
+      errors.push(`General cleanup error: ${error}`);
+      return { cleaned, errors };
+    }
+  }
+
+  /**
+   * Get deposit statistics for monitoring
+   */
+  static async getDepositStatistics(): Promise<{
+    total: number;
+    byStatus: Record<string, number>;
+    byType: Record<string, number>;
+    recentActivity: {
+      last24h: number;
+      last7d: number;
+      last30d: number;
+    };
+  }> {
+    try {
+      const now = new Date();
+      const day24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const day7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const day30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // This would require proper SQL aggregation queries
+      // For now, implement basic counting
+      const allDeposits = await storage.db
+        .select()
+        .from(storage.videoDeposits);
+
+      const stats = {
+        total: allDeposits.length,
+        byStatus: {} as Record<string, number>,
+        byType: {} as Record<string, number>,
+        recentActivity: {
+          last24h: allDeposits.filter(d => new Date(d.createdAt) > day24h).length,
+          last7d: allDeposits.filter(d => new Date(d.createdAt) > day7d).length,
+          last30d: allDeposits.filter(d => new Date(d.createdAt) > day30d).length,
+        }
+      };
+
+      // Count by status
+      for (const deposit of allDeposits) {
+        stats.byStatus[deposit.status] = (stats.byStatus[deposit.status] || 0) + 1;
+        stats.byType[deposit.videoType] = (stats.byType[deposit.videoType] || 0) + 1;
+      }
+
+      return stats;
+    } catch (error) {
+      console.error('Error getting deposit statistics:', error);
+      throw new Error('Failed to get deposit statistics');
+    }
+  }
+
+  /**
+   * Verify deposit integrity - check for inconsistencies
+   */
+  static async verifyDepositIntegrity(depositId: string): Promise<{
+    valid: boolean;
+    issues: string[];
+    recommendations: string[];
+  }> {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+
+    try {
+      const deposit = await storage.getVideoDeposit(depositId);
+      if (!deposit) {
+        return {
+          valid: false,
+          issues: ['Deposit not found'],
+          recommendations: ['Remove references to this deposit']
+        };
+      }
+
+      // Check payment intent status
+      if (deposit.paymentIntentId) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(deposit.paymentIntentId);
+          
+          if (deposit.status === 'active' && paymentIntent.status !== 'succeeded') {
+            issues.push('Deposit is active but payment was not successful');
+            recommendations.push('Investigate payment discrepancy and possibly revert status');
+          }
+          
+          if (deposit.status === 'pending_payment' && paymentIntent.status === 'succeeded') {
+            issues.push('Payment succeeded but deposit is still pending');
+            recommendations.push('Process payment success to activate deposit');
+          }
+        } catch (stripeError) {
+          issues.push('Cannot verify payment intent status with Stripe');
+          recommendations.push('Check Stripe configuration and payment intent ID');
+        }
+      }
+
+      // Check Bunny.net video existence
+      if (deposit.bunnyVideoId && deposit.status === 'active') {
+        try {
+          const videoStatus = await bunnyVideoService.getVideoStatus(deposit.bunnyVideoId);
+          if (videoStatus.status === 'failed') {
+            issues.push('Bunny.net video processing failed');
+            recommendations.push('Re-upload video or mark deposit as failed');
+          }
+        } catch (bunnyError) {
+          issues.push('Cannot verify Bunny.net video status');
+          recommendations.push('Check Bunny.net integration and video ID');
+        }
+      }
+
+      // Check quota consistency
+      const currentPeriod = this.getCurrentPeriod(new Date(deposit.createdAt));
+      const quota = await storage.getCreatorQuota(deposit.creatorId, currentPeriod);
+      
+      if (deposit.status === 'active' && quota) {
+        const expectedCount = deposit.videoType === 'clip' ? quota.clipDeposits :
+                             deposit.videoType === 'documentary' ? quota.documentaryDeposits :
+                             quota.filmDeposits;
+        
+        if (expectedCount === 0) {
+          issues.push('Active deposit but quota not incremented');
+          recommendations.push('Update creator quota to reflect active deposit');
+        }
+      }
+
+      return {
+        valid: issues.length === 0,
+        issues,
+        recommendations
+      };
+
+    } catch (error) {
+      console.error('Error verifying deposit integrity:', error);
+      return {
+        valid: false,
+        issues: ['Verification failed due to system error'],
+        recommendations: ['Check system logs and retry verification']
+      };
+    }
+  }
+}

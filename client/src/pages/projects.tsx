@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ProjectCard from '@/components/ProjectCard';
 import InvestmentModal from '@/components/InvestmentModal';
+import VideoDepositModal from '@/components/VideoDepositModal';
+import { useAuth } from '@/hooks/useAuth';
 import type { Project } from '@shared/schema';
 
 export default function Projects() {
@@ -13,8 +15,11 @@ export default function Projects() {
   const [sortBy, setSortBy] = useState('roi_desc');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isInvestmentModalOpen, setIsInvestmentModalOpen] = useState(false);
+  const [isVideoDepositModalOpen, setIsVideoDepositModalOpen] = useState(false);
+  
+  const { user } = useAuth();
 
-  const { data: projects, refetch } = useQuery({
+  const { data: projects, refetch } = useQuery<Project[]>({
     queryKey: ['/api/projects', { category: selectedCategory }],
     refetchOnWindowFocus: false,
   });
@@ -39,8 +44,17 @@ export default function Projects() {
     setSelectedProject(project);
     setIsInvestmentModalOpen(true);
   };
+  
+  const handleVideoDeposit = (project: Project) => {
+    setSelectedProject(project);
+    setIsVideoDepositModalOpen(true);
+  };
 
   const handleInvestmentSuccess = () => {
+    refetch();
+  };
+  
+  const handleVideoDepositSuccess = () => {
     refetch();
   };
 
@@ -61,7 +75,7 @@ export default function Projects() {
       case 'roi_asc':
         return parseFloat(a.roiEstimated || '0') - parseFloat(b.roiEstimated || '0');
       case 'recent':
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
       case 'amount_desc':
         return parseFloat(b.targetAmount) - parseFloat(a.targetAmount);
       default:
@@ -153,6 +167,8 @@ export default function Projects() {
             key={project.id}
             project={project}
             onInvest={handleInvest}
+            onVideoDeposit={user?.id === project.creatorId ? handleVideoDeposit : undefined}
+            isCreator={user?.id === project.creatorId}
           />
         ))}
       </div>
@@ -175,6 +191,19 @@ export default function Projects() {
         project={selectedProject}
         onSuccess={handleInvestmentSuccess}
       />
+      
+      {/* Video Deposit Modal */}
+      {isVideoDepositModalOpen && selectedProject && user && (
+        <VideoDepositModal
+          project={selectedProject}
+          user={user}
+          isOpen={isVideoDepositModalOpen}
+          onClose={() => {
+            setIsVideoDepositModalOpen(false);
+            setSelectedProject(null);
+          }}
+        />
+      )}
     </main>
   );
 }

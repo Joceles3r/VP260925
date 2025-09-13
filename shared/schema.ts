@@ -195,6 +195,8 @@ export const videoDeposits = pgTable("video_deposits", {
   hlsPlaylistUrl: varchar("hls_playlist_url"),
   thumbnailUrl: varchar("thumbnail_url"),
   processingData: jsonb("processing_data"), // Bunny.net processing info
+  paidAt: timestamp("paid_at"), // When payment was confirmed
+  rejectionReason: varchar("rejection_reason"), // Reason for rejection if applicable
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -213,6 +215,7 @@ export const videoTokens = pgTable("video_tokens", {
   usageCount: integer("usage_count").default(0),
   maxUsage: integer("max_usage").default(3), // Limit token usage
   isRevoked: boolean("is_revoked").default(false),
+  lastAccessedAt: timestamp("last_accessed_at"), // Track last access time
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -242,6 +245,9 @@ export const videoAnalytics = pgTable("video_analytics", {
   referrer: varchar("referrer"),
   ipAddress: varchar("ip_address"),
   sessionId: varchar("session_id"),
+  userAgent: varchar("user_agent"), // Browser user agent
+  tokenId: varchar("token_id"), // Reference to video token used
+  sessionDuration: integer("session_duration"), // Total session duration in seconds
 });
 
 // Relations

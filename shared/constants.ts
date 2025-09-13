@@ -111,11 +111,10 @@ export const VIDEO_SECURITY = {
 } as const;
 
 // Bunny.net CDN configuration (single VISUAL account)
+// Note: libraryId and apiKey are configured server-side only for security
 export const BUNNY_CONFIG = {
   storageZone: 'visual-videos', // Single storage zone for all videos
   pullZone: 'visual-cdn', // Single pull zone for delivery
-  libraryId: process.env.BUNNY_LIBRARY_ID || '', // VISUAL's library ID
-  apiKey: process.env.BUNNY_API_KEY || '', // VISUAL's API key
   baseUrl: 'https://visual-videos.b-cdn.net', // VISUAL's CDN URL
   streamApiUrl: 'https://video.bunnycdn.com/library', // Stream API base
   allowedFormats: ['mp4', 'webm', 'mov'], // Allowed video formats
