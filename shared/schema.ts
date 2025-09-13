@@ -50,6 +50,15 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 // Notification priority enum
 export const notificationPriorityEnum = pgEnum('notification_priority', ['low', 'medium', 'high', 'urgent']);
 
+// Video deposit type enum (based on VISUAL pricing: 2€, 5€, 10€)
+export const videoTypeEnum = pgEnum('video_type', ['clip', 'documentary', 'film']);
+
+// Video deposit status enum
+export const videoDepositStatusEnum = pgEnum('video_deposit_status', ['pending_payment', 'processing', 'active', 'rejected', 'archived']);
+
+// Video protection type enum
+export const videoProtectionEnum = pgEnum('video_protection', ['token', 'hls_encrypted', 'watermarked']);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -168,6 +177,73 @@ export const notificationPreferences = pgTable("notification_preferences", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Video deposits table - tracks video uploads with VISUAL pricing system
+export const videoDeposits = pgTable("video_deposits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id),
+  creatorId: varchar("creator_id").notNull().references(() => users.id),
+  videoType: videoTypeEnum("video_type").notNull(), // clip, documentary, film
+  originalFilename: varchar("original_filename").notNull(),
+  bunnyVideoId: varchar("bunny_video_id").unique(), // Bunny.net video ID
+  bunnyLibraryId: varchar("bunny_library_id"), // Bunny.net library ID
+  duration: integer("duration"), // Duration in seconds
+  fileSize: integer("file_size"), // File size in bytes
+  status: videoDepositStatusEnum("status").default('pending_payment'),
+  depositFee: decimal("deposit_fee", { precision: 5, scale: 2 }).notNull(), // 2€, 5€, or 10€
+  paymentIntentId: varchar("payment_intent_id"), // Stripe payment intent
+  protectionLevel: videoProtectionEnum("protection_level").default('token'),
+  hlsPlaylistUrl: varchar("hls_playlist_url"),
+  thumbnailUrl: varchar("thumbnail_url"),
+  processingData: jsonb("processing_data"), // Bunny.net processing info
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Video access tokens table - for secure token-based video access
+export const videoTokens = pgTable("video_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  videoDepositId: varchar("video_deposit_id").notNull().references(() => videoDeposits.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  token: varchar("token").notNull().unique(), // Signed token for Bunny.net
+  expiresAt: timestamp("expires_at").notNull(),
+  ipAddress: varchar("ip_address"),
+  userAgent: varchar("user_agent"),
+  sessionId: varchar("session_id"),
+  deviceFingerprint: varchar("device_fingerprint"),
+  usageCount: integer("usage_count").default(0),
+  maxUsage: integer("max_usage").default(3), // Limit token usage
+  isRevoked: boolean("is_revoked").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Creator quotas table - manages monthly/quarterly video deposit limits
+export const creatorQuotas = pgTable("creator_quotas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  creatorId: varchar("creator_id").notNull().references(() => users.id),
+  period: varchar("period", { length: 7 }).notNull(), // "2024-01" format
+  clipDeposits: integer("clip_deposits").default(0), // Max 2/month
+  documentaryDeposits: integer("documentary_deposits").default(0), // Max 1/month
+  filmDeposits: integer("film_deposits").default(0), // Max 1/quarter
+  totalSpentEUR: decimal("total_spent_eur", { precision: 10, scale: 2 }).default('0.00'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Video analytics table - track views, performance for better ROI calculation
+export const videoAnalytics = pgTable("video_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  videoDepositId: varchar("video_deposit_id").notNull().references(() => videoDeposits.id),
+  userId: varchar("user_id").references(() => users.id), // Null for anonymous views
+  viewDate: timestamp("view_date").defaultNow(),
+  watchDuration: integer("watch_duration"), // Seconds watched
+  completionRate: decimal("completion_rate", { precision: 5, scale: 2 }), // % watched
+  deviceType: varchar("device_type"), // mobile, desktop, tablet
+  location: varchar("location"), // Country/region
+  referrer: varchar("referrer"),
+  ipAddress: varchar("ip_address"),
+  sessionId: varchar("session_id"),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
@@ -231,6 +307,48 @@ export const notificationPreferencesRelations = relations(notificationPreference
   }),
 }));
 
+export const videoDepositsRelations = relations(videoDeposits, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [videoDeposits.projectId],
+    references: [projects.id],
+  }),
+  creator: one(users, {
+    fields: [videoDeposits.creatorId],
+    references: [users.id],
+  }),
+  tokens: many(videoTokens),
+  analytics: many(videoAnalytics),
+}));
+
+export const videoTokensRelations = relations(videoTokens, ({ one }) => ({
+  videoDeposit: one(videoDeposits, {
+    fields: [videoTokens.videoDepositId],
+    references: [videoDeposits.id],
+  }),
+  user: one(users, {
+    fields: [videoTokens.userId],
+    references: [users.id],
+  }),
+}));
+
+export const creatorQuotasRelations = relations(creatorQuotas, ({ one }) => ({
+  creator: one(users, {
+    fields: [creatorQuotas.creatorId],
+    references: [users.id],
+  }),
+}));
+
+export const videoAnalyticsRelations = relations(videoAnalytics, ({ one }) => ({
+  videoDeposit: one(videoDeposits, {
+    fields: [videoAnalytics.videoDepositId],
+    references: [videoDeposits.id],
+  }),
+  user: one(users, {
+    fields: [videoAnalytics.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -265,6 +383,27 @@ export const insertNotificationPreferenceSchema = createInsertSchema(notificatio
   updatedAt: true,
 });
 
+export const insertVideoDepositSchema = createInsertSchema(videoDeposits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVideoTokenSchema = createInsertSchema(videoTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCreatorQuotaSchema = createInsertSchema(creatorQuotas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVideoAnalyticsSchema = createInsertSchema(videoAnalytics).omit({
+  id: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -275,9 +414,17 @@ export type LiveShow = typeof liveShows.$inferSelect;
 export type ComplianceReport = typeof complianceReports.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type VideoDeposit = typeof videoDeposits.$inferSelect;
+export type VideoToken = typeof videoTokens.$inferSelect;
+export type CreatorQuota = typeof creatorQuotas.$inferSelect;
+export type VideoAnalytics = typeof videoAnalytics.$inferSelect;
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferenceSchema>;
+export type InsertVideoDeposit = z.infer<typeof insertVideoDepositSchema>;
+export type InsertVideoToken = z.infer<typeof insertVideoTokenSchema>;
+export type InsertCreatorQuota = z.infer<typeof insertCreatorQuotaSchema>;
+export type InsertVideoAnalytics = z.infer<typeof insertVideoAnalyticsSchema>;
