@@ -38,6 +38,14 @@ export const PROFILE_CAUTION_MINIMUMS = {
   invested_reader: 20  // Investi-lecteurs
 } as const;
 
+// User profile types and their minimum withdrawal amounts (Module 6)
+export const PROFILE_WITHDRAWAL_MINIMUMS = {
+  creator: 50,      // Porteurs: €50 minimum 
+  admin: 50,        // Infoporteurs: €50 minimum
+  investor: 25,     // Investisseurs: €25 minimum
+  invested_reader: 25  // Investi-lecteurs: €25 minimum
+} as const;
+
 // Investment status mappings
 export const INVESTMENT_STATUS = {
   active: {

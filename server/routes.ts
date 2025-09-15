@@ -15,7 +15,7 @@ import {
   updateSocialPostSchema,
   updateSocialCommentSchema
 } from "@shared/schema";
-import { getMinimumCautionAmount } from "@shared/utils";
+import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -2491,6 +2491,255 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE 5: RÈGLES CATÉGORIES VIDÉOS =====
   // Video category management with automated lifecycle rules
   app.use('/api/categories', categoriesRouter);
+
+  // ===== MODULE 6: SEUILS DE RETRAIT PAR PROFIL =====
+  // Withdrawal request management with profile-based minimum thresholds
+
+  // EXPLICIT ADMIN AUTHORIZATION MIDDLEWARE
+  const requireAdminAccess = async (req: any, res: any, next: any) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || user.profileType !== 'admin') {
+        // Enhanced audit logging for security
+        await storage.createAuditLog({
+          userId: userId || 'unknown',
+          action: 'unauthorized_admin_access_attempt',
+          resourceType: 'admin_endpoint',
+          details: {
+            endpoint: req.originalUrl,
+            method: req.method,
+            userAgent: req.get('User-Agent'),
+            ip: req.ip,
+            profileType: user?.profileType || 'none'
+          }
+        });
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      // Attach user to request for downstream handlers
+      req.adminUser = user;
+      next();
+    } catch (error) {
+      console.error('Admin authorization middleware error:', error);
+      res.status(500).json({ message: "Authorization check failed" });
+    }
+  };
+
+  // Validation schema for withdrawal requests - accepts both number and string
+  const createWithdrawalRequestSchema = z.object({
+    amount: z.union([z.number(), z.string()])
+      .transform((val) => {
+        const num = typeof val === 'string' ? parseFloat(val) : val;
+        if (isNaN(num)) throw new Error('Invalid number format');
+        return num;
+      })
+      .refine(n => n > 0, "Amount must be a positive number")
+  });
+
+  // Create withdrawal request
+  app.post('/api/withdrawal/request', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = createWithdrawalRequestSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data",
+          errors: validation.error.issues 
+        });
+      }
+
+      const { amount } = validation.data;
+      const withdrawalAmount = amount; // Amount is already transformed to number by schema
+
+      // Get user to check profile and balance
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check minimum threshold based on profile
+      const minimumThreshold = getMinimumWithdrawalAmount(user.profileType || 'investor');
+      if (withdrawalAmount < minimumThreshold) {
+        return res.status(400).json({ 
+          message: `Minimum withdrawal amount for ${user.profileType || 'investor'} profile is €${minimumThreshold}`,
+          minimumThreshold 
+        });
+      }
+
+      // FUND RESERVATION: Calculate available balance considering pending withdrawals
+      const currentBalance = parseFloat(user.balanceEUR || '0');
+      const pendingWithdrawalAmount = await storage.getUserPendingWithdrawalAmount(userId);
+      const availableBalance = currentBalance - pendingWithdrawalAmount;
+      
+      if (withdrawalAmount > availableBalance) {
+        return res.status(400).json({ 
+          message: `Insufficient available balance. Available: €${availableBalance.toFixed(2)} (Total: €${currentBalance.toFixed(2)}, Reserved: €${pendingWithdrawalAmount.toFixed(2)})`,
+          availableBalance,
+          totalBalance: currentBalance,
+          reservedAmount: pendingWithdrawalAmount
+        });
+      }
+
+      // Check KYC verification
+      if (!user.kycVerified) {
+        return res.status(403).json({ 
+          message: "KYC verification required for withdrawals" 
+        });
+      }
+
+      // Create withdrawal request
+      const withdrawalRequest = await storage.createWithdrawalRequest({
+        userId,
+        amount: amount,
+        minimumThreshold: minimumThreshold.toString(),
+        status: 'pending'
+      });
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'withdrawal_request_created',
+        resourceType: 'withdrawal',
+        resourceId: withdrawalRequest.id,
+        details: {
+          amount: withdrawalAmount,
+          minimumThreshold,
+          profileType: user.profileType,
+          balanceBefore: availableBalance
+        }
+      });
+
+      res.json({
+        success: true,
+        withdrawalRequest: {
+          id: withdrawalRequest.id,
+          amount: withdrawalAmount,
+          minimumThreshold,
+          status: withdrawalRequest.status,
+          requestedAt: withdrawalRequest.requestedAt
+        }
+      });
+    } catch (error) {
+      console.error("Error creating withdrawal request:", error);
+      res.status(500).json({ message: "Failed to create withdrawal request" });
+    }
+  });
+
+  // Get user withdrawal history
+  app.get('/api/withdrawal/history', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { limit = 20 } = req.query;
+
+      const withdrawals = await storage.getUserWithdrawalRequests(userId, parseInt(limit));
+      
+      res.json({
+        withdrawals: withdrawals.map(w => ({
+          id: w.id,
+          amount: parseFloat(w.amount),
+          minimumThreshold: parseFloat(w.minimumThreshold),
+          status: w.status,
+          requestedAt: w.requestedAt,
+          processedAt: w.processedAt,
+          failureReason: w.failureReason
+        }))
+      });
+    } catch (error) {
+      console.error("Error fetching withdrawal history:", error);
+      res.status(500).json({ message: "Failed to fetch withdrawal history" });
+    }
+  });
+
+  // Admin: Get pending withdrawals
+  app.get('/api/admin/withdrawals', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const pendingWithdrawals = await storage.getPendingWithdrawalRequests();
+      
+      // Enrich with user data
+      const enrichedWithdrawals = await Promise.all(
+        pendingWithdrawals.map(async (withdrawal) => {
+          const requestUser = await storage.getUser(withdrawal.userId);
+          return {
+            id: withdrawal.id,
+            amount: parseFloat(withdrawal.amount),
+            minimumThreshold: parseFloat(withdrawal.minimumThreshold),
+            status: withdrawal.status,
+            requestedAt: withdrawal.requestedAt,
+            user: requestUser ? {
+              id: requestUser.id,
+              firstName: requestUser.firstName,
+              lastName: requestUser.lastName,
+              email: requestUser.email,
+              profileType: requestUser.profileType,
+              balanceEUR: parseFloat(requestUser.balanceEUR || '0')
+            } : null
+          };
+        })
+      );
+
+      res.json({ pendingWithdrawals: enrichedWithdrawals });
+    } catch (error) {
+      console.error("Error fetching pending withdrawals:", error);
+      res.status(500).json({ message: "Failed to fetch pending withdrawals" });
+    }
+  });
+
+  // Admin: Process withdrawal (approve/reject)
+  app.put('/api/admin/withdrawals/:id', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, failureReason } = req.body;
+      const adminUser = req.adminUser; // From middleware
+
+      if (!['processing', 'completed', 'failed'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const updates: any = {
+        status,
+        processedAt: new Date()
+      };
+
+      if (status === 'failed' && failureReason) {
+        updates.failureReason = failureReason;
+      }
+
+      const updatedWithdrawal = await storage.updateWithdrawalRequest(id, updates);
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: adminUser.id,
+        action: 'withdrawal_processed',
+        resourceType: 'withdrawal', 
+        resourceId: id,
+        details: {
+          status,
+          failureReason,
+          processedBy: adminUser.id,
+          amount: parseFloat(updatedWithdrawal.amount)
+        }
+      });
+
+      res.json({
+        success: true,
+        withdrawal: {
+          id: updatedWithdrawal.id,
+          status: updatedWithdrawal.status,
+          processedAt: updatedWithdrawal.processedAt,
+          failureReason: updatedWithdrawal.failureReason
+        }
+      });
+    } catch (error) {
+      console.error("Error processing withdrawal:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
 
   return httpServer;
 }

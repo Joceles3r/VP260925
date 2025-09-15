@@ -1,6 +1,6 @@
 // Centralized utility functions for VISUAL platform
 
-import { PROJECT_CATEGORIES, PROFILE_CAUTION_MINIMUMS, INVESTMENT_STATUS, DEFAULT_CATEGORY_SCORE, DEFAULT_COLOR_CLASS, DEFAULT_CAUTION_MINIMUM } from './constants';
+import { PROJECT_CATEGORIES, PROFILE_CAUTION_MINIMUMS, PROFILE_WITHDRAWAL_MINIMUMS, INVESTMENT_STATUS, DEFAULT_CATEGORY_SCORE, DEFAULT_COLOR_CLASS, DEFAULT_CAUTION_MINIMUM } from './constants';
 
 /**
  * Get minimum caution amount based on user profile type
@@ -9,6 +9,15 @@ import { PROJECT_CATEGORIES, PROFILE_CAUTION_MINIMUMS, INVESTMENT_STATUS, DEFAUL
  */
 export function getMinimumCautionAmount(profileType: string): number {
   return PROFILE_CAUTION_MINIMUMS[profileType as keyof typeof PROFILE_CAUTION_MINIMUMS] ?? DEFAULT_CAUTION_MINIMUM;
+}
+
+/**
+ * Get minimum withdrawal amount based on user profile type (Module 6)
+ * @param profileType - User's profile type (creator, admin, investor, invested_reader)
+ * @returns Minimum withdrawal amount in EUR
+ */
+export function getMinimumWithdrawalAmount(profileType: string): number {
+  return PROFILE_WITHDRAWAL_MINIMUMS[profileType as keyof typeof PROFILE_WITHDRAWAL_MINIMUMS] ?? 25; // Default to €25
 }
 
 /**
