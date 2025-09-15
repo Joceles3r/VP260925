@@ -11,6 +11,15 @@ import {
   videoTokens,
   creatorQuotas,
   videoAnalytics,
+  socialPosts,
+  socialComments,
+  socialLikes,
+  visuPointsTransactions,
+  paymentReceipts,
+  videoCategories,
+  projectExtensions,
+  purgeJobs,
+  withdrawalRequests,
   type User,
   type UpsertUser,
   type Project,
@@ -24,6 +33,15 @@ import {
   type VideoToken,
   type CreatorQuota,
   type VideoAnalytics,
+  type SocialPost,
+  type SocialComment,
+  type SocialLike,
+  type VisuPointsTransaction,
+  type PaymentReceipt,
+  type VideoCategory,
+  type ProjectExtension,
+  type PurgeJob,
+  type WithdrawalRequest,
   type InsertProject,
   type InsertInvestment,
   type InsertTransaction,
@@ -33,6 +51,15 @@ import {
   type InsertVideoToken,
   type InsertCreatorQuota,
   type InsertVideoAnalytics,
+  type InsertSocialPost,
+  type InsertSocialComment,
+  type InsertSocialLike,
+  type InsertVisuPointsTransaction,
+  type InsertPaymentReceipt,
+  type InsertVideoCategory,
+  type InsertProjectExtension,
+  type InsertPurgeJob,
+  type InsertWithdrawalRequest,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql } from "drizzle-orm";
@@ -106,6 +133,71 @@ export interface IStorage {
   createVideoAnalytics(analytics: InsertVideoAnalytics): Promise<VideoAnalytics>;
   getVideoAnalytics(videoDepositId: string): Promise<VideoAnalytics[]>;
   getPopularVideos(limit?: number): Promise<{ deposit: VideoDeposit; viewCount: number }[]>;
+  
+  // MODULE 1: Mini réseau social VISUAL
+  // Social posts operations
+  createSocialPost(post: InsertSocialPost): Promise<SocialPost>;
+  getSocialPost(id: string): Promise<SocialPost | undefined>;
+  getProjectSocialPosts(projectId: string, limit?: number, offset?: number): Promise<SocialPost[]>;
+  getUserSocialPosts(authorId: string, limit?: number, offset?: number): Promise<SocialPost[]>;
+  updateSocialPost(id: string, updates: Partial<SocialPost>): Promise<SocialPost>;
+  deleteSocialPost(id: string): Promise<void>;
+  
+  // Social comments operations
+  createSocialComment(comment: InsertSocialComment): Promise<SocialComment>;
+  getPostComments(postId: string, limit?: number, offset?: number): Promise<SocialComment[]>;
+  getCommentReplies(parentId: string, limit?: number, offset?: number): Promise<SocialComment[]>;
+  updateSocialComment(id: string, updates: Partial<SocialComment>): Promise<SocialComment>;
+  deleteSocialComment(id: string): Promise<void>;
+  
+  // Social likes operations
+  createSocialLike(like: InsertSocialLike): Promise<SocialLike>;
+  removeSocialLike(userId: string, postId?: string, commentId?: string): Promise<void>;
+  getPostLikes(postId: string): Promise<SocialLike[]>;
+  getCommentLikes(commentId: string): Promise<SocialLike[]>;
+  getUserLikedPosts(userId: string, limit?: number): Promise<SocialPost[]>;
+  
+  // VisuPoints transactions operations
+  createVisuPointsTransaction(transaction: InsertVisuPointsTransaction): Promise<VisuPointsTransaction>;
+  getUserVisuPointsBalance(userId: string): Promise<number>;
+  getUserVisuPointsHistory(userId: string, limit?: number): Promise<VisuPointsTransaction[]>;
+  
+  // MODULE 2: Cycle de vie projet vidéo
+  // Project extensions operations
+  createProjectExtension(extension: InsertProjectExtension): Promise<ProjectExtension>;
+  getProjectExtensions(projectId: string): Promise<ProjectExtension[]>;
+  getActiveProjectExtensions(): Promise<ProjectExtension[]>;
+  updateProjectExtension(id: string, updates: Partial<ProjectExtension>): Promise<ProjectExtension>;
+  
+  // MODULE 3: Purge automatique
+  // Purge jobs operations
+  createPurgeJob(job: InsertPurgeJob): Promise<PurgeJob>;
+  getPendingPurgeJobs(): Promise<PurgeJob[]>;
+  getCompletedPurgeJobs(limit?: number): Promise<PurgeJob[]>;
+  updatePurgeJob(id: string, updates: Partial<PurgeJob>): Promise<PurgeJob>;
+  
+  // MODULE 4: Reçus de paiement
+  // Payment receipts operations
+  createPaymentReceipt(receipt: InsertPaymentReceipt): Promise<PaymentReceipt>;
+  getPaymentReceipt(id: string): Promise<PaymentReceipt | undefined>;
+  getUserPaymentReceipts(userId: string, limit?: number): Promise<PaymentReceipt[]>;
+  getPaymentReceiptByTransaction(transactionId: string): Promise<PaymentReceipt | undefined>;
+  
+  // MODULE 5: Règles catégories vidéos
+  // Video categories operations
+  createVideoCategory(category: InsertVideoCategory): Promise<VideoCategory>;
+  getVideoCategory(category: string): Promise<VideoCategory | undefined>;
+  getAllVideoCategories(): Promise<VideoCategory[]>;
+  updateVideoCategory(category: string, updates: Partial<VideoCategory>): Promise<VideoCategory>;
+  getCategoryActiveVideos(category: string): Promise<number>;
+  
+  // MODULE 6: Seuils de retrait
+  // Withdrawal requests operations
+  createWithdrawalRequest(request: InsertWithdrawalRequest): Promise<WithdrawalRequest>;
+  getUserWithdrawalRequests(userId: string, limit?: number): Promise<WithdrawalRequest[]>;
+  getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]>;
+  updateWithdrawalRequest(id: string, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest>;
+  getUserPendingWithdrawalAmount(userId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -570,6 +662,358 @@ export class DatabaseStorage implements IStorage {
       deposit: r.deposit,
       viewCount: r.viewCount || 0
     }));
+  }
+
+  // MODULE 1: Mini réseau social VISUAL
+  // Social posts operations
+  async createSocialPost(post: InsertSocialPost, tx?: any): Promise<SocialPost> {
+    const dbInstance = tx || db;
+    const [newPost] = await dbInstance.insert(socialPosts).values(post).returning();
+    return newPost;
+  }
+
+  async getSocialPost(id: string): Promise<SocialPost | undefined> {
+    const [post] = await db
+      .select()
+      .from(socialPosts)
+      .where(eq(socialPosts.id, id));
+    return post;
+  }
+
+  async getProjectSocialPosts(projectId: string, limit = 20, offset = 0): Promise<SocialPost[]> {
+    return await db
+      .select()
+      .from(socialPosts)
+      .where(eq(socialPosts.projectId, projectId))
+      .orderBy(desc(socialPosts.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getUserSocialPosts(authorId: string, limit = 20, offset = 0): Promise<SocialPost[]> {
+    return await db
+      .select()
+      .from(socialPosts)
+      .where(eq(socialPosts.authorId, authorId))
+      .orderBy(desc(socialPosts.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async updateSocialPost(id: string, updates: Partial<SocialPost>): Promise<SocialPost> {
+    const [updatedPost] = await db
+      .update(socialPosts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(socialPosts.id, id))
+      .returning();
+    return updatedPost;
+  }
+
+  async deleteSocialPost(id: string): Promise<void> {
+    await db.delete(socialPosts).where(eq(socialPosts.id, id));
+  }
+
+  // Social comments operations
+  async createSocialComment(comment: InsertSocialComment, tx?: any): Promise<SocialComment> {
+    const dbInstance = tx || db;
+    const [newComment] = await dbInstance.insert(socialComments).values(comment).returning();
+    return newComment;
+  }
+
+  async getSocialComment(id: string): Promise<SocialComment | undefined> {
+    const [comment] = await db
+      .select()
+      .from(socialComments)
+      .where(eq(socialComments.id, id));
+    return comment;
+  }
+
+  async getPostComments(postId: string, limit = 50, offset = 0): Promise<SocialComment[]> {
+    return await db
+      .select()
+      .from(socialComments)
+      .where(eq(socialComments.postId, postId))
+      .orderBy(asc(socialComments.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getCommentReplies(parentId: string, limit = 20, offset = 0): Promise<SocialComment[]> {
+    return await db
+      .select()
+      .from(socialComments)
+      .where(eq(socialComments.parentId, parentId))
+      .orderBy(asc(socialComments.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async updateSocialComment(id: string, updates: Partial<SocialComment>): Promise<SocialComment> {
+    const [updatedComment] = await db
+      .update(socialComments)
+      .set(updates)
+      .where(eq(socialComments.id, id))
+      .returning();
+    return updatedComment;
+  }
+
+  async deleteSocialComment(id: string): Promise<void> {
+    await db.delete(socialComments).where(eq(socialComments.id, id));
+  }
+
+  // Social likes operations
+  async createSocialLike(like: InsertSocialLike, tx?: any): Promise<SocialLike> {
+    const dbInstance = tx || db;
+    const [newLike] = await dbInstance.insert(socialLikes).values(like).returning();
+    return newLike;
+  }
+
+  async removeSocialLike(userId: string, postId?: string, commentId?: string): Promise<void> {
+    if (postId) {
+      await db
+        .delete(socialLikes)
+        .where(and(eq(socialLikes.userId, userId), eq(socialLikes.postId, postId)));
+    } else if (commentId) {
+      await db
+        .delete(socialLikes)
+        .where(and(eq(socialLikes.userId, userId), eq(socialLikes.commentId, commentId)));
+    }
+  }
+
+  async getPostLikes(postId: string): Promise<SocialLike[]> {
+    return await db
+      .select()
+      .from(socialLikes)
+      .where(eq(socialLikes.postId, postId))
+      .orderBy(desc(socialLikes.createdAt));
+  }
+
+  async getCommentLikes(commentId: string): Promise<SocialLike[]> {
+    return await db
+      .select()
+      .from(socialLikes)
+      .where(eq(socialLikes.commentId, commentId))
+      .orderBy(desc(socialLikes.createdAt));
+  }
+
+  async getUserLikedPosts(userId: string, limit = 20): Promise<SocialPost[]> {
+    const likedPosts = await db
+      .select({
+        post: socialPosts,
+      })
+      .from(socialLikes)
+      .innerJoin(socialPosts, eq(socialLikes.postId, socialPosts.id))
+      .where(eq(socialLikes.userId, userId))
+      .orderBy(desc(socialLikes.createdAt))
+      .limit(limit);
+    
+    return likedPosts.map(lp => lp.post);
+  }
+
+  // VisuPoints transactions operations
+  async createVisuPointsTransaction(transaction: InsertVisuPointsTransaction, tx?: any): Promise<VisuPointsTransaction> {
+    const dbInstance = tx || db;
+    const [newTransaction] = await dbInstance.insert(visuPointsTransactions).values(transaction).returning();
+    return newTransaction;
+  }
+
+  async getUserVisuPointsBalance(userId: string): Promise<number> {
+    const result = await db
+      .select({ totalPoints: sql<number>`COALESCE(SUM(${visuPointsTransactions.amount}), 0)` })
+      .from(visuPointsTransactions)
+      .where(eq(visuPointsTransactions.userId, userId));
+    
+    return result[0]?.totalPoints || 0;
+  }
+
+  async getUserVisuPointsHistory(userId: string, limit = 50): Promise<VisuPointsTransaction[]> {
+    return await db
+      .select()
+      .from(visuPointsTransactions)
+      .where(eq(visuPointsTransactions.userId, userId))
+      .orderBy(desc(visuPointsTransactions.createdAt))
+      .limit(limit);
+  }
+
+  // MODULE 2: Cycle de vie projet vidéo
+  async createProjectExtension(extension: InsertProjectExtension): Promise<ProjectExtension> {
+    const [newExtension] = await db.insert(projectExtensions).values(extension).returning();
+    return newExtension;
+  }
+
+  async getProjectExtensions(projectId: string): Promise<ProjectExtension[]> {
+    return await db
+      .select()
+      .from(projectExtensions)
+      .where(eq(projectExtensions.projectId, projectId))
+      .orderBy(desc(projectExtensions.createdAt));
+  }
+
+  async getActiveProjectExtensions(): Promise<ProjectExtension[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(projectExtensions)
+      .where(gte(projectExtensions.extendsUntil, now))
+      .orderBy(asc(projectExtensions.extendsUntil));
+  }
+
+  async updateProjectExtension(id: string, updates: Partial<ProjectExtension>): Promise<ProjectExtension> {
+    const [updatedExtension] = await db
+      .update(projectExtensions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(projectExtensions.id, id))
+      .returning();
+    return updatedExtension;
+  }
+
+  // MODULE 3: Purge automatique
+  async createPurgeJob(job: InsertPurgeJob): Promise<PurgeJob> {
+    const [newJob] = await db.insert(purgeJobs).values(job).returning();
+    return newJob;
+  }
+
+  async getPendingPurgeJobs(): Promise<PurgeJob[]> {
+    return await db
+      .select()
+      .from(purgeJobs)
+      .where(eq(purgeJobs.status, 'pending'))
+      .orderBy(asc(purgeJobs.scheduledAt));
+  }
+
+  async getCompletedPurgeJobs(limit = 20): Promise<PurgeJob[]> {
+    return await db
+      .select()
+      .from(purgeJobs)
+      .where(eq(purgeJobs.status, 'completed'))
+      .orderBy(desc(purgeJobs.executedAt))
+      .limit(limit);
+  }
+
+  async updatePurgeJob(id: string, updates: Partial<PurgeJob>): Promise<PurgeJob> {
+    const [updatedJob] = await db
+      .update(purgeJobs)
+      .set(updates)
+      .where(eq(purgeJobs.id, id))
+      .returning();
+    return updatedJob;
+  }
+
+  // MODULE 4: Reçus de paiement
+  async createPaymentReceipt(receipt: InsertPaymentReceipt): Promise<PaymentReceipt> {
+    const [newReceipt] = await db.insert(paymentReceipts).values(receipt).returning();
+    return newReceipt;
+  }
+
+  async getPaymentReceipt(id: string): Promise<PaymentReceipt | undefined> {
+    const [receipt] = await db
+      .select()
+      .from(paymentReceipts)
+      .where(eq(paymentReceipts.id, id));
+    return receipt;
+  }
+
+  async getUserPaymentReceipts(userId: string, limit = 20): Promise<PaymentReceipt[]> {
+    return await db
+      .select()
+      .from(paymentReceipts)
+      .where(eq(paymentReceipts.userId, userId))
+      .orderBy(desc(paymentReceipts.createdAt))
+      .limit(limit);
+  }
+
+  async getPaymentReceiptByTransaction(transactionId: string): Promise<PaymentReceipt | undefined> {
+    const [receipt] = await db
+      .select()
+      .from(paymentReceipts)
+      .where(eq(paymentReceipts.transactionId, transactionId));
+    return receipt;
+  }
+
+  // MODULE 5: Règles catégories vidéos
+  async createVideoCategory(category: InsertVideoCategory): Promise<VideoCategory> {
+    const [newCategory] = await db.insert(videoCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async getVideoCategory(category: string): Promise<VideoCategory | undefined> {
+    const [videoCategory] = await db
+      .select()
+      .from(videoCategories)
+      .where(eq(videoCategories.category, category));
+    return videoCategory;
+  }
+
+  async getAllVideoCategories(): Promise<VideoCategory[]> {
+    return await db
+      .select()
+      .from(videoCategories)
+      .orderBy(asc(videoCategories.category));
+  }
+
+  async updateVideoCategory(category: string, updates: Partial<VideoCategory>): Promise<VideoCategory> {
+    const [updatedCategory] = await db
+      .update(videoCategories)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(videoCategories.category, category))
+      .returning();
+    return updatedCategory;
+  }
+
+  async getCategoryActiveVideos(category: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(videoDeposits)
+      .where(and(
+        eq(videoDeposits.category, category),
+        eq(videoDeposits.status, 'active')
+      ));
+    
+    return result[0]?.count || 0;
+  }
+
+  // MODULE 6: Seuils de retrait
+  async createWithdrawalRequest(request: InsertWithdrawalRequest): Promise<WithdrawalRequest> {
+    const [newRequest] = await db.insert(withdrawalRequests).values(request).returning();
+    return newRequest;
+  }
+
+  async getUserWithdrawalRequests(userId: string, limit = 20): Promise<WithdrawalRequest[]> {
+    return await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.userId, userId))
+      .orderBy(desc(withdrawalRequests.requestedAt))
+      .limit(limit);
+  }
+
+  async getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]> {
+    return await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.status, 'pending'))
+      .orderBy(asc(withdrawalRequests.requestedAt));
+  }
+
+  async updateWithdrawalRequest(id: string, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest> {
+    const [updatedRequest] = await db
+      .update(withdrawalRequests)
+      .set(updates)
+      .where(eq(withdrawalRequests.id, id))
+      .returning();
+    return updatedRequest;
+  }
+
+  async getUserPendingWithdrawalAmount(userId: string): Promise<number> {
+    const result = await db
+      .select({ totalAmount: sql<number>`COALESCE(SUM(${withdrawalRequests.amount}), 0)` })
+      .from(withdrawalRequests)
+      .where(and(
+        eq(withdrawalRequests.userId, userId),
+        eq(withdrawalRequests.status, 'pending')
+      ));
+    
+    return result[0]?.totalAmount || 0;
   }
 }
 

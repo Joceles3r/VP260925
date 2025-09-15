@@ -11,6 +11,7 @@ import {
   decimal,
   boolean,
   pgEnum,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -312,7 +313,12 @@ export const socialLikes = pgTable("social_likes", {
   postId: varchar("post_id").references(() => socialPosts.id),
   commentId: varchar("comment_id").references(() => socialComments.id),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // Prevent duplicate likes on posts
+  unique("unique_user_post_like").on(table.userId, table.postId),
+  // Prevent duplicate likes on comments  
+  unique("unique_user_comment_like").on(table.userId, table.commentId),
+]);
 
 // VISUPoints transactions table
 export const visuPointsTransactions = pgTable("visu_points_transactions", {
@@ -663,6 +669,16 @@ export const insertSocialPostSchema = createInsertSchema(socialPosts).omit({
 export const insertSocialCommentSchema = createInsertSchema(socialComments).omit({
   id: true,
   createdAt: true,
+});
+
+// Secure update schemas - only allow safe fields to be modified
+export const updateSocialPostSchema = z.object({
+  content: z.string().min(1).max(10000).optional(),
+  mediaUrls: z.array(z.string().url()).max(10).optional(),
+});
+
+export const updateSocialCommentSchema = z.object({
+  content: z.string().min(1).max(2000),
 });
 
 export const insertSocialLikeSchema = createInsertSchema(socialLikes).omit({
