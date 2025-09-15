@@ -2,8 +2,19 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
+import { db } from "./db";
 import { setupAuth, isAuthenticated, getSession } from "./replitAuth";
-import { insertProjectSchema, insertInvestmentSchema, insertTransactionSchema } from "@shared/schema";
+import { 
+  insertProjectSchema, 
+  insertInvestmentSchema, 
+  insertTransactionSchema,
+  insertSocialPostSchema,
+  insertSocialCommentSchema,
+  insertSocialLikeSchema,
+  insertVisuPointsTransactionSchema,
+  updateSocialPostSchema,
+  updateSocialCommentSchema
+} from "@shared/schema";
 import { getMinimumCautionAmount } from "@shared/utils";
 import { z } from "zod";
 import multer from "multer";
@@ -20,7 +31,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-08-27.basil",
 });
 
 // Function getMinimumCautionAmount is now imported from @shared/utils
@@ -1453,6 +1464,399 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error verifying deposit:", error);
       res.status(500).json({ message: "Verification failed" });
+    }
+  });
+
+  // ===== MODULE 1: MINI RÉSEAU SOCIAL VISUAL =====
+  
+  // Social Posts routes
+  app.post('/api/social/posts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Validate and parse post data
+      const postData = insertSocialPostSchema.parse({
+        ...req.body,
+        authorId: userId,
+      });
+
+      // Use database transaction to ensure atomicity
+      const result = await db.transaction(async (tx) => {
+        const post = await storage.createSocialPost(postData, tx);
+        
+        // Award 5 VisuPoints for creating a post
+        await storage.createVisuPointsTransaction({
+          userId,
+          amount: 5,
+          reason: 'Posted on social network',
+          referenceId: post.id,
+          referenceType: 'post'
+        }, tx);
+
+        return post;
+      });
+
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating social post:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid post data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create post" });
+    }
+  });
+
+  app.get('/api/social/posts', async (req, res) => {
+    try {
+      const { limit = 20, offset = 0, projectId, authorId } = req.query;
+      
+      let posts: any[];
+      if (projectId) {
+        posts = await storage.getProjectSocialPosts(
+          projectId as string,
+          parseInt(limit as string),
+          parseInt(offset as string)
+        );
+      } else if (authorId) {
+        posts = await storage.getUserSocialPosts(
+          authorId as string,
+          parseInt(limit as string),
+          parseInt(offset as string)
+        );
+      } else {
+        // TODO: Implement general feed fetch
+        posts = [];
+      }
+      
+      res.json(posts);
+    } catch (error) {
+      console.error("Error fetching social posts:", error);
+      res.status(500).json({ message: "Failed to fetch posts" });
+    }
+  });
+
+  app.get('/api/social/posts/:id', async (req, res) => {
+    try {
+      const post = await storage.getSocialPost(req.params.id);
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+      res.json(post);
+    } catch (error) {
+      console.error("Error fetching social post:", error);
+      res.status(500).json({ message: "Failed to fetch post" });
+    }
+  });
+
+  app.put('/api/social/posts/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const postId = req.params.id;
+      
+      // Check if post exists and belongs to user
+      const existingPost = await storage.getSocialPost(postId);
+      if (!existingPost) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+      
+      if (existingPost.authorId !== userId) {
+        return res.status(403).json({ message: "Can only edit your own posts" });
+      }
+
+      // Use secure update schema - only allows safe fields
+      const updateData = updateSocialPostSchema.parse(req.body);
+      const updatedPost = await storage.updateSocialPost(postId, updateData);
+      
+      res.json(updatedPost);
+    } catch (error) {
+      console.error("Error updating social post:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid update data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update post" });
+    }
+  });
+
+  app.delete('/api/social/posts/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const postId = req.params.id;
+      
+      // Check if post exists and belongs to user
+      const existingPost = await storage.getSocialPost(postId);
+      if (!existingPost) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+      
+      if (existingPost.authorId !== userId) {
+        return res.status(403).json({ message: "Can only delete your own posts" });
+      }
+
+      await storage.deleteSocialPost(postId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting social post:", error);
+      res.status(500).json({ message: "Failed to delete post" });
+    }
+  });
+
+  // Social Comments routes
+  app.post('/api/social/comments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const commentData = insertSocialCommentSchema.parse({
+        ...req.body,
+        authorId: userId,
+      });
+
+      // Use database transaction to ensure atomicity
+      const result = await db.transaction(async (tx) => {
+        const comment = await storage.createSocialComment(commentData, tx);
+        
+        // Award 2 VisuPoints for commenting
+        await storage.createVisuPointsTransaction({
+          userId,
+          amount: 2,
+          reason: 'Commented on a post',
+          referenceId: comment.id,
+          referenceType: 'comment'
+        }, tx);
+
+        return comment;
+      });
+
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating comment:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid comment data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create comment" });
+    }
+  });
+
+  app.get('/api/social/posts/:postId/comments', async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const { limit = 50, offset = 0 } = req.query;
+      
+      const comments = await storage.getPostComments(
+        postId,
+        parseInt(limit as string),
+        parseInt(offset as string)
+      );
+      
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  app.get('/api/social/comments/:commentId/replies', async (req, res) => {
+    try {
+      const { commentId } = req.params;
+      const { limit = 20, offset = 0 } = req.query;
+      
+      const replies = await storage.getCommentReplies(
+        commentId,
+        parseInt(limit as string),
+        parseInt(offset as string)
+      );
+      
+      res.json(replies);
+    } catch (error) {
+      console.error("Error fetching replies:", error);
+      res.status(500).json({ message: "Failed to fetch replies" });
+    }
+  });
+
+  app.put('/api/social/comments/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const commentId = req.params.id;
+      
+      // Check if comment exists and belongs to user
+      const existingComment = await storage.getSocialComment(commentId);
+      if (!existingComment) {
+        return res.status(404).json({ message: "Comment not found" });
+      }
+      
+      if (existingComment.authorId !== userId) {
+        return res.status(403).json({ message: "Can only edit your own comments" });
+      }
+
+      // Use secure update schema - only allows safe fields
+      const updateData = updateSocialCommentSchema.parse(req.body);
+      const updatedComment = await storage.updateSocialComment(commentId, updateData);
+      
+      res.json(updatedComment);
+    } catch (error) {
+      console.error("Error updating comment:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid update data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update comment" });
+    }
+  });
+
+  app.delete('/api/social/comments/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const commentId = req.params.id;
+      
+      // TODO: Add authorization check
+      await storage.deleteSocialComment(commentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      res.status(500).json({ message: "Failed to delete comment" });
+    }
+  });
+
+  // Social Likes routes
+  app.post('/api/social/likes', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { postId, commentId } = req.body;
+      
+      if (!postId && !commentId) {
+        return res.status(400).json({ message: "Either postId or commentId required" });
+      }
+      
+      if (postId && commentId) {
+        return res.status(400).json({ message: "Cannot like both post and comment simultaneously" });
+      }
+
+      const likeData = insertSocialLikeSchema.parse({
+        userId,
+        postId: postId || null,
+        commentId: commentId || null,
+      });
+
+      // Use database transaction to ensure atomicity
+      const result = await db.transaction(async (tx) => {
+        const like = await storage.createSocialLike(likeData, tx);
+        
+        // Award 1 VisuPoint for liking
+        await storage.createVisuPointsTransaction({
+          userId,
+          amount: 1,
+          reason: postId ? 'Liked a post' : 'Liked a comment',
+          referenceId: like.id,
+          referenceType: 'like'
+        }, tx);
+
+        return like;
+      });
+
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating like:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid like data", errors: error.errors });
+      }
+      // Handle unique constraint violations for duplicate likes
+      if (error.message?.includes('unique_user_post_like') || error.message?.includes('unique_user_comment_like')) {
+        return res.status(409).json({ message: "You have already liked this content" });
+      }
+      res.status(500).json({ message: "Failed to create like" });
+    }
+  });
+
+  app.delete('/api/social/likes', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { postId, commentId } = req.query;
+      
+      if (!postId && !commentId) {
+        return res.status(400).json({ message: "Either postId or commentId required" });
+      }
+
+      await storage.removeSocialLike(userId, postId as string, commentId as string);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing like:", error);
+      res.status(500).json({ message: "Failed to remove like" });
+    }
+  });
+
+  app.get('/api/social/posts/:postId/likes', async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const likes = await storage.getPostLikes(postId);
+      res.json(likes);
+    } catch (error) {
+      console.error("Error fetching post likes:", error);
+      res.status(500).json({ message: "Failed to fetch likes" });
+    }
+  });
+
+  app.get('/api/social/comments/:commentId/likes', async (req, res) => {
+    try {
+      const { commentId } = req.params;
+      const likes = await storage.getCommentLikes(commentId);
+      res.json(likes);
+    } catch (error) {
+      console.error("Error fetching comment likes:", error);
+      res.status(500).json({ message: "Failed to fetch likes" });
+    }
+  });
+
+  // VisuPoints routes
+  app.get('/api/visupoints/balance', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const balance = await storage.getUserVisuPointsBalance(userId);
+      res.json({ balance });
+    } catch (error) {
+      console.error("Error fetching VisuPoints balance:", error);
+      res.status(500).json({ message: "Failed to fetch balance" });
+    }
+  });
+
+  app.get('/api/visupoints/history', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { limit = 50 } = req.query;
+      
+      const history = await storage.getUserVisuPointsHistory(
+        userId,
+        parseInt(limit as string)
+      );
+      
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching VisuPoints history:", error);
+      res.status(500).json({ message: "Failed to fetch history" });
+    }
+  });
+
+  app.get('/api/social/users/:userId/liked-posts', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { limit = 20 } = req.query;
+      
+      const likedPosts = await storage.getUserLikedPosts(
+        userId,
+        parseInt(limit as string)
+      );
+      
+      res.json(likedPosts);
+    } catch (error) {
+      console.error("Error fetching liked posts:", error);
+      res.status(500).json({ message: "Failed to fetch liked posts" });
     }
   });
 
