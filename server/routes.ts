@@ -25,6 +25,7 @@ import { notificationService } from "./services/notificationService";
 import { VideoDepositService } from "./services/videoDepositService";
 import { bunnyVideoService } from "./services/bunnyVideoService";
 import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenValidator";
+import { registerPurgeRoutes } from "./purge/routes";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -2317,6 +2318,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  
+  // ===== MODULE 3: SYSTÈME DE PURGE AUTOMATIQUE =====
+  // Purge functionality extracted to dedicated module
+  registerPurgeRoutes(app);
+
   return httpServer;
 }
