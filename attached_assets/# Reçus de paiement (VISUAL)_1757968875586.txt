@@ -1,0 +1,7 @@
+# Reçus de paiement (VISUAL)
+
+1. Chaque paiement (dépôt porteur, achat VISUpoints, abonnement, etc.) génère un reçu.
+2. Le reçu est téléchargeable directement depuis le tableau de bord utilisateur.
+3. Format standard : PDF ou TXT, mentionnant montant, date, service.
+4. Stripe Connect gère l’émission automatique des justificatifs.
+5. Objectif : transparence, conformité légale, preuve d’achat.
