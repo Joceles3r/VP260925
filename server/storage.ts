@@ -89,6 +89,7 @@ export interface IStorage {
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getUserTransactions(userId: string, limit?: number): Promise<Transaction[]>;
   getAllTransactions(limit?: number): Promise<Transaction[]>;
+  getTransaction(id: string): Promise<Transaction | undefined>;
   
   // Live shows operations
   getActiveLiveShows(): Promise<LiveShow[]>;
@@ -185,6 +186,12 @@ export interface IStorage {
   getPaymentReceipt(id: string): Promise<PaymentReceipt | undefined>;
   getUserPaymentReceipts(userId: string, limit?: number): Promise<PaymentReceipt[]>;
   getPaymentReceiptByTransaction(transactionId: string): Promise<PaymentReceipt | undefined>;
+  
+  // Receipt operations for handlers (aliases to payment receipts)
+  createReceipt(receipt: InsertPaymentReceipt): Promise<PaymentReceipt>;
+  getReceipt(id: string): Promise<PaymentReceipt | undefined>;
+  getUserReceipts(userId: string): Promise<PaymentReceipt[]>;
+  getReceiptsByTransaction(transactionId: string): Promise<PaymentReceipt[]>;
   
   // MODULE 5: Règles catégories vidéos
   // Video categories operations
@@ -347,6 +354,14 @@ export class DatabaseStorage implements IStorage {
       .from(transactions)
       .orderBy(desc(transactions.createdAt))
       .limit(limit);
+  }
+
+  async getTransaction(id: string): Promise<Transaction | undefined> {
+    const [transaction] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, id));
+    return transaction;
   }
 
   async getTransactionByPaymentIntent(paymentIntentId: string): Promise<Transaction | null> {
@@ -937,6 +952,27 @@ export class DatabaseStorage implements IStorage {
       .from(paymentReceipts)
       .where(eq(paymentReceipts.transactionId, transactionId));
     return receipt;
+  }
+
+  // Receipt operations for handlers (aliases to payment receipts)
+  async createReceipt(receipt: InsertPaymentReceipt): Promise<PaymentReceipt> {
+    return this.createPaymentReceipt(receipt);
+  }
+
+  async getReceipt(id: string): Promise<PaymentReceipt | undefined> {
+    return this.getPaymentReceipt(id);
+  }
+
+  async getUserReceipts(userId: string): Promise<PaymentReceipt[]> {
+    return this.getUserPaymentReceipts(userId);
+  }
+
+  async getReceiptsByTransaction(transactionId: string): Promise<PaymentReceipt[]> {
+    return await db
+      .select()
+      .from(paymentReceipts)
+      .where(eq(paymentReceipts.transactionId, transactionId))
+      .orderBy(desc(paymentReceipts.createdAt));
   }
 
   // MODULE 5: Règles catégories vidéos

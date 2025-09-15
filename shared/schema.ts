@@ -85,7 +85,8 @@ export const purgeTypeEnum = pgEnum('purge_type', ['projects', 'live_shows', 'ar
 export const auditActionEnum = pgEnum('audit_action', [
   'purge_manual', 'purge_scheduled', 'purge_projects', 'purge_live_shows', 'purge_articles', 
   'purge_technical', 'purge_financial', 'admin_access', 'user_role_change', 'project_status_change',
-  'compliance_report', 'video_moderation', 'financial_operation', 'security_alert'
+  'compliance_report', 'video_moderation', 'financial_operation', 'security_alert',
+  'receipts_viewed', 'receipt_generated', 'receipt_downloaded', 'bulk_receipts_generated', 'auto_receipt_generated'
 ]);
 
 // User storage table
@@ -348,6 +349,8 @@ export const paymentReceipts = pgTable("payment_receipts", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: varchar("currency", { length: 3 }).default('EUR'),
   description: varchar("description").notNull(),
+  content: text("content"), // PDF/TXT content for receipts
+  metadata: jsonb("metadata"), // Additional receipt metadata
   stripePaymentIntentId: varchar("stripe_payment_intent_id"),
   receiptNumber: varchar("receipt_number").unique().notNull(), // Sequential receipt number
   filePath: varchar("file_path"), // Path to generated PDF/TXT file
