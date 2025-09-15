@@ -86,7 +86,8 @@ export const auditActionEnum = pgEnum('audit_action', [
   'purge_manual', 'purge_scheduled', 'purge_projects', 'purge_live_shows', 'purge_articles', 
   'purge_technical', 'purge_financial', 'admin_access', 'user_role_change', 'project_status_change',
   'compliance_report', 'video_moderation', 'financial_operation', 'security_alert',
-  'receipts_viewed', 'receipt_generated', 'receipt_downloaded', 'bulk_receipts_generated', 'auto_receipt_generated'
+  'receipts_viewed', 'receipt_generated', 'receipt_downloaded', 'bulk_receipts_generated', 'auto_receipt_generated',
+  'category_created', 'category_updated', 'cycle_started', 'cycle_extended', 'category_closed', 'threshold_check'
 ]);
 
 // User storage table
