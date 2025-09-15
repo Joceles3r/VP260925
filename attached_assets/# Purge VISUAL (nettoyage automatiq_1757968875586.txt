@@ -1,0 +1,8 @@
+# Purge VISUAL (nettoyage automatique)
+
+1. Purge des projets vidéos : retrait automatique après cycle si hors TOP 10.
+2. Purge des Live Shows/Battles : suppression publique après l’événement (archivage ADMIN).
+3. Purge des articles (Infoporteurs) : archivage si inactifs ou signalés.
+4. Purge technique : suppression des logs inutiles, fichiers temporaires, comptes inactifs.
+5. Purge financière : fonds bloqués sous seuil de retrait → mis en suspens administratif.
+Objectif : maintenir fluidité, sécurité, et pertinence des contenus.

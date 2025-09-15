@@ -1,0 +1,10 @@
+# Cycle de vie d’un projet vidéo (contenu porteur)
+
+1. Dépôt : le porteur paie des frais de dépôt (via Bunny.net) et soumet son projet.
+2. Durée de vie standard : 168 heures (7 jours).
+3. Classement :
+   - TOP 10 : projet reconduit automatiquement.
+   - Hors TOP 10 : projet retiré de la plateforme, archivé dans le compte porteur.
+4. Prolongation : le porteur peut payer 20 € pour prolonger son projet au-delà du cycle.
+5. Archivage : projets non reconduits → archivés, visibles uniquement par le porteur.
+6. Cas spéciaux : Live Shows/Battles → durée spéciale ; Projets PRO → règles adaptées.

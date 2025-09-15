@@ -1,0 +1,11 @@
+# Règle de déclenchement et clôture des catégories (Vidéos)
+
+1. Une catégorie n’est activée que lorsqu’au moins 30 vidéos y sont déposées.
+2. Dès que 30 vidéos sont validées → démarrage du cycle de 168 heures (7 jours).
+3. Chaque catégorie accepte un maximum de 100 vidéos par cycle.
+4. Si au bout des 168 heures, la catégorie n’a pas atteint 100 vidéos :
+   - Relance automatique d’un deuxième cycle de 168 heures.
+5. À l’issue des deux cycles (2 × 168h), si 100 vidéos ne sont pas atteintes :
+   - La catégorie est clôturée automatiquement.
+   - Les votes et investissements sont calculés sur le nombre présent de vidéos.
+   - Les paiements sont effectués via Stripe Connect.
