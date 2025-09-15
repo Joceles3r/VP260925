@@ -197,8 +197,10 @@ export interface IStorage {
   // Video categories operations
   createVideoCategory(category: InsertVideoCategory): Promise<VideoCategory>;
   getVideoCategory(category: string): Promise<VideoCategory | undefined>;
+  getVideoCategoryById(id: string): Promise<VideoCategory | undefined>;
   getAllVideoCategories(): Promise<VideoCategory[]>;
   updateVideoCategory(category: string, updates: Partial<VideoCategory>): Promise<VideoCategory>;
+  updateVideoCategoryById(id: string, updates: Partial<VideoCategory>): Promise<VideoCategory>;
   getCategoryActiveVideos(category: string): Promise<number>;
   
   // MODULE 6: Seuils de retrait
@@ -985,7 +987,15 @@ export class DatabaseStorage implements IStorage {
     const [videoCategory] = await db
       .select()
       .from(videoCategories)
-      .where(eq(videoCategories.category, category));
+      .where(eq(videoCategories.name, category));
+    return videoCategory;
+  }
+
+  async getVideoCategoryById(id: string): Promise<VideoCategory | undefined> {
+    const [videoCategory] = await db
+      .select()
+      .from(videoCategories)
+      .where(eq(videoCategories.id, id));
     return videoCategory;
   }
 
@@ -993,24 +1003,35 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(videoCategories)
-      .orderBy(asc(videoCategories.category));
+      .orderBy(asc(videoCategories.name));
   }
 
   async updateVideoCategory(category: string, updates: Partial<VideoCategory>): Promise<VideoCategory> {
     const [updatedCategory] = await db
       .update(videoCategories)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(videoCategories.category, category))
+      .where(eq(videoCategories.name, category))
+      .returning();
+    return updatedCategory;
+  }
+
+  async updateVideoCategoryById(id: string, updates: Partial<VideoCategory>): Promise<VideoCategory> {
+    const [updatedCategory] = await db
+      .update(videoCategories)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(videoCategories.id, id))
       .returning();
     return updatedCategory;
   }
 
   async getCategoryActiveVideos(category: string): Promise<number> {
+    // JOIN videoDeposits → projects to get category info since videoDeposits has no category column
     const result = await db
       .select({ count: sql<number>`count(*)` })
       .from(videoDeposits)
+      .innerJoin(projects, eq(videoDeposits.projectId, projects.id))
       .where(and(
-        eq(videoDeposits.category, category),
+        eq(projects.category, category),
         eq(videoDeposits.status, 'active')
       ));
     

@@ -63,7 +63,7 @@ export async function updateVideoCategory(categoryId: string, data: UpdateCatego
     throw new Error('Seuls les administrateurs peuvent modifier les catégories');
   }
 
-  const category = await storage.updateVideoCategory(categoryId, data);
+  const category = await storage.updateVideoCategoryById(categoryId, data);
 
   await storage.createAuditLog({
     action: CATEGORY_EVENTS.CATEGORY_UPDATED,
@@ -131,7 +131,7 @@ async function checkSingleCategoryThreshold(category: any, dryRun: boolean) {
       const cycleStart = new Date();
       const cycleEnd = new Date(cycleStart.getTime() + CATEGORY_RULES.CYCLE_DURATION_HOURS * 60 * 60 * 1000);
       
-      await storage.updateVideoCategory(category.id, {
+      await storage.updateVideoCategoryById(category.id, {
         status: 'first_cycle',
         currentVideoCount: currentCount,
         cycleStartedAt: cycleStart,
@@ -198,7 +198,7 @@ async function extendToSecondCycle(category: any, videoCount: number, dryRun: bo
     const cycleStart = new Date();
     const cycleEnd = new Date(cycleStart.getTime() + CATEGORY_RULES.CYCLE_DURATION_HOURS * 60 * 60 * 1000);
     
-    await storage.updateVideoCategory(category.id, {
+    await storage.updateVideoCategoryById(category.id, {
       status: 'second_cycle',
       currentVideoCount: videoCount,
       cycleStartedAt: cycleStart,
@@ -231,7 +231,7 @@ async function extendToSecondCycle(category: any, videoCount: number, dryRun: bo
 // Clôture pour max vidéos atteint
 async function closeCategoryForMaxVideos(category: any, videoCount: number, dryRun: boolean) {
   if (!dryRun) {
-    await storage.updateVideoCategory(category.id, {
+    await storage.updateVideoCategoryById(category.id, {
       status: 'closed',
       currentVideoCount: videoCount,
       isActive: false,
@@ -262,7 +262,7 @@ async function closeCategoryForMaxVideos(category: any, videoCount: number, dryR
 // Clôture pour fin des 2 cycles
 async function closeCategoryForEndOfCycles(category: any, videoCount: number, dryRun: boolean) {
   if (!dryRun) {
-    await storage.updateVideoCategory(category.id, {
+    await storage.updateVideoCategoryById(category.id, {
       status: 'closed',
       currentVideoCount: videoCount,
       isActive: false,
@@ -298,7 +298,7 @@ export async function startCycleManually(request: StartCycleRequest, adminId: st
     throw new Error('Seuls les administrateurs peuvent démarrer un cycle manuellement');
   }
 
-  const category = await storage.getVideoCategory(request.categoryId);
+  const category = await storage.getVideoCategoryById(request.categoryId);
   if (!category) {
     throw new Error('Catégorie introuvable');
   }
@@ -312,7 +312,7 @@ export async function startCycleManually(request: StartCycleRequest, adminId: st
   const cycleStart = new Date();
   const cycleEnd = new Date(cycleStart.getTime() + CATEGORY_RULES.CYCLE_DURATION_HOURS * 60 * 60 * 1000);
   
-  await storage.updateVideoCategory(category.id, {
+  await storage.updateVideoCategoryById(category.id, {
     status: 'first_cycle',
     currentVideoCount: currentCount,
     cycleStartedAt: cycleStart,
@@ -349,14 +349,14 @@ export async function closeCategoryManually(request: CloseCategoryRequest, admin
     throw new Error('Seuls les administrateurs peuvent clôturer une catégorie manuellement');
   }
 
-  const category = await storage.getVideoCategory(request.categoryId);
+  const category = await storage.getVideoCategoryById(request.categoryId);
   if (!category) {
     throw new Error('Catégorie introuvable');
   }
 
   const currentCount = await storage.getCategoryActiveVideos(category.name!);
 
-  await storage.updateVideoCategory(category.id, {
+  await storage.updateVideoCategoryById(category.id, {
     status: 'closed',
     currentVideoCount: currentCount,
     isActive: false,
@@ -390,7 +390,7 @@ export async function closeCategoryManually(request: CloseCategoryRequest, admin
 
 // Obtenir les statistiques d'une catégorie
 export async function getCategoryStats(request: CategoryStatsRequest) {
-  const category = await storage.getVideoCategory(request.categoryId);
+  const category = await storage.getVideoCategoryById(request.categoryId);
   if (!category) {
     throw new Error('Catégorie introuvable');
   }
