@@ -27,6 +27,7 @@ import { bunnyVideoService } from "./services/bunnyVideoService";
 import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenValidator";
 import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
+import { categoriesRouter } from "./categories/routes";
 import { generateReceiptPDF } from "./receipts/handlers";
 
 // Initialize Stripe
@@ -2412,6 +2413,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE 4: SYSTÈME DE REÇUS DE PAIEMENT =====
   // Receipt functionality for transparency and legal compliance
   app.use('/api/receipts', receiptsRouter);
+
+  // ===== MODULE 5: RÈGLES CATÉGORIES VIDÉOS =====
+  // Video category management with automated lifecycle rules
+  app.use('/api/categories', categoriesRouter);
 
   return httpServer;
 }
