@@ -206,6 +206,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 paidAt: new Date()
               });
 
+              // 1.5. AUTO-CHECK CATEGORY THRESHOLDS: Module 5 integration (CRITICAL FIX)
+              try {
+                // Get the project to find its category
+                const project = await storage.getProject(videoDeposit.projectId);
+                if (project && project.category) {
+                  // CRITICAL FIX: Resolve category name to UUID
+                  const categoryObject = await storage.getVideoCategory(project.category);
+                  
+                  if (!categoryObject || !categoryObject.id) {
+                    console.warn(`Category not found for name: ${project.category} - threshold check skipped`);
+                    await storage.createAuditLog({
+                      userId: 'system',
+                      action: 'threshold_check_skipped',
+                      resourceType: 'category',
+                      details: {
+                        reason: 'category_not_found',
+                        categoryName: project.category,
+                        trigger: 'video_deposit_activation',
+                        videoDepositId,
+                        projectId: project.id
+                      }
+                    });
+                  } else {
+                    // Import category threshold checker
+                    const { checkCategoryThresholds } = await import('./categories/handlers');
+                    
+                    // Trigger automatic threshold check with CORRECT UUID
+                    const thresholdResults = await checkCategoryThresholds({
+                      dryRun: false, // Execute real actions
+                      categoryIds: [categoryObject.id] // FIXED: Use UUID instead of name
+                    }, 'system'); // System-triggered
+
+                    console.log(`Category threshold check triggered for ${project.category} (ID: ${categoryObject.id}) after video activation:`, thresholdResults);
+                    
+                    // Enhanced audit with ID resolution tracking
+                    await storage.createAuditLog({
+                      userId: 'system',
+                      action: 'threshold_check',
+                      resourceType: 'category',
+                      resourceId: categoryObject.id, // Use UUID for resourceId
+                      details: {
+                        trigger: 'video_deposit_activation',
+                        videoDepositId,
+                        projectId: project.id,
+                        categoryName: project.category,
+                        categoryId: categoryObject.id,
+                        results: thresholdResults,
+                        categoriesChecked: thresholdResults.length
+                      }
+                    });
+
+                    // GUARD: Alert if no categories were actually checked
+                    if (thresholdResults.length === 0) {
+                      console.error(`CRITICAL: Category threshold check returned zero results for ${project.category} (${categoryObject.id})`);
+                    }
+                  }
+                }
+              } catch (categoryError) {
+                console.error('Failed to auto-check category thresholds after video activation:', categoryError);
+                // Enhanced error logging for debugging
+                await storage.createAuditLog({
+                  userId: 'system',
+                  action: 'threshold_check_error',
+                  resourceType: 'category',
+                  details: {
+                    error: categoryError instanceof Error ? categoryError.message : 'Unknown error',
+                    trigger: 'video_deposit_activation',
+                    videoDepositId,
+                    projectId: videoDeposit.projectId
+                  }
+                });
+                // Don't break the main flow if category check fails
+              }
+
               // 2. Update creator quota atomically
               const currentDate = new Date();
               const period = videoType === 'film' 
