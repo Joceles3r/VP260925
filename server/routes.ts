@@ -242,6 +242,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               return res.status(500).json({ error: 'Video deposit processing failed' });
             }
+          } else if (type === 'project_extension') {
+            // Handle project extension payment success with atomic operations
+            const projectId = paymentIntent.metadata.projectId;
+            
+            if (!projectId) {
+              console.error('Missing project extension metadata:', paymentIntentId);
+              return res.status(400).json({ error: 'Invalid project extension metadata' });
+            }
+
+            // Get the project
+            const project = await storage.getProject(projectId);
+            if (!project) {
+              console.error('Project not found for extension:', projectId);
+              return res.status(404).json({ error: 'Project not found' });
+            }
+
+            // Ensure atomicity: All operations succeed or all fail
+            try {
+              // 1. Get most recent extension by cycleEndsAt (fixed ambiguous selection)
+              const extensions = await storage.getProjectExtensions(projectId);
+              const currentExtension = extensions
+                .filter(ext => !ext.isArchived)
+                .sort((a, b) => {
+                  const dateA = a.cycleEndsAt ? new Date(a.cycleEndsAt).getTime() : 0;
+                  const dateB = b.cycleEndsAt ? new Date(b.cycleEndsAt).getTime() : 0;
+                  return dateB - dateA; // Most recent first
+                })[0];
+              
+              // 2. Calculate new extension dates with state transitions
+              const now = new Date();
+              const extensionDuration = 168 * 60 * 60 * 1000; // 168 hours in milliseconds
+              const newExpiryDate = new Date(now.getTime() + extensionDuration);
+              
+              let extension;
+              if (currentExtension) {
+                // Update existing extension with state transitions
+                const newProlongationCount = (currentExtension.prolongationCount || 0) + 1;
+                const isTopTen = currentExtension.isInTopTen;
+                
+                extension = await storage.updateProjectExtension(currentExtension.id, {
+                  cycleEndsAt: newExpiryDate,
+                  prolongationCount: newProlongationCount,
+                  prolongationPaidEUR: ((parseFloat(currentExtension.prolongationPaidEUR || '0') || 0) + 20).toString(),
+                  canProlong: newProlongationCount < 3, // Max 3 total extensions
+                  // Persist state transitions - if not in TOP 10, archive after payment
+                  isArchived: !isTopTen,
+                  archivedAt: !isTopTen ? now : null,
+                  archiveReason: !isTopTen ? 'out_of_top_ten' : null
+                });
+              } else {
+                // Create new extension (will be updated by ranking system)
+                extension = await storage.createProjectExtension({
+                  projectId,
+                  isInTopTen: false, // Will be updated by ranking system
+                  cycleEndsAt: newExpiryDate,
+                  prolongationCount: 1,
+                  prolongationPaidEUR: '20.00',
+                  canProlong: true,
+                  isArchived: false // New extensions start active
+                });
+              }
+
+              // 3. Create transaction record with proper type
+              await storage.createTransaction({
+                userId,
+                type: 'project_extension',
+                amount: depositAmount.toString(),
+                commission: '0.00',
+                projectId,
+                metadata: {
+                  type: 'project_extension',
+                  extensionId: extension.id,
+                  expiresAt: newExpiryDate.toISOString(),
+                  paymentIntentId,
+                  simulationMode: false
+                }
+              });
+
+              // 4. Send success notification
+              await notificationService.notifyUser(userId, {
+                type: 'project_status_change',
+                title: 'Prolongation confirmée',
+                message: `Votre projet a été prolongé de 168h pour €${depositAmount}. ${extension.isArchived ? 'Le projet a été archivé car il n\'est pas dans le TOP 10.' : ''}`,
+                priority: 'medium'
+              });
+
+              console.log(`Project extension confirmed for user ${userId}: project ${projectId} - €${depositAmount}`);
+            } catch (atomicError) {
+              console.error('Atomic project extension operation failed:', atomicError);
+              
+              // Notify user of processing failure
+              await notificationService.notifyUser(userId, {
+                type: 'project_status_change',
+                title: 'Erreur de prolongation',
+                message: 'Une erreur est survenue lors de la prolongation de votre projet. Contactez le support.',
+                priority: 'high'
+              });
+
+              return res.status(500).json({ error: 'Project extension processing failed' });
+            }
           }
           break;
         }
@@ -251,6 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const userId = paymentIntent.metadata.userId;
           const type = paymentIntent.metadata.type;
           const videoDepositId = paymentIntent.metadata.videoDepositId;
+          const projectId = paymentIntent.metadata.projectId;
           
           if (userId) {
             // Handle video deposit payment failure with cleanup
@@ -270,12 +371,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.error('Failed to cleanup after video payment failure:', cleanupError);
               }
             }
+            
+            // Handle project extension payment failure
+            if (type === 'project_extension' && projectId) {
+              try {
+                console.log(`Project extension payment failed for project ${projectId}, user ${userId}`);
+                // No cleanup needed for project extensions as no state was changed yet
+              } catch (cleanupError) {
+                console.error('Failed to handle project extension payment failure:', cleanupError);
+              }
+            }
 
             await notificationService.notifyUser(userId, {
               type: 'payment_failed',
               title: 'Échec du paiement',
               message: type === 'video_deposit' 
                 ? 'Votre paiement pour le dépôt vidéo a échoué. Le dépôt a été annulé.'
+                : type === 'project_extension'
+                ? 'Votre paiement pour la prolongation du projet a échoué. Veuillez réessayer.'
                 : 'Votre paiement a échoué. Veuillez réessayer.',
               priority: 'high'
             });
@@ -1768,7 +1881,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid like data", errors: error.errors });
       }
       // Handle unique constraint violations for duplicate likes
-      if (error.message?.includes('unique_user_post_like') || error.message?.includes('unique_user_comment_like')) {
+      if (error instanceof Error && (error.message?.includes('unique_user_post_like') || error.message?.includes('unique_user_comment_like'))) {
         return res.status(409).json({ message: "You have already liked this content" });
       }
       res.status(500).json({ message: "Failed to create like" });
@@ -1857,6 +1970,350 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching liked posts:", error);
       res.status(500).json({ message: "Failed to fetch liked posts" });
+    }
+  });
+
+  // ===== MODULE 2: CYCLE DE VIE PROJET VIDÉO =====
+  
+  // Get project lifecycle status
+  app.get('/api/projects/:projectId/lifecycle', async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      const extensions = await storage.getProjectExtensions(projectId);
+      const currentExtension = extensions.find(ext => !ext.isArchived);
+      
+      // Calculate lifecycle status
+      const now = new Date();
+      const createdAt = new Date(project.createdAt || new Date());
+      const standardCycleEnd = new Date(createdAt.getTime() + (168 * 60 * 60 * 1000)); // 168 hours
+      
+      let status = 'active';
+      let expiresAt = standardCycleEnd;
+      
+      if (currentExtension && currentExtension.cycleEndsAt) {
+        expiresAt = new Date(currentExtension.cycleEndsAt);
+      }
+      
+      if (now > expiresAt) {
+        status = currentExtension?.isInTopTen ? 'renewed' : 'archived';
+      }
+      
+      res.json({
+        project,
+        extensions,
+        currentExtension,
+        status,
+        expiresAt,
+        standardCycleEnd,
+        hoursRemaining: Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60))),
+        canProlong: currentExtension?.canProlong !== false && status === 'active',
+        prolongationCost: 20.00
+      });
+    } catch (error) {
+      console.error("Error fetching project lifecycle:", error);
+      res.status(500).json({ message: "Failed to fetch lifecycle status" });
+    }
+  });
+  
+  // Create payment intent for project extension (secure)
+  app.post('/api/projects/:projectId/extension-payment', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { projectId } = req.params;
+      
+      // Verify project ownership
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      if (project.creatorId !== userId) {
+        return res.status(403).json({ message: "Only project creator can extend" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if extension is allowed - use most recent extension by cycleEndsAt
+      const extensions = await storage.getProjectExtensions(projectId);
+      const currentExtension = extensions
+        .filter(ext => !ext.isArchived)
+        .sort((a, b) => {
+          const dateA = a.cycleEndsAt ? new Date(a.cycleEndsAt).getTime() : 0;
+          const dateB = b.cycleEndsAt ? new Date(b.cycleEndsAt).getTime() : 0;
+          return dateB - dateA; // Most recent first
+        })[0];
+      
+      if (currentExtension && !currentExtension.canProlong) {
+        return res.status(400).json({ message: "Project cannot be prolonged further" });
+      }
+      
+      if (currentExtension && (currentExtension.prolongationCount || 0) >= 3) {
+        return res.status(400).json({ message: "Maximum 3 prolongations allowed" });
+      }
+      
+      // Create Stripe PaymentIntent with secure metadata
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: 2000, // €20.00 in cents
+        currency: 'eur',
+        automatic_payment_methods: {
+          enabled: true,
+        },
+        metadata: {
+          type: 'project_extension',
+          projectId,
+          userId,
+          amount: '20.00'
+        },
+      });
+      
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        amount: 20.00,
+        currency: 'EUR',
+        paymentIntentId: paymentIntent.id
+      });
+    } catch (error) {
+      console.error("Error creating payment intent for extension:", error);
+      res.status(500).json({ message: "Failed to create payment intent" });
+    }
+  });
+  
+  // Get TOP 10 projects
+  app.get('/api/projects/ranking/top10', async (req, res) => {
+    try {
+      // Get all active project extensions that are in TOP 10
+      const topExtensions = await storage.getActiveProjectExtensions();
+      const top10Extensions = topExtensions
+        .filter(ext => ext.isInTopTen && ext.topTenRank && ext.topTenRank <= 10)
+        .sort((a, b) => (a.topTenRank || 11) - (b.topTenRank || 11));
+      
+      // Get full project data for each
+      const top10Projects = await Promise.all(
+        top10Extensions.map(async (ext) => {
+          const project = await storage.getProject(ext.projectId);
+          return {
+            project,
+            extension: ext,
+            rank: ext.topTenRank
+          };
+        })
+      );
+      
+      res.json(top10Projects.filter(p => p.project));
+    } catch (error) {
+      console.error("Error fetching TOP 10:", error);
+      res.status(500).json({ message: "Failed to fetch TOP 10 projects" });
+    }
+  });
+  
+  // Update project ranking (Admin only) - STRENGTHENED SECURITY
+  app.post('/api/projects/ranking/update', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      // Strengthened admin verification
+      if (!user) {
+        console.error(`Admin verification failed: User not found - ${userId}`);
+        return res.status(403).json({ message: "Access denied: User not found" });
+      }
+      
+      if (user.profileType !== 'admin') {
+        console.error(`Admin verification failed: Insufficient privileges - ${userId} (${user.profileType})`);
+        return res.status(403).json({ message: "Access denied: Admin privileges required" });
+      }
+      
+      if (!user.kycVerified) {
+        console.error(`Admin verification failed: KYC not verified - ${userId}`);
+        return res.status(403).json({ message: "Access denied: KYC verification required for admin operations" });
+      }
+      
+      const { rankings } = req.body; // Array of { projectId, rank }
+      
+      // Enhanced input validation
+      if (!Array.isArray(rankings)) {
+        console.error(`Invalid rankings input from admin ${userId}: not an array`);
+        return res.status(400).json({ message: "Rankings must be an array" });
+      }
+      
+      if (rankings.length === 0) {
+        return res.status(400).json({ message: "Rankings array cannot be empty" });
+      }
+      
+      if (rankings.length > 100) {
+        console.error(`Admin ${userId} attempted to update too many rankings: ${rankings.length}`);
+        return res.status(400).json({ message: "Cannot update more than 100 rankings at once" });
+      }
+      
+      // Validate each ranking entry
+      for (const ranking of rankings) {
+        if (!ranking.projectId || typeof ranking.rank !== 'number') {
+          console.error(`Invalid ranking entry from admin ${userId}:`, ranking);
+          return res.status(400).json({ message: "Each ranking must have projectId and numeric rank" });
+        }
+        
+        if (ranking.rank < 1 || ranking.rank > 1000) {
+          return res.status(400).json({ message: "Rank must be between 1 and 1000" });
+        }
+      }
+      
+      // Update rankings
+      const updatePromises = rankings.map(async ({ projectId, rank }) => {
+        const extensions = await storage.getProjectExtensions(projectId);
+        let currentExtension = extensions.find(ext => !ext.isArchived);
+        
+        if (!currentExtension) {
+          // Create new extension if none exists
+          currentExtension = await storage.createProjectExtension({
+            projectId,
+            isInTopTen: rank <= 10,
+            topTenRank: rank <= 10 ? rank : null,
+            isArchived: false,
+            canProlong: true
+          });
+        } else {
+          // Update existing extension
+          await storage.updateProjectExtension(currentExtension.id, {
+            isInTopTen: rank <= 10,
+            topTenRank: rank <= 10 ? rank : null,
+            // If project falls out of TOP 10, archive it
+            isArchived: rank > 10,
+            archivedAt: rank > 10 ? new Date() : null,
+            archiveReason: rank > 10 ? 'out_of_top_ten' : null
+          });
+        }
+        
+        return { projectId, rank, updated: true };
+      });
+      
+      const results = await Promise.all(updatePromises);
+      
+      // Log admin action for audit trail
+      console.log(`Admin ${userId} (${user.email}) updated rankings for ${results.length} projects`);
+      
+      res.json({
+        success: true,
+        updated: results.length,
+        results,
+        timestamp: new Date().toISOString(),
+        adminUserId: userId
+      });
+    } catch (error) {
+      console.error("Error updating rankings:", error);
+      res.status(500).json({ message: "Failed to update rankings" });
+    }
+  });
+  
+  // Archive project manually
+  app.post('/api/projects/:projectId/archive', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { projectId } = req.params;
+      const { reason = 'manual' } = req.body;
+      
+      // Verify project ownership or admin access
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (project.creatorId !== userId && user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      // Archive project extension
+      const extensions = await storage.getProjectExtensions(projectId);
+      let currentExtension = extensions.find(ext => !ext.isArchived);
+      
+      if (!currentExtension) {
+        // Create extension for archiving
+        currentExtension = await storage.createProjectExtension({
+          projectId,
+          isInTopTen: false,
+          isArchived: true,
+          archivedAt: new Date(),
+          archiveReason: reason,
+          canProlong: false
+        });
+      } else {
+        // Update existing extension
+        await storage.updateProjectExtension(currentExtension.id, {
+          isInTopTen: false,
+          isArchived: true,
+          archivedAt: new Date(),
+          archiveReason: reason,
+          canProlong: false
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: "Project archived successfully",
+        archivedAt: new Date(),
+        reason
+      });
+    } catch (error) {
+      console.error("Error archiving project:", error);
+      res.status(500).json({ message: "Failed to archive project" });
+    }
+  });
+  
+  // Get user's archived projects
+  app.get('/api/users/:userId/archived-projects', isAuthenticated, async (req: any, res) => {
+    try {
+      const requestUserId = req.user.claims.sub;
+      const { userId } = req.params;
+      
+      // Check access permissions
+      if (requestUserId !== userId) {
+        const user = await storage.getUser(requestUserId);
+        if (!user || user.profileType !== 'admin') {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+      
+      // Get all user projects
+      const allProjects = await storage.getProjects(1000, 0); // Get many projects
+      const userProjects = allProjects.filter(p => p.creatorId === userId);
+      
+      // Get archived extensions for user projects
+      const archivedProjects = await Promise.all(
+        userProjects.map(async (project) => {
+          const extensions = await storage.getProjectExtensions(project.id);
+          const archivedExtension = extensions.find(ext => ext.isArchived);
+          
+          if (archivedExtension) {
+            return {
+              project,
+              extension: archivedExtension,
+              archivedAt: archivedExtension.archivedAt,
+              archiveReason: archivedExtension.archiveReason
+            };
+          }
+          return null;
+        })
+      );
+      
+      const filtered = archivedProjects.filter(Boolean);
+      
+      res.json(filtered);
+    } catch (error) {
+      console.error("Error fetching archived projects:", error);
+      res.status(500).json({ message: "Failed to fetch archived projects" });
     }
   });
 
