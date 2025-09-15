@@ -20,6 +20,7 @@ import {
   projectExtensions,
   purgeJobs,
   withdrawalRequests,
+  auditLogs,
   type User,
   type UpsertUser,
   type Project,
@@ -42,6 +43,7 @@ import {
   type ProjectExtension,
   type PurgeJob,
   type WithdrawalRequest,
+  type AuditLog,
   type InsertProject,
   type InsertInvestment,
   type InsertTransaction,
@@ -60,6 +62,7 @@ import {
   type InsertProjectExtension,
   type InsertPurgeJob,
   type InsertWithdrawalRequest,
+  type InsertAuditLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql } from "drizzle-orm";
@@ -198,6 +201,12 @@ export interface IStorage {
   getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]>;
   updateWithdrawalRequest(id: string, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest>;
   getUserPendingWithdrawalAmount(userId: string): Promise<number>;
+
+  // Audit logs operations for security and compliance
+  createAuditLog(auditLog: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(limit?: number, offset?: number): Promise<AuditLog[]>;
+  getUserAuditLogs(userId: string, limit?: number, offset?: number): Promise<AuditLog[]>;
+  getAuditLogsByAction(action: string, limit?: number): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1014,6 +1023,41 @@ export class DatabaseStorage implements IStorage {
       ));
     
     return result[0]?.totalAmount || 0;
+  }
+
+  // ===== AUDIT STORAGE: SECURITY & COMPLIANCE OPERATIONS =====
+  // STORAGE: createAuditLog - Creates audit trail entries for administrative actions
+  async createAuditLog(auditLog: InsertAuditLog): Promise<AuditLog> {
+    const [newAuditLog] = await db.insert(auditLogs).values(auditLog).returning();
+    return newAuditLog;
+  }
+
+  async getAuditLogs(limit = 100, offset = 0): Promise<AuditLog[]> {
+    return await db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getUserAuditLogs(userId: string, limit = 50, offset = 0): Promise<AuditLog[]> {
+    return await db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.userId, userId))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getAuditLogsByAction(action: string, limit = 50): Promise<AuditLog[]> {
+    return await db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.action, action as any))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
   }
 }
 

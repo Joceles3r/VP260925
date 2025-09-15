@@ -81,6 +81,13 @@ export const categoryStatusEnum = pgEnum('category_status', ['waiting', 'active'
 // Purge type enum
 export const purgeTypeEnum = pgEnum('purge_type', ['projects', 'live_shows', 'articles', 'technical', 'financial']);
 
+// Audit action enum for tracking administrative operations
+export const auditActionEnum = pgEnum('audit_action', [
+  'purge_manual', 'purge_scheduled', 'purge_projects', 'purge_live_shows', 'purge_articles', 
+  'purge_technical', 'purge_financial', 'admin_access', 'user_role_change', 'project_status_change',
+  'compliance_report', 'video_moderation', 'financial_operation', 'security_alert'
+]);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -397,6 +404,28 @@ export const purgeJobs = pgTable("purge_jobs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ===== AUDIT SYSTEM: SECURITY & COMPLIANCE LOGGING =====
+// TABLE: audit_logs - Persistent audit trail for administrative operations  
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  action: auditActionEnum("action").notNull(),
+  resourceType: varchar("resource_type"), // 'project', 'user', 'live_show', 'post', etc.
+  resourceId: varchar("resource_id"), // ID of the affected resource
+  details: jsonb("details"), // Detailed information about the action
+  ipAddress: varchar("ip_address"),
+  userAgent: varchar("user_agent"),
+  success: boolean("success").default(true),
+  errorMessage: text("error_message"),
+  dryRun: boolean("dry_run").default(false),
+  affectedCount: integer("affected_count").default(0), // Number of items affected
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_audit_logs_user_id").on(table.userId),
+  index("idx_audit_logs_action").on(table.action),
+  index("idx_audit_logs_created_at").on(table.createdAt),
+]);
+
 // Withdrawal requests table - Seuils minimaux de retrait
 export const withdrawalRequests = pgTable("withdrawal_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -424,6 +453,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   visuPointsTransactions: many(visuPointsTransactions),
   paymentReceipts: many(paymentReceipts),
   withdrawalRequests: many(withdrawalRequests),
+  auditLogs: many(auditLogs),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -519,6 +549,13 @@ export const videoAnalyticsRelations = relations(videoAnalytics, ({ one }) => ({
   }),
   user: one(users, {
     fields: [videoAnalytics.userId],
+    references: [users.id],
+  }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [auditLogs.userId],
     references: [users.id],
   }),
 }));
@@ -718,6 +755,11 @@ export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalReques
   requestedAt: true,
 });
 
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -743,6 +785,7 @@ export type VideoCategory = typeof videoCategories.$inferSelect;
 export type ProjectExtension = typeof projectExtensions.$inferSelect;
 export type PurgeJob = typeof purgeJobs.$inferSelect;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
@@ -764,3 +807,4 @@ export type InsertVideoCategory = z.infer<typeof insertVideoCategorySchema>;
 export type InsertProjectExtension = z.infer<typeof insertProjectExtensionSchema>;
 export type InsertPurgeJob = z.infer<typeof insertPurgeJobSchema>;
 export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

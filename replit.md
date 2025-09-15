@@ -75,6 +75,22 @@ Preferred communication style: Simple, everyday language.
 - **File Upload System**: Multer for handling video and image uploads
 - **Session Storage**: PostgreSQL-backed session management for authentication
 
+## Environment Variables Required
+
+### Core Application
+- `DATABASE_URL`: PostgreSQL database connection string (auto-configured by Replit)
+- `STRIPE_SECRET_KEY`: Stripe secret key for payment processing
+- `STRIPE_WEBHOOK_SECRET`: Stripe webhook secret for payment validation
+
+### Module 3 - Automated Purge System
+- `PURGE_CRON_AUTH_KEY`: Authentication key for scheduled purge operations (must be set for production)
+- `PURGE_ADMIN_TOKEN`: Admin token for internal API calls during purge operations
+
+### Security Features
+- **Dry-run by default**: All purge operations default to simulation mode
+- **€100 financial safety limit**: Financial purges capped at €100 to prevent accidental large balance removal
+- **Audit logging**: All purge operations are logged with full details for compliance
+
 ### Monitoring and Development
 - **TanStack Query**: Robust data fetching with caching and background updates
 - **Replit Development Tools**: Integrated development environment features
