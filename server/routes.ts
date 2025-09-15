@@ -26,6 +26,8 @@ import { VideoDepositService } from "./services/videoDepositService";
 import { bunnyVideoService } from "./services/bunnyVideoService";
 import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenValidator";
 import { registerPurgeRoutes } from "./purge/routes";
+import { receiptsRouter } from "./receipts/routes";
+import { generateReceiptPDF } from "./receipts/handlers";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -131,7 +133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
 
             // Create transaction record with correct type
-            await storage.createTransaction({
+            const transaction = await storage.createTransaction({
               userId,
               type: 'deposit',
               amount: depositAmount.toString(),
@@ -141,6 +143,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 simulationMode: false 
               }
             });
+
+            // AUTO-GENERATE RECEIPT: Critical fix for missing automatic generation
+            try {
+              const receipt = await generateReceiptPDF(transaction.id, userId, {
+                templateVersion: 'webhook-v1',
+                includeDetails: true
+              });
+              
+              // Log auto-generation audit
+              await storage.createAuditLog({
+                userId,
+                action: 'auto_receipt_generated',
+                resourceType: 'receipt',
+                resourceId: receipt.receiptId,
+                details: {
+                  transactionId: transaction.id,
+                  receiptNumber: receipt.receiptNumber,
+                  paymentIntentId,
+                  trigger: 'caution_deposit_webhook'
+                }
+              });
+              
+              console.log(`Auto-generated receipt ${receipt.receiptNumber} for caution deposit ${transaction.id}`);
+            } catch (receiptError) {
+              console.error('Failed to auto-generate receipt for caution deposit:', receiptError);
+              // Don't fail the payment, just log the error
+            }
 
             // Send real-time notification
             await notificationService.notifyUser(userId, {
@@ -203,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
 
               // 3. Create transaction record
-              await storage.createTransaction({
+              const transaction = await storage.createTransaction({
                 userId,
                 type: 'deposit',
                 amount: depositAmount.toString(),
@@ -215,6 +244,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   simulationMode: false
                 }
               });
+
+              // 3.5. AUTO-GENERATE RECEIPT: Video deposit
+              try {
+                const receipt = await generateReceiptPDF(transaction.id, userId, {
+                  templateVersion: 'webhook-video-v1',
+                  includeDetails: true
+                });
+                
+                // Log auto-generation audit
+                await storage.createAuditLog({
+                  userId,
+                  action: 'auto_receipt_generated',
+                  resourceType: 'receipt',
+                  resourceId: receipt.receiptId,
+                  details: {
+                    transactionId: transaction.id,
+                    receiptNumber: receipt.receiptNumber,
+                    paymentIntentId,
+                    videoType,
+                    videoDepositId,
+                    trigger: 'video_deposit_webhook'
+                  }
+                });
+                
+                console.log(`Auto-generated receipt ${receipt.receiptNumber} for video deposit ${transaction.id}`);
+              } catch (receiptError) {
+                console.error('Failed to auto-generate receipt for video deposit:', receiptError);
+                // Don't fail the payment, just log the error
+              }
 
               // 4. Send success notification
               await notificationService.notifyUser(userId, {
@@ -306,7 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
 
               // 3. Create transaction record with proper type
-              await storage.createTransaction({
+              const transaction = await storage.createTransaction({
                 userId,
                 type: 'project_extension',
                 amount: depositAmount.toString(),
@@ -320,6 +378,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   simulationMode: false
                 }
               });
+
+              // 3.5. AUTO-GENERATE RECEIPT: Project extension
+              try {
+                const receipt = await generateReceiptPDF(transaction.id, userId, {
+                  templateVersion: 'webhook-extension-v1',
+                  includeDetails: true
+                });
+                
+                // Log auto-generation audit
+                await storage.createAuditLog({
+                  userId,
+                  action: 'auto_receipt_generated',
+                  resourceType: 'receipt',
+                  resourceId: receipt.receiptId,
+                  details: {
+                    transactionId: transaction.id,
+                    receiptNumber: receipt.receiptNumber,
+                    paymentIntentId,
+                    projectId,
+                    extensionId: extension.id,
+                    trigger: 'project_extension_webhook'
+                  }
+                });
+                
+                console.log(`Auto-generated receipt ${receipt.receiptNumber} for project extension ${transaction.id}`);
+              } catch (receiptError) {
+                console.error('Failed to auto-generate receipt for project extension:', receiptError);
+                // Don't fail the payment, just log the error
+              }
 
               // 4. Send success notification
               await notificationService.notifyUser(userId, {
@@ -2321,6 +2408,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE 3: SYSTÈME DE PURGE AUTOMATIQUE =====
   // Purge functionality extracted to dedicated module
   registerPurgeRoutes(app);
+
+  // ===== MODULE 4: SYSTÈME DE REÇUS DE PAIEMENT =====
+  // Receipt functionality for transparency and legal compliance
+  app.use('/api/receipts', receiptsRouter);
 
   return httpServer;
 }
