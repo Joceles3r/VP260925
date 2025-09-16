@@ -97,6 +97,8 @@ export const auditActionEnum = pgEnum('audit_action', [
   'compliance_report', 'video_moderation', 'financial_operation', 'security_alert',
   'receipts_viewed', 'receipt_generated', 'receipt_downloaded', 'bulk_receipts_generated', 'auto_receipt_generated',
   'category_created', 'category_updated', 'cycle_started', 'cycle_extended', 'category_closed', 'threshold_check',
+  'threshold_check_skipped', 'threshold_check_error', 'unauthorized_admin_access_attempt', 
+  'withdrawal_request_created', 'withdrawal_processed',
   'content_reported', 'report_validated', 'report_rejected', 'visupoints_awarded'
 ]);
 

@@ -8,9 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Heart, MessageCircle, Share2, Users, Trophy, Star } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Users, Trophy, Star, Flag } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 interface SocialPost {
   id: string;
@@ -35,6 +37,20 @@ interface Comment {
   isLiked: boolean;
 }
 
+interface UserStats {
+  visuPoints: number;
+  postsCount: number;
+  likesReceived: number;
+}
+
+interface PostsData {
+  posts: SocialPost[];
+}
+
+interface CommentsData {
+  comments: Comment[];
+}
+
 export default function SocialPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -44,21 +60,25 @@ export default function SocialPage() {
   const [newPostType, setNewPostType] = useState('discussion');
   const [newCommentContent, setNewCommentContent] = useState('');
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+  const [reportType, setReportType] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
 
   // Fetch social posts
-  const { data: postsData, isLoading: isLoadingPosts } = useQuery({
+  const { data: postsData, isLoading: isLoadingPosts } = useQuery<PostsData>({
     queryKey: ['/api/social/posts'],
     enabled: !!user
   });
 
   // Fetch comments for selected post
-  const { data: commentsData, isLoading: isLoadingComments } = useQuery({
+  const { data: commentsData, isLoading: isLoadingComments } = useQuery<CommentsData>({
     queryKey: ['/api/social/posts', selectedPostId, 'comments'],
     enabled: !!selectedPostId
   });
 
   // Fetch user stats
-  const { data: statsData } = useQuery({
+  const { data: statsData } = useQuery<UserStats>({
     queryKey: ['/api/social/stats'],
     enabled: !!user
   });
@@ -119,6 +139,62 @@ export default function SocialPage() {
     }
   });
 
+  // Report post mutation
+  const reportPostMutation = useMutation({
+    mutationFn: async (reportData: { contentType: string; contentId: string; reportType: string; description: string }) => {
+      const response = await fetch('/api/reports/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reportData)
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create report');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Signalement envoyé",
+        description: "Votre signalement a été envoyé et sera examiné par notre équipe."
+      });
+      setReportDialogOpen(false);
+      setReportType('');
+      setReportDescription('');
+      setReportingPostId(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erreur",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleReportPost = (postId: string) => {
+    setReportingPostId(postId);
+    setReportDialogOpen(true);
+  };
+
+  const submitReport = () => {
+    if (!reportingPostId || !reportType) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner un motif de signalement.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    reportPostMutation.mutate({
+      contentType: 'social_post',
+      contentId: reportingPostId,
+      reportType,
+      description: reportDescription
+    });
+  };
+
   const getProfileBadge = (profileType: string) => {
     switch (profileType) {
       case 'admin':
@@ -154,7 +230,7 @@ export default function SocialPage() {
         </h1>
         <Badge variant="secondary" className="flex items-center gap-2">
           <Users className="w-4 h-4" />
-{String((postsData as any)?.posts?.length || 0)} posts
+          {String(postsData?.posts?.length || 0)} posts
         </Badge>
       </div>
 
@@ -166,7 +242,7 @@ export default function SocialPage() {
               <CardTitle className="text-sm">Mes VisuPoints</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-primary">{(statsData as any).visuPoints || 0}</div>
+              <div className="text-2xl font-bold text-primary">{statsData?.visuPoints || 0}</div>
               <p className="text-xs text-muted-foreground">Points communauté</p>
             </CardContent>
           </Card>
@@ -175,7 +251,7 @@ export default function SocialPage() {
               <CardTitle className="text-sm">Mes Posts</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-secondary">{(statsData as any).postsCount || 0}</div>
+              <div className="text-2xl font-bold text-secondary">{statsData?.postsCount || 0}</div>
               <p className="text-xs text-muted-foreground">Publications</p>
             </CardContent>
           </Card>
@@ -184,7 +260,7 @@ export default function SocialPage() {
               <CardTitle className="text-sm">Interactions</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-accent">{(statsData as any).likesReceived || 0}</div>
+              <div className="text-2xl font-bold text-accent">{statsData?.likesReceived || 0}</div>
               <p className="text-xs text-muted-foreground">Likes reçus</p>
             </CardContent>
           </Card>
@@ -249,8 +325,8 @@ export default function SocialPage() {
 
       {/* Posts Feed */}
       <div className="space-y-6" data-testid="posts-feed">
-        {(postsData as any)?.posts?.length > 0 ? (
-          (postsData as any).posts.map((post: SocialPost) => (
+        {postsData?.posts?.length ? (
+          postsData.posts.map((post: SocialPost) => (
             <Card key={post.id} data-testid={`post-${post.id}`}>
               <CardHeader>
                 <div className="flex items-center space-x-3">
@@ -302,6 +378,16 @@ export default function SocialPage() {
                       >
                         <MessageCircle className="w-4 h-4" />
                         {post.commentsCount}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleReportPost(post.id)}
+                        className="flex items-center gap-2 text-muted-foreground hover:text-destructive"
+                        data-testid={`report-post-${post.id}`}
+                      >
+                        <Flag className="w-4 h-4" />
+                        Signaler
                       </Button>
                       <Button variant="ghost" size="sm" className="flex items-center gap-2">
                         <Share2 className="w-4 h-4" />
@@ -356,7 +442,7 @@ export default function SocialPage() {
                           ))}
                         </div>
                       ) : (
-                        (commentsData as any)?.comments?.map((comment: Comment) => (
+                        commentsData?.comments?.map((comment: Comment) => (
                           <div key={comment.id} className="flex gap-3" data-testid={`comment-${comment.id}`}>
                             <Avatar className="w-8 h-8">
                               <AvatarFallback className="bg-muted">
@@ -399,6 +485,61 @@ export default function SocialPage() {
           </Card>
         )}
       </div>
+
+      {/* Report Dialog Modal */}
+      <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Signaler ce contenu</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="report-type">Motif du signalement *</Label>
+              <Select value={reportType} onValueChange={setReportType}>
+                <SelectTrigger data-testid="report-type-select">
+                  <SelectValue placeholder="Sélectionnez un motif" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="plagiat">Plagiat</SelectItem>
+                  <SelectItem value="contenu_offensant">Contenu offensant</SelectItem>
+                  <SelectItem value="desinformation">Désinformation</SelectItem>
+                  <SelectItem value="infraction_legale">Infraction légale</SelectItem>
+                  <SelectItem value="contenu_illicite">Contenu illicite</SelectItem>
+                  <SelectItem value="violation_droits">Violation de droits</SelectItem>
+                  <SelectItem value="propos_haineux">Propos haineux</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="report-description">Description (optionnel)</Label>
+              <Textarea
+                id="report-description"
+                placeholder="Décrivez en détail pourquoi vous signalez ce contenu..."
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                rows={3}
+                data-testid="report-description"
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setReportDialogOpen(false)}
+                data-testid="report-cancel"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={submitReport}
+                disabled={!reportType || reportPostMutation.isPending}
+                data-testid="report-submit"
+              >
+                {reportPostMutation.isPending ? "Envoi..." : "Signaler"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
