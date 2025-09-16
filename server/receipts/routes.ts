@@ -20,6 +20,47 @@ import {
 
 const router = Router();
 
+// ROUTE: /api/receipts
+// Get current user's receipts (simplified endpoint for authenticated user)
+router.get('/', isAuthenticated, async (req: any, res: Response) => {
+  try {
+    const userId = req.user.claims.sub;
+    const { limit = 20, dateFrom, dateTo, format } = req.query;
+    
+    // Use existing getUserReceipts function
+    const receipts = await getUserReceipts(userId, {
+      dateFrom,
+      dateTo,
+      format: format === 'pdf' || format === 'txt' ? format : undefined
+    });
+
+    // Limit results for performance
+    const limitedReceipts = receipts.slice(0, parseInt(limit));
+
+    // Log audit
+    await storage.createAuditLog({
+      userId,
+      action: 'receipts_viewed',
+      resourceType: 'user_receipts',
+      resourceId: userId,
+      details: { 
+        resultCount: limitedReceipts.length,
+        filters: { dateFrom, dateTo, format, limit }
+      }
+    });
+
+    res.json({
+      success: true,
+      receipts: limitedReceipts,
+      count: limitedReceipts.length
+    });
+  } catch (error) {
+    console.error("Error fetching current user receipts:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch receipts';
+    res.status(500).json({ message: errorMessage });
+  }
+});
+
 // ROUTE: /api/receipts/user/:userId
 // Get user receipts
 router.get('/user/:userId', isAuthenticated, async (req: any, res: Response) => {
