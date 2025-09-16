@@ -3,10 +3,12 @@ import { Info, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { getMinimumCautionAmount } from '@shared/utils';
+import { ALLOWED_INVESTMENT_AMOUNTS, isValidInvestmentAmount } from '@shared/constants';
 import type { Project } from '@shared/schema';
 
 interface InvestmentModalProps {
@@ -47,10 +49,10 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
       return;
     }
 
-    if (amount < 1 || amount > 20) {
+    if (!isValidInvestmentAmount(amount)) {
       toast({
         title: "Montant invalide",
-        description: "L'investissement doit être entre €1 et €20",
+        description: `L'investissement doit être l'un des montants suivants : ${ALLOWED_INVESTMENT_AMOUNTS.join(', ')} €`,
         variant: "destructive",
       });
       return;
@@ -124,17 +126,20 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
           {/* Investment Amount */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Montant (€1 - €20)
+              Montant d'investissement
             </label>
-            <Input
-              type="number"
-              min="1"
-              max="20"
-              value={amount}
-              onChange={(e) => setAmount(parseInt(e.target.value) || 1)}
-              className="w-full"
-              data-testid="investment-amount"
-            />
+            <Select value={amount.toString()} onValueChange={(value) => setAmount(parseInt(value))}>
+              <SelectTrigger className="w-full" data-testid="investment-amount">
+                <SelectValue placeholder="Sélectionnez un montant" />
+              </SelectTrigger>
+              <SelectContent>
+                {ALLOWED_INVESTMENT_AMOUNTS.map(amount => (
+                  <SelectItem key={amount} value={amount.toString()}>
+                    {amount} €
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Investment Summary */}
