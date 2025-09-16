@@ -13,6 +13,9 @@ export default function Navigation() {
     { path: '/projects', label: 'Projets', section: 'projects' },
     { path: '/portfolio', label: 'Portfolio', section: 'portfolio' },
     { path: '/live', label: 'Live', section: 'live' },
+    { path: '/wallet', label: 'Portefeuille', section: 'wallet' },
+    { path: '/social', label: 'Social', section: 'social' },
+    { path: '/receipts', label: 'Reçus', section: 'receipts' },
     ...(user?.profileType === 'admin' ? [{ path: '/admin', label: 'Admin', section: 'admin' }] : []),
   ];
 

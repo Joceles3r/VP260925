@@ -65,7 +65,7 @@ import {
   type InsertAuditLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, sql, or } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -737,6 +737,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSocialPost(id: string): Promise<void> {
     await db.delete(socialPosts).where(eq(socialPosts.id, id));
+  }
+
+  async getAllSocialPosts(limit = 20, offset = 0, userId?: string): Promise<SocialPost[]> {
+    // Return all posts: user's own posts + published posts from others
+    return await db
+      .select()
+      .from(socialPosts)
+      .where(
+        userId 
+          ? or(eq(socialPosts.authorId, userId), eq(socialPosts.status, 'published'))
+          : eq(socialPosts.status, 'published')
+      )
+      .orderBy(desc(socialPosts.createdAt))
+      .limit(limit)
+      .offset(offset);
   }
 
   // Social comments operations
