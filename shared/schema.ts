@@ -81,13 +81,23 @@ export const categoryStatusEnum = pgEnum('category_status', ['waiting', 'active'
 // Purge type enum
 export const purgeTypeEnum = pgEnum('purge_type', ['projects', 'live_shows', 'articles', 'technical', 'financial']);
 
+// Content report type enum for signalement modules
+export const reportTypeEnum = pgEnum('report_type', ['plagiat', 'contenu_offensant', 'desinformation', 'infraction_legale', 'contenu_illicite', 'violation_droits', 'propos_haineux']);
+
+// Content report status enum
+export const reportStatusEnum = pgEnum('report_status', ['pending', 'validating', 'confirmed', 'rejected', 'abusive']);
+
+// Content type enum for reports
+export const contentTypeEnum = pgEnum('content_type', ['article', 'video', 'social_post', 'comment']);
+
 // Audit action enum for tracking administrative operations
 export const auditActionEnum = pgEnum('audit_action', [
   'purge_manual', 'purge_scheduled', 'purge_projects', 'purge_live_shows', 'purge_articles', 
   'purge_technical', 'purge_financial', 'admin_access', 'user_role_change', 'project_status_change',
   'compliance_report', 'video_moderation', 'financial_operation', 'security_alert',
   'receipts_viewed', 'receipt_generated', 'receipt_downloaded', 'bulk_receipts_generated', 'auto_receipt_generated',
-  'category_created', 'category_updated', 'cycle_started', 'cycle_extended', 'category_closed', 'threshold_check'
+  'category_created', 'category_updated', 'cycle_started', 'cycle_extended', 'category_closed', 'threshold_check',
+  'content_reported', 'report_validated', 'report_rejected', 'visupoints_awarded'
 ]);
 
 // User storage table
@@ -430,6 +440,33 @@ export const auditLogs = pgTable("audit_logs", {
   index("idx_audit_logs_created_at").on(table.createdAt),
 ]);
 
+// Content reports table - System de signalement communautaire
+export const contentReports = pgTable("content_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id),
+  contentType: contentTypeEnum("content_type").notNull(),
+  contentId: varchar("content_id").notNull(), // ID of reported content
+  reportType: reportTypeEnum("report_type").notNull(),
+  status: reportStatusEnum("status").default('pending'),
+  description: text("description"), // Optional details from reporter
+  adminNotes: text("admin_notes"), // Admin validation notes
+  validatedBy: varchar("validated_by").references(() => users.id), // Admin who validated
+  validatedAt: timestamp("validated_at"),
+  rewardAwarded: boolean("reward_awarded").default(false),
+  awardPosition: integer("award_position"), // Position in reward queue (1-5 for articles, 1-10 for videos)
+  visuPointsAwarded: integer("visu_points_awarded").default(0),
+  ipAddress: varchar("ip_address"),
+  userAgent: varchar("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_content_reports_reporter").on(table.reporterId),
+  index("idx_content_reports_content").on(table.contentType, table.contentId),
+  index("idx_content_reports_status").on(table.status),
+  index("idx_content_reports_created").on(table.createdAt),
+  unique("unique_report_per_content").on(table.reporterId, table.contentType, table.contentId), // One report per user per content
+]);
+
 // Withdrawal requests table - Seuils minimaux de retrait
 export const withdrawalRequests = pgTable("withdrawal_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -458,6 +495,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   paymentReceipts: many(paymentReceipts),
   withdrawalRequests: many(withdrawalRequests),
   auditLogs: many(auditLogs),
+  contentReports: many(contentReports),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -764,6 +802,12 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
   createdAt: true,
 });
 
+export const insertContentReportSchema = createInsertSchema(contentReports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -790,6 +834,7 @@ export type ProjectExtension = typeof projectExtensions.$inferSelect;
 export type PurgeJob = typeof purgeJobs.$inferSelect;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type ContentReport = typeof contentReports.$inferSelect;
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
@@ -812,3 +857,4 @@ export type InsertProjectExtension = z.infer<typeof insertProjectExtensionSchema
 export type InsertPurgeJob = z.infer<typeof insertPurgeJobSchema>;
 export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type InsertContentReport = z.infer<typeof insertContentReportSchema>;
