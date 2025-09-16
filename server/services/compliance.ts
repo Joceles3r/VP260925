@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import { ALLOWED_INVESTMENT_AMOUNTS, isValidInvestmentAmount } from "@shared/constants";
 
 export interface ComplianceData {
   period: string;
@@ -37,15 +38,15 @@ export async function generateComplianceReport(
     // Get recent transactions for analysis
     const recentTransactions = await storage.getAllTransactions(1000);
     
-    // Calculate risk metrics
+    // Calculate risk metrics (nouvelles règles 16/09/2025)
     const suspiciousTransactions = recentTransactions.filter(t => {
       const amount = parseFloat(t.amount);
-      return amount > 15 || amount < 1; // Outside normal range
+      return !isValidInvestmentAmount(amount); // Outside allowed amounts
     }).length;
 
     const largeTransactions = recentTransactions.filter(t => {
       const amount = parseFloat(t.amount);
-      return amount >= 15;
+      return amount >= 15; // Garder 15€+ comme "large"
     }).length;
 
     const failedKycAttempts = userStats.kycPending; // Simplified
@@ -88,10 +89,10 @@ export function validateTransaction(transaction: any): {
 } {
   const violations: string[] = [];
   
-  // Check amount limits
+  // Check amount limits (nouvelles règles 16/09/2025)
   const amount = parseFloat(transaction.amount);
-  if (amount < 1 || amount > 20) {
-    violations.push("Transaction amount outside allowed range (€1-20)");
+  if (!isValidInvestmentAmount(amount)) {
+    violations.push(`Transaction amount must be one of: ${ALLOWED_INVESTMENT_AMOUNTS.join(', ')} EUR`);
   }
   
   // Check daily limits (this would need to be implemented with daily transaction tracking)
@@ -172,10 +173,10 @@ export async function auditUserActivity(userId: string): Promise<{
     
     if (recentTransactions.length > 20) riskScore += 30;
     
-    // Unusual amounts
+    // Unusual amounts (nouvelles règles 16/09/2025)
     const unusualAmounts = userTransactions.filter(t => {
       const amount = parseFloat(t.amount);
-      return amount < 2 || amount > 18;
+      return !isValidInvestmentAmount(amount);
     });
     
     if (unusualAmounts.length > userTransactions.length * 0.3) riskScore += 20;

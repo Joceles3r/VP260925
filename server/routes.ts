@@ -16,6 +16,7 @@ import {
   updateSocialCommentSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
+import { ALLOWED_INVESTMENT_AMOUNTS, isValidInvestmentAmount, ALLOWED_PROJECT_PRICES, isValidProjectPrice } from "@shared/constants";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -670,10 +671,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currentValue: req.body.amount,
       });
 
-      // Validate investment amount (€1-20)
+      // Validate investment amount (nouvelles règles 16/09/2025)
       const amount = parseFloat(req.body.amount);
-      if (amount < 1 || amount > 20) {
-        return res.status(400).json({ message: "Investment amount must be between €1 and €20" });
+      if (!isValidInvestmentAmount(amount)) {
+        return res.status(400).json({ 
+          message: `Investment amount must be one of: ${ALLOWED_INVESTMENT_AMOUNTS.join(', ')} EUR`,
+          allowedAmounts: ALLOWED_INVESTMENT_AMOUNTS
+        });
       }
 
       // Check if user has sufficient balance
