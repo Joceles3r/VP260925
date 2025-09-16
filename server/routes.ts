@@ -1805,11 +1805,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parseInt(offset as string)
         );
       } else {
-        // TODO: Implement general feed fetch
-        posts = [];
+        // Get general feed: user's own posts + public posts from others
+        posts = await storage.getAllSocialPosts(
+          parseInt(limit as string),
+          parseInt(offset as string),
+          req.user?.id
+        );
       }
       
-      res.json(posts);
+      res.json({ posts, count: posts.length });
     } catch (error) {
       console.error("Error fetching social posts:", error);
       res.status(500).json({ message: "Failed to fetch posts" });

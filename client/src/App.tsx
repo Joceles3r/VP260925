@@ -15,6 +15,9 @@ import Portfolio from "@/pages/portfolio";
 import Live from "@/pages/live";
 import Admin from "@/pages/admin";
 import KYCOnboarding from "@/pages/KYCOnboarding";
+import WalletPage from "@/pages/wallet";
+import SocialPage from "@/pages/social";
+import ReceiptsPage from "@/pages/receipts";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -46,6 +49,9 @@ function Router() {
             <Route path="/projects" component={Projects} />
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />
+            <Route path="/wallet" component={WalletPage} />
+            <Route path="/social" component={SocialPage} />
+            <Route path="/receipts" component={ReceiptsPage} />
             <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </>
