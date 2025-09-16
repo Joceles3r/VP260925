@@ -67,6 +67,27 @@ export const DEFAULT_CATEGORY_SCORE = 0.5;
 export const DEFAULT_COLOR_CLASS = 'bg-muted text-muted-foreground';
 export const DEFAULT_CAUTION_MINIMUM = 20;
 
+// VISUAL 16/09/2025 - Nouvelles règles de prix strictes
+// Prix autorisés pour les porteurs (projets visuels)
+export const ALLOWED_PROJECT_PRICES = [2, 3, 4, 5, 10] as const;
+export const MAX_PROJECT_PRICE = 10;
+export const MIN_PROJECT_PRICE = 2;
+
+// Tranches d'investissement autorisées pour les investisseurs
+export const ALLOWED_INVESTMENT_AMOUNTS = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20] as const;
+export const MAX_INVESTMENT_AMOUNT = 20;
+export const MIN_INVESTMENT_AMOUNT = 2;
+
+// Fonction utilitaire pour vérifier si un prix de projet est valide
+export function isValidProjectPrice(price: number): boolean {
+  return ALLOWED_PROJECT_PRICES.includes(price as any);
+}
+
+// Fonction utilitaire pour vérifier si un montant d'investissement est valide
+export function isValidInvestmentAmount(amount: number): boolean {
+  return ALLOWED_INVESTMENT_AMOUNTS.includes(amount as any);
+}
+
 // VISUAL video deposit pricing (based on user requirements)
 export const VIDEO_DEPOSIT_PRICING = {
   clip: {
