@@ -128,7 +128,7 @@ export default function AdminPanel() {
       
       toast({
         title: action === 'validate' ? "Signalement validé" : "Signalement rejeté",
-        description: "Action effectuée avec succès",
+        description: "Le signalement a été traité avec succès",
       });
 
       // Refetch reports after action

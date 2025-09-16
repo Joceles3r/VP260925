@@ -2868,45 +2868,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Ce signalement a déjà été traité" });
       }
 
-      // Get all validated reports for this content to determine reward position
-      const allReports = await storage.getContentReportsByContent(report.contentType, report.contentId);
-      const validatedReports = allReports.filter(r => r.status === 'confirmed').sort((a, b) => 
-        new Date(a.validatedAt || 0).getTime() - new Date(b.validatedAt || 0).getTime()
-      );
-
-      // Determine reward eligibility based on content type
-      const maxRewardPosition = report.contentType === 'article' ? 5 : 10;
-      const currentPosition = validatedReports.length + 1;
-      
-      let visuPointsAwarded = 0;
-      let rewardAwarded = false;
-      
-      if (currentPosition <= maxRewardPosition) {
-        visuPointsAwarded = 1000;
-        rewardAwarded = true;
-        
-        // Award VISUpoints to reporter
-        await storage.createVisuPointsTransaction({
-          userId: report.reporterId,
-          amount: 1000,
-          reason: 'validated_content_report',
-          referenceId: report.id,
-          referenceType: 'content_report'
-        });
-      }
-
       // Update the report
       await storage.updateContentReport(id, {
         status: 'confirmed',
         adminNotes: adminNotes || '',
         validatedBy: adminUserId,
-        validatedAt: new Date(),
-        rewardAwarded,
-        awardPosition: currentPosition,
-        visuPointsAwarded
+        validatedAt: new Date()
       });
 
-      // Create audit logs
+      // Create audit log
       await storage.createAuditLog({
         userId: adminUserId,
         action: 'report_validated',
@@ -2915,32 +2885,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: {
           contentType: report.contentType,
           contentId: report.contentId,
-          reportType: report.reportType,
-          visuPointsAwarded,
-          awardPosition: currentPosition
+          reportType: report.reportType
         }
       });
 
-      if (rewardAwarded) {
-        await storage.createAuditLog({
-          userId: report.reporterId,
-          action: 'visupoints_awarded',
-          resourceType: 'visupoints_transaction',
-          details: {
-            reason: 'validated_content_report',
-            amount: 1000,
-            reportId: id,
-            position: currentPosition
-          }
-        });
-      }
-
       res.json({
-        message: rewardAwarded ? 
-          `Signalement validé ! ${visuPointsAwarded} VISUpoints attribués (position ${currentPosition})` :
-          `Signalement validé (aucune récompense car position ${currentPosition} > ${maxRewardPosition})`,
-        visuPointsAwarded,
-        awardPosition: currentPosition
+        message: "Signalement validé avec succès"
       });
     } catch (error) {
       console.error("Error validating report:", error);
