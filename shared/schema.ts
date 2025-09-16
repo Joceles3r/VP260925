@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { ALLOWED_PROJECT_PRICES, isValidProjectPrice } from "./constants";
 
 // Session storage table for Replit Auth
 export const sessions = pgTable(
@@ -130,6 +131,7 @@ export const projects = pgTable("projects", {
   category: varchar("category", { length: 100 }).notNull(),
   creatorId: varchar("creator_id").notNull().references(() => users.id),
   targetAmount: decimal("target_amount", { precision: 10, scale: 2 }).notNull(),
+  unitPriceEUR: decimal("unit_price_eur", { precision: 10, scale: 2 }).notNull().default('5.00'), // Prix unitaire (2,3,4,5,10€)
   currentAmount: decimal("current_amount", { precision: 10, scale: 2 }).default('0.00'),
   status: projectStatusEnum("status").default('pending'),
   videoUrl: varchar("video_url"),
@@ -696,6 +698,13 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).refine((data) => {
+  // Nouvelles règles de prix 16/09/2025 : prix autorisés pour les porteurs
+  const price = parseFloat(data.unitPriceEUR);
+  return isValidProjectPrice(price);
+}, {
+  message: "Le prix unitaire du projet doit être l'un des montants autorisés : 2, 3, 4, 5, 10 €",
+  path: ["unitPriceEUR"],
 });
 
 export const insertInvestmentSchema = createInsertSchema(investments).omit({
