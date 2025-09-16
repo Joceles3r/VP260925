@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Users, DollarSign, Film, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Users, DollarSign, Film, ShieldAlert, Flag, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,6 +73,7 @@ function AdminStats({ stats }: AdminStatsProps) {
 export default function AdminPanel() {
   const { toast } = useToast();
   const { stats, users, pendingProjects, transactions } = useAdminStore();
+  const [processingReports, setProcessingReports] = useState<Set<string>>(new Set());
 
   const { data: adminStats } = useQuery({
     queryKey: ['/api/admin/stats'],
@@ -91,6 +92,11 @@ export default function AdminPanel() {
     queryKey: ['/api/admin/transactions'],
   });
 
+  const { data: pendingReports, refetch: refetchReports } = useQuery({
+    queryKey: ['/api/reports'],
+    select: (data: any) => data?.reports || [],
+  });
+
   const handleProjectApproval = async (projectId: string, status: 'active' | 'rejected') => {
     try {
       await apiRequest('PUT', `/api/admin/projects/${projectId}/status`, { status });
@@ -107,6 +113,37 @@ export default function AdminPanel() {
         title: "Erreur",
         description: "Impossible de mettre à jour le projet",
         variant: "destructive",
+      });
+    }
+  };
+
+  const handleReportAction = async (reportId: string, action: 'validate' | 'reject', adminNotes?: string, isAbusive?: boolean) => {
+    setProcessingReports(prev => new Set(prev).add(reportId));
+    
+    try {
+      const endpoint = action === 'validate' ? 'validate' : 'reject';
+      const body = action === 'validate' ? { adminNotes } : { adminNotes, isAbusive };
+      
+      await apiRequest('PATCH', `/api/reports/${reportId}/${endpoint}`, body);
+      
+      toast({
+        title: action === 'validate' ? "Signalement validé" : "Signalement rejeté",
+        description: "Action effectuée avec succès",
+      });
+
+      // Refetch reports after action
+      refetchReports();
+    } catch (error: any) {
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de traiter le signalement",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(reportId);
+        return newSet;
       });
     }
   };
@@ -130,11 +167,12 @@ export default function AdminPanel() {
       <AdminStats stats={adminStats} />
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="users" data-testid="tab-users">Utilisateurs</TabsTrigger>
           <TabsTrigger value="projects" data-testid="tab-projects">Projets</TabsTrigger>
           <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
           <TabsTrigger value="compliance" data-testid="tab-compliance">Compliance</TabsTrigger>
+          <TabsTrigger value="moderation" data-testid="tab-moderation">Modération</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="space-y-4">
@@ -181,7 +219,7 @@ export default function AdminPanel() {
                 </thead>
                 
                 <tbody className="divide-y divide-border">
-                  {adminUsers?.map((user: any) => (
+                  {(adminUsers as any[])?.map((user: any) => (
                     <tr key={user.id} className="hover:bg-muted/10" data-testid={`user-row-${user.id}`}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -253,7 +291,7 @@ export default function AdminPanel() {
             
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {adminPendingProjects?.map((project: any) => (
+                {(adminPendingProjects as any[])?.map((project: any) => (
                   <div key={project.id} className="border border-border rounded-lg p-4" data-testid={`pending-project-${project.id}`}>
                     <img 
                       src={project.thumbnailUrl || 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=200&fit=crop'} 
@@ -313,7 +351,7 @@ export default function AdminPanel() {
                   </div>
                 ))}
                 
-                {(!adminPendingProjects || adminPendingProjects.length === 0) && (
+                {(!adminPendingProjects || (adminPendingProjects as any[])?.length === 0) && (
                   <div className="col-span-full text-center py-8 text-muted-foreground" data-testid="no-pending-projects">
                     Aucun projet en attente
                   </div>
@@ -355,7 +393,7 @@ export default function AdminPanel() {
                 </thead>
                 
                 <tbody className="divide-y divide-border">
-                  {adminTransactions?.map((transaction: any) => (
+                  {(adminTransactions as any[])?.map((transaction: any) => (
                     <tr key={transaction.id} className="hover:bg-muted/10" data-testid={`transaction-row-${transaction.id}`}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-foreground" data-testid="transaction-id">
                         #{transaction.id.slice(-8)}
@@ -414,7 +452,7 @@ export default function AdminPanel() {
             <h3 className="text-lg font-semibold text-foreground mb-4">Vérifications KYC en Attente</h3>
             
             <div className="space-y-3">
-              {adminUsers?.filter((user: any) => !user.kycVerified).map((user: any) => (
+              {(adminUsers as any[])?.filter((user: any) => !user.kycVerified).map((user: any) => (
                 <div key={user.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg" data-testid={`kyc-pending-${user.id}`}>
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center text-sm font-medium text-accent-foreground">
@@ -441,9 +479,134 @@ export default function AdminPanel() {
                 </div>
               ))}
               
-              {(!adminUsers || adminUsers.filter((user: any) => !user.kycVerified).length === 0) && (
+              {(!adminUsers || (adminUsers as any[])?.filter((user: any) => !user.kycVerified).length === 0) && (
                 <div className="text-center py-8 text-muted-foreground" data-testid="no-kyc-pending">
                   Aucune vérification KYC en attente
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="moderation" className="space-y-4">
+          <div className="bg-card rounded-lg border border-border overflow-hidden">
+            <div className="px-6 py-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-foreground">Signalements en Attente</h3>
+                <div className="flex items-center space-x-2">
+                  <Flag className="h-5 w-5 text-accent" />
+                  <span className="text-sm text-muted-foreground">
+                    {pendingReports?.filter((r: any) => r.status === 'pending').length || 0} signalements
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="divide-y divide-border">
+              {pendingReports?.filter((report: any) => report.status === 'pending').map((report: any) => (
+                <div key={report.id} className="p-6 hover:bg-muted/10" data-testid={`report-${report.id}`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 bg-destructive/10 rounded-full flex items-center justify-center">
+                            <Flag className="h-4 w-4 text-destructive" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-foreground" data-testid="report-type">
+                              {report.reportType.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {report.contentType} • {new Date(report.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                          <div className="flex items-center space-x-1">
+                            <Eye className="h-4 w-4" />
+                            <span>#{report.contentId.slice(-6)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-xs font-medium text-primary-foreground">
+                            {report.reporter?.firstName?.[0] || report.reporter?.email?.[0] || 'U'}
+                          </div>
+                          <span className="text-sm text-foreground" data-testid="reporter-name">
+                            {report.reporter?.firstName || report.reporter?.email || 'Utilisateur'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {report.description && (
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <div className="text-sm text-muted-foreground mb-1">Description:</div>
+                          <div className="text-sm text-foreground" data-testid="report-description">
+                            {report.description}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col space-y-2 ml-6">
+                      <Button
+                        size="sm"
+                        className="min-w-[100px]"
+                        onClick={() => handleReportAction(report.id, 'validate')}
+                        disabled={processingReports.has(report.id)}
+                        data-testid="validate-report"
+                      >
+                        {processingReports.has(report.id) ? (
+                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Valider
+                          </>
+                        )}
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="min-w-[100px]"
+                        onClick={() => handleReportAction(report.id, 'reject')}
+                        disabled={processingReports.has(report.id)}
+                        data-testid="reject-report"
+                      >
+                        {processingReports.has(report.id) ? (
+                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Rejeter
+                          </>
+                        )}
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-[100px] text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => handleReportAction(report.id, 'reject', '', true)}
+                        disabled={processingReports.has(report.id)}
+                        data-testid="mark-abusive"
+                      >
+                        Abusif
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {(!pendingReports || pendingReports.filter((r: any) => r.status === 'pending').length === 0) && (
+                <div className="text-center py-12 text-muted-foreground" data-testid="no-pending-reports">
+                  <Flag className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Aucun signalement en attente</h3>
+                  <p>Tous les signalements ont été traités</p>
                 </div>
               )}
             </div>
