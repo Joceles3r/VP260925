@@ -21,6 +21,7 @@ import {
   purgeJobs,
   withdrawalRequests,
   auditLogs,
+  contentReports,
   type User,
   type UpsertUser,
   type Project,
@@ -44,6 +45,8 @@ import {
   type PurgeJob,
   type WithdrawalRequest,
   type AuditLog,
+  type ContentReport,
+  type InsertContentReport,
   type InsertProject,
   type InsertInvestment,
   type InsertTransaction,
@@ -216,6 +219,14 @@ export interface IStorage {
   getAuditLogs(limit?: number, offset?: number): Promise<AuditLog[]>;
   getUserAuditLogs(userId: string, limit?: number, offset?: number): Promise<AuditLog[]>;
   getAuditLogsByAction(action: string, limit?: number): Promise<AuditLog[]>;
+
+  // Content report operations
+  createContentReport(report: InsertContentReport): Promise<ContentReport>;
+  getContentReports(limit?: number, offset?: number): Promise<ContentReport[]>;
+  getContentReportsByStatus(status: string): Promise<ContentReport[]>;
+  getContentReportsByContent(contentType: string, contentId: string): Promise<ContentReport[]>;
+  updateContentReport(id: string, updates: Partial<ContentReport>): Promise<ContentReport>;
+  getContentReport(id: string): Promise<ContentReport | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1130,6 +1141,57 @@ export class DatabaseStorage implements IStorage {
       .where(eq(auditLogs.action, action as any))
       .orderBy(desc(auditLogs.createdAt))
       .limit(limit);
+  }
+
+  // Content report operations - MODULE 7 & 8: Protection et signalement
+  async createContentReport(report: InsertContentReport): Promise<ContentReport> {
+    const [newReport] = await db.insert(contentReports).values(report).returning();
+    return newReport;
+  }
+
+  async getContentReports(limit = 50, offset = 0): Promise<ContentReport[]> {
+    return await db
+      .select()
+      .from(contentReports)
+      .orderBy(desc(contentReports.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getContentReportsByStatus(status: string): Promise<ContentReport[]> {
+    return await db
+      .select()
+      .from(contentReports)
+      .where(eq(contentReports.status, status as any))
+      .orderBy(desc(contentReports.createdAt));
+  }
+
+  async getContentReportsByContent(contentType: string, contentId: string): Promise<ContentReport[]> {
+    return await db
+      .select()
+      .from(contentReports)
+      .where(and(
+        eq(contentReports.contentType, contentType as any),
+        eq(contentReports.contentId, contentId)
+      ))
+      .orderBy(desc(contentReports.createdAt));
+  }
+
+  async updateContentReport(id: string, updates: Partial<ContentReport>): Promise<ContentReport> {
+    const [updatedReport] = await db
+      .update(contentReports)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contentReports.id, id))
+      .returning();
+    return updatedReport;
+  }
+
+  async getContentReport(id: string): Promise<ContentReport | undefined> {
+    const [report] = await db
+      .select()
+      .from(contentReports)
+      .where(eq(contentReports.id, id));
+    return report;
   }
 }
 

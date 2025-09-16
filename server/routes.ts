@@ -1809,7 +1809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         posts = await storage.getAllSocialPosts(
           parseInt(limit as string),
           parseInt(offset as string),
-          req.user?.id
+          req.user?.claims?.sub
         );
       }
       
@@ -2499,6 +2499,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE 6: SEUILS DE RETRAIT PAR PROFIL =====
   // Withdrawal request management with profile-based minimum thresholds
 
+  // ===== MODULE 7 & 8: PROTECTION ET SIGNALEMENT CONTENU =====
+  // Content protection and community reporting system with VISUpoints rewards
+
   // EXPLICIT ADMIN AUTHORIZATION MIDDLEWARE
   const requireAdminAccess = async (req: any, res: any, next: any) => {
     try {
@@ -2600,7 +2603,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create withdrawal request
       const withdrawalRequest = await storage.createWithdrawalRequest({
         userId,
-        amount: amount,
+        amount: amount.toString(),
         minimumThreshold: minimumThreshold.toString(),
         status: 'pending'
       });
@@ -2742,6 +2745,408 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing withdrawal:", error);
       res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
+  // ===== CONTENT REPORTS API ROUTES =====
+  
+  // Create a content report (community reporting)
+  app.post('/api/reports/create', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { contentType, contentId, reportType, description } = req.body;
+
+      // Validate input
+      if (!['article', 'video', 'social_post', 'comment'].includes(contentType)) {
+        return res.status(400).json({ message: "Type de contenu invalide" });
+      }
+
+      if (!['plagiat', 'contenu_offensant', 'desinformation', 'infraction_legale', 'contenu_illicite', 'violation_droits', 'propos_haineux'].includes(reportType)) {
+        return res.status(400).json({ message: "Type de signalement invalide" });
+      }
+
+      // Check if user already reported this content
+      const existingReports = await storage.getContentReportsByContent(contentType, contentId);
+      const userAlreadyReported = existingReports.some(report => report.reporterId === userId);
+      
+      if (userAlreadyReported) {
+        return res.status(409).json({ message: "Vous avez déjà signalé ce contenu" });
+      }
+
+      // Create the report
+      const newReport = await storage.createContentReport({
+        reporterId: userId,
+        contentType: contentType as any,
+        contentId,
+        reportType: reportType as any,
+        description: description || '',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'content_reported',
+        resourceType: contentType,
+        resourceId: contentId,
+        details: {
+          reportId: newReport.id,
+          reportType,
+          reporterInfo: {
+            ip: req.ip,
+            userAgent: req.get('User-Agent')
+          }
+        }
+      });
+
+      res.status(201).json({
+        message: "Signalement créé avec succès",
+        reportId: newReport.id
+      });
+    } catch (error) {
+      console.error("Error creating content report:", error);
+      res.status(500).json({ message: "Erreur lors de la création du signalement" });
+    }
+  });
+
+  // Get all reports (admin only)
+  app.get('/api/reports', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const { status, limit = 50, offset = 0 } = req.query;
+      
+      let reports;
+      if (status) {
+        reports = await storage.getContentReportsByStatus(status);
+      } else {
+        reports = await storage.getContentReports(parseInt(limit), parseInt(offset));
+      }
+
+      // Enrich with reporter info
+      const enrichedReports = await Promise.all(
+        reports.map(async (report) => {
+          const reporter = await storage.getUser(report.reporterId);
+          const validator = report.validatedBy ? await storage.getUser(report.validatedBy) : null;
+          
+          return {
+            ...report,
+            reporter: reporter ? {
+              id: reporter.id,
+              firstName: reporter.firstName,
+              lastName: reporter.lastName,
+              email: reporter.email
+            } : null,
+            validator: validator ? {
+              id: validator.id,
+              firstName: validator.firstName,
+              lastName: validator.lastName
+            } : null
+          };
+        })
+      );
+
+      res.json({ reports: enrichedReports });
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération des signalements" });
+    }
+  });
+
+  // Validate a report (admin only) - awards VISUpoints
+  app.patch('/api/reports/:id/validate', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const adminUserId = req.adminUser.id;
+      const { adminNotes } = req.body;
+
+      const report = await storage.getContentReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Signalement non trouvé" });
+      }
+
+      if (report.status !== 'pending') {
+        return res.status(400).json({ message: "Ce signalement a déjà été traité" });
+      }
+
+      // Get all validated reports for this content to determine reward position
+      const allReports = await storage.getContentReportsByContent(report.contentType, report.contentId);
+      const validatedReports = allReports.filter(r => r.status === 'confirmed').sort((a, b) => 
+        new Date(a.validatedAt || 0).getTime() - new Date(b.validatedAt || 0).getTime()
+      );
+
+      // Determine reward eligibility based on content type
+      const maxRewardPosition = report.contentType === 'article' ? 5 : 10;
+      const currentPosition = validatedReports.length + 1;
+      
+      let visuPointsAwarded = 0;
+      let rewardAwarded = false;
+      
+      if (currentPosition <= maxRewardPosition) {
+        visuPointsAwarded = 1000;
+        rewardAwarded = true;
+        
+        // Award VISUpoints to reporter
+        await storage.createVisuPointsTransaction({
+          userId: report.reporterId,
+          amount: 1000,
+          reason: 'validated_content_report',
+          referenceId: report.id,
+          referenceType: 'content_report'
+        });
+      }
+
+      // Update the report
+      const updatedReport = await storage.updateContentReport(id, {
+        status: 'confirmed',
+        adminNotes: adminNotes || '',
+        validatedBy: adminUserId,
+        validatedAt: new Date(),
+        rewardAwarded,
+        awardPosition: currentPosition,
+        visuPointsAwarded
+      });
+
+      // Create audit logs
+      await storage.createAuditLog({
+        userId: adminUserId,
+        action: 'report_validated',
+        resourceType: 'content_report',
+        resourceId: id,
+        details: {
+          contentType: report.contentType,
+          contentId: report.contentId,
+          reportType: report.reportType,
+          visuPointsAwarded,
+          awardPosition: currentPosition
+        }
+      });
+
+      if (rewardAwarded) {
+        await storage.createAuditLog({
+          userId: report.reporterId,
+          action: 'visupoints_awarded',
+          resourceType: 'visupoints_transaction',
+          details: {
+            reason: 'validated_content_report',
+            amount: 1000,
+            reportId: id,
+            position: currentPosition
+          }
+        });
+      }
+
+      res.json({
+        message: rewardAwarded ? 
+          `Signalement validé ! ${visuPointsAwarded} VISUpoints attribués (position ${currentPosition})` :
+          `Signalement validé (aucune récompense car position ${currentPosition} > ${maxRewardPosition})`,
+        visuPointsAwarded,
+        awardPosition: currentPosition
+      });
+    } catch (error) {
+      console.error("Error validating report:", error);
+      res.status(500).json({ message: "Erreur lors de la validation du signalement" });
+    }
+  });
+
+  // Reject a report (admin only)
+  app.patch('/api/reports/:id/reject', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const adminUserId = req.adminUser.id;
+      const { adminNotes, isAbusive } = req.body;
+
+      const report = await storage.getContentReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Signalement non trouvé" });
+      }
+
+      if (report.status !== 'pending') {
+        return res.status(400).json({ message: "Ce signalement a déjà été traité" });
+      }
+
+      const newStatus = isAbusive ? 'abusive' : 'rejected';
+
+      // Update the report
+      await storage.updateContentReport(id, {
+        status: newStatus,
+        adminNotes: adminNotes || '',
+        validatedBy: adminUserId,
+        validatedAt: new Date()
+      });
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: adminUserId,
+        action: 'report_rejected',
+        resourceType: 'content_report',
+        resourceId: id,
+        details: {
+          contentType: report.contentType,
+          contentId: report.contentId,
+          reportType: report.reportType,
+          rejectionReason: adminNotes,
+          isAbusive
+        }
+      });
+
+      res.json({
+        message: isAbusive ? 
+          "Signalement marqué comme abusif" : 
+          "Signalement rejeté",
+        status: newStatus
+      });
+    } catch (error) {
+      console.error("Error rejecting report:", error);
+      res.status(500).json({ message: "Erreur lors du rejet du signalement" });
+    }
+  });
+
+  // Validate a report (admin only) - awards VISUpoints
+  app.patch('/api/reports/:id/validate', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const adminUserId = req.adminUser.id;
+      const { adminNotes } = req.body;
+
+      const report = await storage.getContentReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Signalement non trouvé" });
+      }
+
+      if (report.status !== 'pending') {
+        return res.status(400).json({ message: "Ce signalement a déjà été traité" });
+      }
+
+      // Get all validated reports for this content to determine reward position
+      const allReports = await storage.getContentReportsByContent(report.contentType, report.contentId);
+      const validatedReports = allReports.filter(r => r.status === 'confirmed').sort((a, b) => 
+        new Date(a.validatedAt || 0).getTime() - new Date(b.validatedAt || 0).getTime()
+      );
+
+      // Determine reward eligibility based on content type
+      const maxRewardPosition = report.contentType === 'article' ? 5 : 10;
+      const currentPosition = validatedReports.length + 1;
+      
+      let visuPointsAwarded = 0;
+      let rewardAwarded = false;
+      
+      if (currentPosition <= maxRewardPosition) {
+        visuPointsAwarded = 1000;
+        rewardAwarded = true;
+        
+        // Award VISUpoints to reporter
+        await storage.createVisuPointsTransaction({
+          userId: report.reporterId,
+          amount: 1000,
+          reason: 'validated_content_report',
+          referenceId: report.id,
+          referenceType: 'content_report'
+        });
+      }
+
+      // Update the report
+      await storage.updateContentReport(id, {
+        status: 'confirmed',
+        adminNotes: adminNotes || '',
+        validatedBy: adminUserId,
+        validatedAt: new Date(),
+        rewardAwarded,
+        awardPosition: currentPosition,
+        visuPointsAwarded
+      });
+
+      // Create audit logs
+      await storage.createAuditLog({
+        userId: adminUserId,
+        action: 'report_validated',
+        resourceType: 'content_report',
+        resourceId: id,
+        details: {
+          contentType: report.contentType,
+          contentId: report.contentId,
+          reportType: report.reportType,
+          visuPointsAwarded,
+          awardPosition: currentPosition
+        }
+      });
+
+      if (rewardAwarded) {
+        await storage.createAuditLog({
+          userId: report.reporterId,
+          action: 'visupoints_awarded',
+          resourceType: 'visupoints_transaction',
+          details: {
+            reason: 'validated_content_report',
+            amount: 1000,
+            reportId: id,
+            position: currentPosition
+          }
+        });
+      }
+
+      res.json({
+        message: rewardAwarded ? 
+          `Signalement validé ! ${visuPointsAwarded} VISUpoints attribués (position ${currentPosition})` :
+          `Signalement validé (aucune récompense car position ${currentPosition} > ${maxRewardPosition})`,
+        visuPointsAwarded,
+        awardPosition: currentPosition
+      });
+    } catch (error) {
+      console.error("Error validating report:", error);
+      res.status(500).json({ message: "Erreur lors de la validation du signalement" });
+    }
+  });
+
+  // Reject a report (admin only)
+  app.patch('/api/reports/:id/reject', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const adminUserId = req.adminUser.id;
+      const { adminNotes, isAbusive } = req.body;
+
+      const report = await storage.getContentReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Signalement non trouvé" });
+      }
+
+      if (report.status !== 'pending') {
+        return res.status(400).json({ message: "Ce signalement a déjà été traité" });
+      }
+
+      const newStatus = isAbusive ? 'abusive' : 'rejected';
+
+      // Update the report
+      await storage.updateContentReport(id, {
+        status: newStatus,
+        adminNotes: adminNotes || '',
+        validatedBy: adminUserId,
+        validatedAt: new Date()
+      });
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: adminUserId,
+        action: 'report_rejected',
+        resourceType: 'content_report',
+        resourceId: id,
+        details: {
+          contentType: report.contentType,
+          contentId: report.contentId,
+          reportType: report.reportType,
+          rejectionReason: adminNotes,
+          isAbusive
+        }
+      });
+
+      res.json({
+        message: isAbusive ? 
+          "Signalement marqué comme abusif" : 
+          "Signalement rejeté",
+        status: newStatus
+      });
+    } catch (error) {
+      console.error("Error rejecting report:", error);
+      res.status(500).json({ message: "Erreur lors du rejet du signalement" });
     }
   });
 
