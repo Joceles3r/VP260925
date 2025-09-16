@@ -631,6 +631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const projectData = insertProjectSchema.parse({
         ...req.body,
         creatorId: userId,
+        unitPriceEUR: req.body.unitPriceEUR || '5.00', // Prix unitaire obligatoire (2,3,4,5,10€)
         videoUrl: req.file ? `/uploads/${req.file.filename}` : undefined,
       });
 
