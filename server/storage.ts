@@ -22,6 +22,16 @@ import {
   withdrawalRequests,
   auditLogs,
   contentReports,
+  // Nouvelles tables pour fonctionnalités avancées
+  referrals,
+  referralLimits,
+  loginStreaks,
+  visitorActivities,
+  visitorsOfMonth,
+  articles,
+  articleInvestments,
+  visuPointsPacks,
+  visuPointsPurchases,
   type User,
   type UpsertUser,
   type Project,
@@ -66,6 +76,25 @@ import {
   type InsertPurgeJob,
   type InsertWithdrawalRequest,
   type InsertAuditLog,
+  // Nouveaux types pour fonctionnalités avancées
+  type Referral,
+  type ReferralLimit,
+  type LoginStreak,
+  type VisitorActivity,
+  type VisitorOfMonth,
+  type Article,
+  type ArticleInvestment,
+  type VisuPointsPack,
+  type VisuPointsPurchase,
+  type InsertReferral,
+  type InsertReferralLimit,
+  type InsertLoginStreak,
+  type InsertVisitorActivity,
+  type InsertVisitorOfMonth,
+  type InsertArticle,
+  type InsertArticleInvestment,
+  type InsertVisuPointsPack,
+  type InsertVisuPointsPurchase,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql, or } from "drizzle-orm";
@@ -168,6 +197,7 @@ export interface IStorage {
   createVisuPointsTransaction(transaction: InsertVisuPointsTransaction): Promise<VisuPointsTransaction>;
   getUserVisuPointsBalance(userId: string): Promise<number>;
   getUserVisuPointsHistory(userId: string, limit?: number): Promise<VisuPointsTransaction[]>;
+  getVisuPointsTransactionByKey(idempotencyKey: string): Promise<VisuPointsTransaction | null>;
   
   // MODULE 2: Cycle de vie projet vidéo
   // Project extensions operations
@@ -227,6 +257,57 @@ export interface IStorage {
   getContentReportsByContent(contentType: string, contentId: string): Promise<ContentReport[]>;
   updateContentReport(id: string, updates: Partial<ContentReport>): Promise<ContentReport>;
   getContentReport(id: string): Promise<ContentReport | undefined>;
+
+  // ===== NOUVELLES MÉTHODES POUR FONCTIONNALITÉS AVANCÉES =====
+  
+  // Referral system operations
+  createReferral(referral: InsertReferral): Promise<Referral>;
+  getReferralByCode(code: string): Promise<Referral | undefined>;
+  getUserReferrals(sponsorId: string): Promise<Referral[]>;
+  updateReferral(id: string, updates: Partial<Referral>): Promise<Referral>;
+  getReferralByRefereeId(refereeId: string): Promise<Referral | undefined>;
+  getUserReferralLimit(userId: string, monthYear: string): Promise<ReferralLimit | undefined>;
+  createReferralLimit(limit: InsertReferralLimit): Promise<ReferralLimit>;
+  updateReferralLimit(userId: string, monthYear: string, updates: Partial<ReferralLimit>): Promise<ReferralLimit>;
+
+  // Login streaks operations  
+  getUserLoginStreak(userId: string): Promise<LoginStreak | undefined>;
+  createLoginStreak(streak: InsertLoginStreak): Promise<LoginStreak>;
+  updateLoginStreak(userId: string, updates: Partial<LoginStreak>): Promise<LoginStreak>;
+
+  // Visitor activities operations
+  createVisitorActivity(activity: InsertVisitorActivity): Promise<VisitorActivity>;
+  getUserActivities(userId: string, limit?: number): Promise<VisitorActivity[]>;
+  getSessionActivities(sessionId: string): Promise<VisitorActivity[]>;
+
+  // Visitor of the month operations
+  getVisitorOfMonth(userId: string, monthYear: string): Promise<VisitorOfMonth | undefined>;
+  createVisitorOfMonth(visitor: InsertVisitorOfMonth): Promise<VisitorOfMonth>;
+  updateVisitorOfMonth(userId: string, monthYear: string, updates: Partial<VisitorOfMonth>): Promise<VisitorOfMonth>;
+  getMonthlyVisitorRankings(monthYear: string, limit?: number): Promise<VisitorOfMonth[]>;
+
+  // Articles operations for Infoporteurs
+  createArticle(article: InsertArticle): Promise<Article>;
+  getArticle(id: string): Promise<Article | undefined>;
+  getArticles(limit?: number, offset?: number, category?: string): Promise<Article[]>;
+  getUserArticles(authorId: string, limit?: number): Promise<Article[]>;
+  updateArticle(id: string, updates: Partial<Article>): Promise<Article>;
+  getPendingArticles(): Promise<Article[]>;
+
+  // Article investments operations for Investi-lecteurs
+  createArticleInvestment(investment: InsertArticleInvestment): Promise<ArticleInvestment>;
+  getArticleInvestments(articleId: string): Promise<ArticleInvestment[]>;
+  getUserArticleInvestments(userId: string): Promise<ArticleInvestment[]>;
+  updateArticleInvestment(id: string, updates: Partial<ArticleInvestment>): Promise<ArticleInvestment>;
+
+  // VISUpoints packs operations
+  getVisuPointsPacks(): Promise<VisuPointsPack[]>;
+  createVisuPointsPack(pack: InsertVisuPointsPack): Promise<VisuPointsPack>;
+  updateVisuPointsPack(id: string, updates: Partial<VisuPointsPack>): Promise<VisuPointsPack>;
+  
+  // VISUpoints purchases operations
+  createVisuPointsPurchase(purchase: InsertVisuPointsPurchase): Promise<VisuPointsPurchase>;
+  getUserVisuPointsPurchases(userId: string): Promise<VisuPointsPurchase[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -887,6 +968,16 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
+  async getVisuPointsTransactionByKey(idempotencyKey: string): Promise<VisuPointsTransaction | null> {
+    const result = await db
+      .select()
+      .from(visuPointsTransactions)
+      .where(eq(visuPointsTransactions.idempotencyKey, idempotencyKey))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+
   // MODULE 2: Cycle de vie projet vidéo
   async createProjectExtension(extension: InsertProjectExtension): Promise<ProjectExtension> {
     const [newExtension] = await db.insert(projectExtensions).values(extension).returning();
@@ -906,8 +997,8 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(projectExtensions)
-      .where(gte(projectExtensions.extendsUntil, now))
-      .orderBy(asc(projectExtensions.extendsUntil));
+      .where(gte(projectExtensions.cycleEndsAt, now))
+      .orderBy(asc(projectExtensions.cycleEndsAt));
   }
 
   async updateProjectExtension(id: string, updates: Partial<ProjectExtension>): Promise<ProjectExtension> {
@@ -930,7 +1021,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(purgeJobs)
       .where(eq(purgeJobs.status, 'pending'))
-      .orderBy(asc(purgeJobs.scheduledAt));
+      .orderBy(asc(purgeJobs.targetDate));
   }
 
   async getCompletedPurgeJobs(limit = 20): Promise<PurgeJob[]> {
@@ -1192,6 +1283,275 @@ export class DatabaseStorage implements IStorage {
       .from(contentReports)
       .where(eq(contentReports.id, id));
     return report;
+  }
+
+  // ===== IMPLÉMENTATION NOUVELLES MÉTHODES POUR FONCTIONNALITÉS AVANCÉES =====
+
+  // Referral system operations
+  async createReferral(referral: InsertReferral): Promise<Referral> {
+    const [newReferral] = await db.insert(referrals).values(referral).returning();
+    return newReferral;
+  }
+
+  async getReferralByCode(code: string): Promise<Referral | undefined> {
+    const [referral] = await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.referralCode, code));
+    return referral;
+  }
+
+  async getUserReferrals(sponsorId: string): Promise<Referral[]> {
+    return await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.sponsorId, sponsorId))
+      .orderBy(desc(referrals.createdAt));
+  }
+
+  async updateReferral(id: string, updates: Partial<Referral>): Promise<Referral> {
+    const [updatedReferral] = await db
+      .update(referrals)
+      .set(updates)
+      .where(eq(referrals.id, id))
+      .returning();
+    return updatedReferral;
+  }
+
+  async getReferralByRefereeId(refereeId: string): Promise<Referral | undefined> {
+    const [referral] = await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.refereeId, refereeId));
+    return referral;
+  }
+
+  async getUserReferralLimit(userId: string, monthYear: string): Promise<ReferralLimit | undefined> {
+    const [limit] = await db
+      .select()
+      .from(referralLimits)
+      .where(and(
+        eq(referralLimits.userId, userId),
+        eq(referralLimits.monthYear, monthYear)
+      ));
+    return limit;
+  }
+
+  async createReferralLimit(limit: InsertReferralLimit): Promise<ReferralLimit> {
+    const [newLimit] = await db.insert(referralLimits).values(limit).returning();
+    return newLimit;
+  }
+
+  async updateReferralLimit(userId: string, monthYear: string, updates: Partial<ReferralLimit>): Promise<ReferralLimit> {
+    const [updatedLimit] = await db
+      .update(referralLimits)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(
+        eq(referralLimits.userId, userId),
+        eq(referralLimits.monthYear, monthYear)
+      ))
+      .returning();
+    return updatedLimit;
+  }
+
+  // Login streaks operations
+  async getUserLoginStreak(userId: string): Promise<LoginStreak | undefined> {
+    const [streak] = await db
+      .select()
+      .from(loginStreaks)
+      .where(eq(loginStreaks.userId, userId));
+    return streak;
+  }
+
+  async createLoginStreak(streak: InsertLoginStreak): Promise<LoginStreak> {
+    const [newStreak] = await db.insert(loginStreaks).values(streak).returning();
+    return newStreak;
+  }
+
+  async updateLoginStreak(userId: string, updates: Partial<LoginStreak>): Promise<LoginStreak> {
+    const [updatedStreak] = await db
+      .update(loginStreaks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(loginStreaks.userId, userId))
+      .returning();
+    return updatedStreak;
+  }
+
+  // Visitor activities operations
+  async createVisitorActivity(activity: InsertVisitorActivity): Promise<VisitorActivity> {
+    const [newActivity] = await db.insert(visitorActivities).values(activity).returning();
+    return newActivity;
+  }
+
+  async getUserActivities(userId: string, limit = 50): Promise<VisitorActivity[]> {
+    return await db
+      .select()
+      .from(visitorActivities)
+      .where(eq(visitorActivities.userId, userId))
+      .orderBy(desc(visitorActivities.createdAt))
+      .limit(limit);
+  }
+
+  async getSessionActivities(sessionId: string): Promise<VisitorActivity[]> {
+    return await db
+      .select()
+      .from(visitorActivities)
+      .where(eq(visitorActivities.sessionId, sessionId))
+      .orderBy(desc(visitorActivities.createdAt));
+  }
+
+  // Visitor of the month operations
+  async getVisitorOfMonth(userId: string, monthYear: string): Promise<VisitorOfMonth | undefined> {
+    const [visitor] = await db
+      .select()
+      .from(visitorsOfMonth)
+      .where(and(
+        eq(visitorsOfMonth.userId, userId),
+        eq(visitorsOfMonth.monthYear, monthYear)
+      ));
+    return visitor;
+  }
+
+  async createVisitorOfMonth(visitor: InsertVisitorOfMonth): Promise<VisitorOfMonth> {
+    const [newVisitor] = await db.insert(visitorsOfMonth).values(visitor).returning();
+    return newVisitor;
+  }
+
+  async updateVisitorOfMonth(userId: string, monthYear: string, updates: Partial<VisitorOfMonth>): Promise<VisitorOfMonth> {
+    const [updatedVisitor] = await db
+      .update(visitorsOfMonth)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(
+        eq(visitorsOfMonth.userId, userId),
+        eq(visitorsOfMonth.monthYear, monthYear)
+      ))
+      .returning();
+    return updatedVisitor;
+  }
+
+  async getMonthlyVisitorRankings(monthYear: string, limit = 10): Promise<VisitorOfMonth[]> {
+    return await db
+      .select()
+      .from(visitorsOfMonth)
+      .where(eq(visitorsOfMonth.monthYear, monthYear))
+      .orderBy(asc(visitorsOfMonth.rank))
+      .limit(limit);
+  }
+
+  // Articles operations for Infoporteurs
+  async createArticle(article: InsertArticle): Promise<Article> {
+    const [newArticle] = await db.insert(articles).values(article).returning();
+    return newArticle;
+  }
+
+  async getArticle(id: string): Promise<Article | undefined> {
+    const [article] = await db.select().from(articles).where(eq(articles.id, id));
+    return article;
+  }
+
+  async getArticles(limit = 20, offset = 0, category?: string): Promise<Article[]> {
+    const query = db.select().from(articles);
+    if (category) {
+      query.where(eq(articles.category, category));
+    }
+    return await query
+      .orderBy(desc(articles.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getUserArticles(authorId: string, limit = 20): Promise<Article[]> {
+    return await db
+      .select()
+      .from(articles)
+      .where(eq(articles.authorId, authorId))
+      .orderBy(desc(articles.createdAt))
+      .limit(limit);
+  }
+
+  async updateArticle(id: string, updates: Partial<Article>): Promise<Article> {
+    const [updatedArticle] = await db
+      .update(articles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(articles.id, id))
+      .returning();
+    return updatedArticle;
+  }
+
+  async getPendingArticles(): Promise<Article[]> {
+    return await db
+      .select()
+      .from(articles)
+      .where(eq(articles.status, 'pending'))
+      .orderBy(desc(articles.createdAt));
+  }
+
+  // Article investments operations for Investi-lecteurs
+  async createArticleInvestment(investment: InsertArticleInvestment): Promise<ArticleInvestment> {
+    const [newInvestment] = await db.insert(articleInvestments).values(investment).returning();
+    return newInvestment;
+  }
+
+  async getArticleInvestments(articleId: string): Promise<ArticleInvestment[]> {
+    return await db
+      .select()
+      .from(articleInvestments)
+      .where(eq(articleInvestments.articleId, articleId))
+      .orderBy(desc(articleInvestments.createdAt));
+  }
+
+  async getUserArticleInvestments(userId: string): Promise<ArticleInvestment[]> {
+    return await db
+      .select()
+      .from(articleInvestments)
+      .where(eq(articleInvestments.userId, userId))
+      .orderBy(desc(articleInvestments.createdAt));
+  }
+
+  async updateArticleInvestment(id: string, updates: Partial<ArticleInvestment>): Promise<ArticleInvestment> {
+    const [updatedInvestment] = await db
+      .update(articleInvestments)
+      .set(updates)
+      .where(eq(articleInvestments.id, id))
+      .returning();
+    return updatedInvestment;
+  }
+
+  // VISUpoints packs operations
+  async getVisuPointsPacks(): Promise<VisuPointsPack[]> {
+    return await db
+      .select()
+      .from(visuPointsPacks)
+      .where(eq(visuPointsPacks.isActive, true))
+      .orderBy(asc(visuPointsPacks.sortOrder));
+  }
+
+  async createVisuPointsPack(pack: InsertVisuPointsPack): Promise<VisuPointsPack> {
+    const [newPack] = await db.insert(visuPointsPacks).values(pack).returning();
+    return newPack;
+  }
+
+  async updateVisuPointsPack(id: string, updates: Partial<VisuPointsPack>): Promise<VisuPointsPack> {
+    const [updatedPack] = await db
+      .update(visuPointsPacks)
+      .set(updates)
+      .where(eq(visuPointsPacks.id, id))
+      .returning();
+    return updatedPack;
+  }
+
+  // VISUpoints purchases operations
+  async createVisuPointsPurchase(purchase: InsertVisuPointsPurchase): Promise<VisuPointsPurchase> {
+    const [newPurchase] = await db.insert(visuPointsPurchases).values(purchase).returning();
+    return newPurchase;
+  }
+
+  async getUserVisuPointsPurchases(userId: string): Promise<VisuPointsPurchase[]> {
+    return await db
+      .select()
+      .from(visuPointsPurchases)
+      .where(eq(visuPointsPurchases.userId, userId))
+      .orderBy(desc(visuPointsPurchases.createdAt));
   }
 }
 

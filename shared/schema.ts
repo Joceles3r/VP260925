@@ -363,6 +363,7 @@ export const visuPointsTransactions = pgTable("visu_points_transactions", {
   reason: varchar("reason").notNull(), // 'post_like', 'comment_helpful', 'investment', etc.
   referenceId: varchar("reference_id"), // ID of the post/comment/project that earned points
   referenceType: varchar("reference_type"), // 'post', 'comment', 'project', etc.
+  idempotencyKey: varchar("idempotency_key").unique(), // For preventing duplicate awards
   createdAt: timestamp("created_at").defaultNow(),
 });
 
