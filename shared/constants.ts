@@ -256,6 +256,40 @@ export const TOP10_SYSTEM = {
   MIN_DAILY_SALES_FOR_RANKING: 1, // Minimum 1 vente pour être classé
 } as const;
 
+// ===== RÈGLES DE DISTRIBUTION DES ÉVÉNEMENTS D'INVESTISSEMENT =====
+// Mise à jour v.16/09/2025 - Règles de redistribution 40/30/7/23 (CORRECTIF)
+
+// Distribution des événements d'investissement de catégorie (TOP 100)
+export const INVESTMENT_CATEGORY_DISTRIBUTION = {
+  INVESTORS_TOP10_PERCENT: 0.40,     // 40% Investisseurs TOP 10 ✅ CORRIGÉ
+  CREATORS_TOP10_PERCENT: 0.30,      // 30% Porteurs TOP 10 ✅ CORRIGÉ  
+  VISUAL_PLATFORM_PERCENT: 0.23,     // 23% VISUAL (commission + reliquats arrondis)
+  INVESTORS_11_100_PERCENT: 0.07,    // 7% Investisseurs rangs 11-100 (équipartition)
+} as const;
+
+// Tableaux détaillés de répartition TOP10 (pourcentages absolus de S)
+export const TOP10_DETAILED_DISTRIBUTION = {
+  // Investisseurs TOP10 - parts absolues (≈ 40% total)
+  INVESTORS_PERCENTAGES: [13.66, 6.83, 4.55, 3.41, 2.73, 2.28, 1.95, 1.71, 1.52, 1.37],
+  // Porteurs TOP10 - parts absolues (≈ 30% total)  
+  CREATORS_PERCENTAGES: [10.24, 5.12, 3.41, 2.56, 2.05, 1.71, 1.46, 1.28, 1.14, 1.02],
+} as const;
+
+// Distribution des Live Shows / Battles
+export const LIVE_SHOWS_DISTRIBUTION = {
+  WINNING_ARTIST_PERCENT: 0.40,      // 40% Artiste gagnant
+  WINNING_INVESTORS_PERCENT: 0.30,   // 30% Investisseurs gagnants (TOP 10 côté gagnant)
+  LOSING_ARTIST_PERCENT: 0.20,       // 20% Artiste perdant
+  LOSING_INVESTORS_PERCENT: 0.10,    // 10% Investisseurs perdants
+} as const;
+
+// Distribution des Articles journalistiques
+export const ARTICLES_DISTRIBUTION = {
+  INFOPORTEUR_PERCENT: 0.60,         // 60% Infoporteur (tout auteur confondu)
+  INVESTILECTEURS_PERCENT: 0.30,     // 30% Investi-lecteurs gagnants TOP 10
+  VISUAL_COMMISSION_PERCENT: 0.10,   // 10% VISUAL (commission)
+} as const;
+
 // ===== FIDÉLITÉ AMÉLIORÉE - Streaks Quotidiens et Hebdomadaires =====
 // Nouveau système de fidélité avec cycles quotidiens et hebdomadaires
 export const ENHANCED_FIDELITY = {
