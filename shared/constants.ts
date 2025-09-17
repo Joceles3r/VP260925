@@ -283,12 +283,13 @@ export const LIVE_SHOWS_DISTRIBUTION = {
   LOSING_INVESTORS_PERCENT: 0.10,    // 10% Investisseurs perdants
 } as const;
 
-// Distribution des Articles journalistiques
-export const ARTICLES_DISTRIBUTION = {
-  INFOPORTEUR_PERCENT: 0.60,         // 60% Infoporteur (tout auteur confondu)
-  INVESTILECTEURS_PERCENT: 0.30,     // 30% Investi-lecteurs gagnants TOP 10
-  VISUAL_COMMISSION_PERCENT: 0.10,   // 10% VISUAL (commission)
-} as const;
+// Distribution des Articles journalistiques - OBSOLÈTE
+// ⚠️ DÉPRÉCIÉ - Utiliser VISUAL_PLATFORM_FEE (30% VISUAL / 70% Infoporteur) + système TOP10
+// export const ARTICLES_DISTRIBUTION = {
+//   INFOPORTEUR_PERCENT: 0.60,         // 60% Infoporteur (tout auteur confondu)
+//   INVESTILECTEURS_PERCENT: 0.30,     // 30% Investi-lecteurs gagnants TOP 10
+//   VISUAL_COMMISSION_PERCENT: 0.10,   // 10% VISUAL (commission)
+// } as const;
 
 // ===== FIDÉLITÉ AMÉLIORÉE - Streaks Quotidiens et Hebdomadaires =====
 // Nouveau système de fidélité avec cycles quotidiens et hebdomadaires
