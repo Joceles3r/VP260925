@@ -525,6 +525,7 @@ export class Top10Service {
   /**
    * NOUVELLE MÉTHODE - Gestion des ventes d'articles avec prélèvement 30% VISUAL
    * À appeler lors de chaque vente d'article confirmée
+   * CORRIGÉ - Stockage des montants bruts ET nets pour cohérence financière
    */
   static async processArticleSale(articleId: string, buyerUserId: string, saleAmountEUR: number): Promise<{
     platformFee: number;
@@ -534,9 +535,15 @@ export class Top10Service {
     try {
       console.log(`[TOP10] 💰 Traitement vente article ${articleId}: ${saleAmountEUR.toFixed(2)}€`);
       
-      // 1. Calculer la répartition 30/70
+      // 1. Calculer la répartition 30/70 avec arrondi correct
       const platformFee = Math.round(saleAmountEUR * VISUAL_PLATFORM_FEE.PLATFORM_FEE_INFOARTICLE * 100) / 100;
       const creatorNet = Math.round(saleAmountEUR * VISUAL_PLATFORM_FEE.NET_TO_INFOPORTEUR * 100) / 100;
+      
+      // Validation mathématique stricte
+      const calculatedTotal = platformFee + creatorNet;
+      if (Math.abs(calculatedTotal - saleAmountEUR) > 0.01) {
+        console.warn(`[TOP10] ⚠️ Écart de calcul détecté: ${saleAmountEUR}€ != ${calculatedTotal}€ (${platformFee}€ + ${creatorNet}€)`);
+      }
       
       // 2. Récupérer l'article et son auteur
       const article = await storage.getArticle(articleId);
@@ -544,11 +551,11 @@ export class Top10Service {
         throw new Error(`Article ${articleId} introuvable`);
       }
       
-      // 3. Enregistrer la vente dans les investissements d'articles
+      // 3. Enregistrer la vente avec montant BRUT pour traçabilité
       await storage.createArticleInvestment({
         articleId,
         userId: buyerUserId,
-        amount: saleAmountEUR.toString(),
+        amount: saleAmountEUR.toString(), // BRUT pour traçabilité complète
         visuPoints: 0, // Pas de points pour l'acheteur, seulement pour le créateur
         currentValue: saleAmountEUR.toString()
       });
@@ -697,6 +704,7 @@ export class Top10Service {
 
   /**
    * Met à jour la table articleSalesDaily avec support des transactions
+   * CORRIGÉ - Calcule et stocke les montants nets pour redistribution correcte
    */
   private static async updateArticleSalesDaily(date: Date, tx?: any): Promise<void> {
     const investments = tx 
@@ -707,37 +715,43 @@ export class Top10Service {
     
     for (const investment of investments) {
       try {
+        // CORRECTION CRITIQUE : Calculer le montant NET après commission VISUAL 30%
+        const grossAmount = parseFloat(investment.amount);
+        const netAmount = Math.round(grossAmount * VISUAL_PLATFORM_FEE.NET_TO_INFOPORTEUR * 100) / 100;
+        
+        console.log(`[TOP10] 💰 Vente ${investment.articleId}: Brut ${grossAmount}€ → Net ${netAmount}€ (après 30% VISUAL)`);
+        
         if (tx) {
           // Utiliser upsert avec la transaction pour éviter les doublons
           await tx.insert(articleSalesDaily)
             .values({
               articleId: investment.articleId,
               salesDate: new Date(dateStr + 'T00:00:00Z'),
-              totalSalesEUR: investment.amount,
+              totalSalesEUR: netAmount.toString(), // UTILISER LE MONTANT NET
               salesCount: 1
             })
             .onConflictDoUpdate({
               target: [articleSalesDaily.articleId, articleSalesDaily.salesDate],
               set: {
-                totalSalesEUR: sql`${articleSalesDaily.totalSalesEUR} + ${investment.amount}`,
+                totalSalesEUR: sql`${articleSalesDaily.totalSalesEUR} + ${netAmount}`, // NET
                 salesCount: sql`${articleSalesDaily.salesCount} + 1`,
                 updatedAt: new Date()
               }
             });
         } else {
-          // Version fallback sans transaction
+          // Version fallback sans transaction - UTILISER MONTANT NET
           const existing = await storage.getArticleSaleDaily(investment.articleId, dateStr);
           
           if (existing) {
             await storage.updateArticleSaleDaily(existing.id, {
-              totalSalesEUR: (parseFloat(existing.totalSalesEUR || '0') + parseFloat(investment.amount)).toString(),
+              totalSalesEUR: (parseFloat(existing.totalSalesEUR || '0') + netAmount).toString(), // NET
               salesCount: (existing.salesCount || 0) + 1
             });
           } else {
             await storage.createArticleSaleDaily({
               articleId: investment.articleId,
               salesDate: new Date(dateStr + 'T00:00:00Z'),
-              totalSalesEUR: investment.amount,
+              totalSalesEUR: netAmount.toString(), // UTILISER LE MONTANT NET
               salesCount: 1
             });
           }

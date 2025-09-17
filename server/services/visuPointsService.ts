@@ -1,5 +1,6 @@
 import { storage } from '../storage.js';
 import type { VisuPointsTransaction } from '../../shared/schema.js';
+import { VISU_POINTS, VISUAL_PLATFORM_FEE } from '../../shared/constants.js';
 
 export interface AwardPointsOptions {
   userId: string;
@@ -18,6 +19,14 @@ export class VISUPointsService {
     const { userId, amount, reason, referenceId, referenceType, idempotencyKey } = options;
 
     try {
+      // VALIDATION CRITIQUE - Montants et règles de sécurité
+      if (amount < 0) {
+        throw new Error(`Montant VISUpoints invalide: ${amount} (doit être positif)`);
+      }
+      if (amount > 100000) { // Limite sécurité 100k VP = 1000€
+        throw new Error(`Montant VISUpoints excessif: ${amount} VP (limite: 100,000 VP)`);
+      }
+      
       // Check for idempotency if key is provided
       if (idempotencyKey) {
         const existingTransaction = await storage.getVisuPointsTransactionByKey(idempotencyKey);
@@ -126,6 +135,70 @@ export class VISUPointsService {
       referenceId: activityId,
       referenceType: 'visitor_activity'
     });
+  }
+
+  /**
+   * NOUVEAU - Validation des règles de conversion VISUpoints
+   * Vérifie la cohérence avec les constantes système
+   */
+  static validateConversionRules(): {
+    conversionRate: number;
+    threshold: number;
+    isValid: boolean;
+    errors: string[];
+  } {
+    const errors: string[] = [];
+    
+    // Vérifier la cohérence entre constantes
+    if (VISU_POINTS.conversionRate !== VISUAL_PLATFORM_FEE.VISUPOINTS_TO_EUR) {
+      errors.push(`Incohérence taux de conversion: VISU_POINTS.conversionRate (${VISU_POINTS.conversionRate}) != VISUAL_PLATFORM_FEE.VISUPOINTS_TO_EUR (${VISUAL_PLATFORM_FEE.VISUPOINTS_TO_EUR})`);
+    }
+    
+    if (VISU_POINTS.conversionThreshold !== VISUAL_PLATFORM_FEE.VISUPOINTS_CONVERSION_THRESHOLD) {
+      errors.push(`Incohérence seuil conversion: VISU_POINTS.conversionThreshold (${VISU_POINTS.conversionThreshold}) != VISUAL_PLATFORM_FEE.VISUPOINTS_CONVERSION_THRESHOLD (${VISUAL_PLATFORM_FEE.VISUPOINTS_CONVERSION_THRESHOLD})`);
+    }
+    
+    // Validations logiques
+    if (VISU_POINTS.conversionRate <= 0) {
+      errors.push(`Taux de conversion invalide: ${VISU_POINTS.conversionRate} (doit être > 0)`);
+    }
+    
+    if (VISU_POINTS.conversionThreshold <= 0) {
+      errors.push(`Seuil de conversion invalide: ${VISU_POINTS.conversionThreshold} (doit être > 0)`);
+    }
+    
+    return {
+      conversionRate: VISU_POINTS.conversionRate,
+      threshold: VISU_POINTS.conversionThreshold,
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * NOUVEAU - Calcule la valeur EUR des VISUpoints selon les règles officielles
+   */
+  static convertVPToEUR(visuPoints: number): { 
+    euros: number; 
+    canConvert: boolean; 
+    remainingVP: number;
+    thresholdMet: boolean;
+  } {
+    const validation = this.validateConversionRules();
+    if (!validation.isValid) {
+      throw new Error(`Règles de conversion invalides: ${validation.errors.join(', ')}`);
+    }
+    
+    const thresholdMet = visuPoints >= VISU_POINTS.conversionThreshold;
+    const convertibleVP = thresholdMet ? visuPoints : 0;
+    const euros = Math.floor(convertibleVP / VISU_POINTS.conversionRate * 100) / 100; // Arrondir à 2 décimales
+    
+    return {
+      euros,
+      canConvert: thresholdMet && euros > 0,
+      remainingVP: thresholdMet ? 0 : visuPoints, // Si on peut convertir, tout est converti
+      thresholdMet
+    };
   }
 
   /**
