@@ -149,3 +149,80 @@ export const BUNNY_CONFIG = {
   allowedFormats: ['mp4', 'webm', 'mov'], // Allowed video formats
   maxConcurrentUploads: 3 // Limit concurrent uploads
 } as const;
+
+// ===== NOUVELLES CONSTANTES POUR FONCTIONNALITÉS AVANCÉES =====
+
+// Système de parrainage
+export const REFERRAL_SYSTEM = {
+  maxReferralsPerMonth: 20, // Limite de 20 filleuls/mois
+  sponsorBonusVP: 100, // 100 VISUpoints (1€) pour le parrain
+  refereeBonusVP: 50, // 50 VISUpoints (0.50€) pour le filleul
+  linkExpiryDays: 30, // Liens valides 30 jours
+  codeLength: 8, // Longueur du code de parrainage
+} as const;
+
+// Gamification - Streaks de connexion
+export const STREAK_REWARDS = {
+  daily: 5, // 5 VP par jour consécutif
+  weekly: 50, // Bonus 50 VP pour 7 jours consécutifs
+  monthly: 200, // Bonus 200 VP pour 30 jours consécutifs
+  maxStreakReward: 500, // Récompense maximale pour un streak
+} as const;
+
+// Visiteur du mois
+export const VISITOR_OF_MONTH = {
+  rewardVP: 2500, // 25€ en VISUpoints pour le gagnant
+  minActivitiesForRanking: 10, // Minimum d'activités pour être classé
+  activityPoints: {
+    page_view: 1,
+    project_view: 2,
+    investment: 10,
+    social_interaction: 3,
+    login: 2,
+  },
+} as const;
+
+// Prix articles pour Infoporteurs {0, 0.2-5€}
+export const ALLOWED_ARTICLE_PRICES = [0, 0.2, 0.5, 1, 2, 3, 4, 5] as const;
+export const MAX_ARTICLE_PRICE = 5;
+export const MIN_ARTICLE_PRICE = 0;
+
+// Fonction utilitaire pour vérifier si un prix d'article est valide
+export function isValidArticlePrice(price: number): boolean {
+  return ALLOWED_ARTICLE_PRICES.includes(price as any);
+}
+
+// Packs VISUpoints pour Investi-lecteurs
+export const VISU_POINTS_PACKS = [
+  { name: 'Starter', points: 500, price: 5, bonus: 0 },
+  { name: 'Standard', points: 1200, price: 10, bonus: 100 },
+  { name: 'Premium', points: 2500, price: 20, bonus: 250 },
+  { name: 'Ultimate', points: 5500, price: 40, bonus: 600 },
+] as const;
+
+// VISUpoints système
+export const VISU_POINTS = {
+  conversionRate: 100, // 100 VP = 1 EUR
+  conversionThreshold: 2500, // Minimum 2500 VP pour conversion
+  bonusActions: {
+    stripe_connected: 50,
+    bunny_activated: 25,
+    first_investment: 100,
+    profile_completed: 30,
+    referral_success: 100,
+    article_published: 20,
+    daily_login: 5,
+  },
+} as const;
+
+// Filtres émotionnels
+export const EMOTIONAL_FILTERS = {
+  joie: { color: '#fbbf24', icon: '😊' },
+  tristesse: { color: '#3b82f6', icon: '😢' },
+  colère: { color: '#ef4444', icon: '😠' },
+  peur: { color: '#6b7280', icon: '😰' },
+  surprise: { color: '#8b5cf6', icon: '😲' },
+  dégoût: { color: '#10b981', icon: '🤢' },
+  confiance: { color: '#06b6d4', icon: '😌' },
+  anticipation: { color: '#f59e0b', icon: '🤗' },
+} as const;
