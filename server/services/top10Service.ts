@@ -127,7 +127,7 @@ export class Top10Service {
       const winners = await this.calculateWinners(rankingDate, articleRankings, tx);
       console.log(`[TOP10] 🎉 Vainqueurs calculés: ${winners.length} investi-lecteurs`);
       
-      // 7. REDISTRIBUTION INTELLIGENTE 60/40
+      // 7. REDISTRIBUTION INTELLIGENTE 60/40 avec arithmétique en centimes
       await this.executeSmartRedistribution(top10Infoporteurs, winners, redistribution, tx);
       
       console.log(`[TOP10] ✅ Classement quotidien généré avec succès pour ${dateStr}`);
@@ -189,8 +189,8 @@ export class Top10Service {
   }
 
   /**
-   * NOUVELLE MÉTHODE - Redistribution intelligente selon les règles 60/40
-   * 60% pour TOP10 infoporteurs, 40% pour investi-lecteurs vainqueurs
+   * REDISTRIBUTION EXACTE - Arithmétique en centimes stricte selon les règles 60/40
+   * MATHÉMATIQUES PARFAITES - Allocation déterministe des restes d'arrondi
    * SÉCURISÉ - Support transactionnel pour garantir l'atomicité
    */
   private static async executeSmartRedistribution(
@@ -199,33 +199,44 @@ export class Top10Service {
     redistribution: Top10Redistributions,
     tx?: any
   ): Promise<void> {
-    const totalPool = parseFloat(redistribution.totalPoolEUR);
-    if (totalPool <= 0) {
-      console.log(`[TOP10] ⚠️ Pas de pot de redistribution (${totalPool}€)`);
+    const totalPoolEUR = parseFloat(redistribution.totalPoolEUR);
+    if (totalPoolEUR <= 0) {
+      console.log(`[TOP10] ⚠️ Pas de pot de redistribution (${totalPoolEUR}€)`);
       return;
     }
     
-    // Calculs selon la répartition 60/40
-    const top10Pool = totalPool * TOP10_SYSTEM.SPLIT_TOP10_PERCENT; // 60%
-    const winnersPool = totalPool * TOP10_SYSTEM.SPLIT_WINNERS_PERCENT; // 40%
+    // CONVERSION EN CENTIMES pour arithmétique exacte
+    const totalPoolCents = Math.round(totalPoolEUR * 100);
     
-    console.log(`[TOP10] 📊 Redistribution: ${totalPool.toFixed(2)}€ total → TOP10: ${top10Pool.toFixed(2)}€ (60%), Vainqueurs: ${winnersPool.toFixed(2)}€ (40%)`);
-    
-    // Redistribuer aux TOP10 infoporteurs
-    if (top10Infoporteurs.length > 0) {
-      const sharePerInfoporteur = top10Pool / top10Infoporteurs.length;
-      for (const infoporteur of top10Infoporteurs) {
-        await this.distributeToInfoporteur(infoporteur, sharePerInfoporteur, tx);
-      }
+    // Validation des pourcentages constants (protection contre erreurs de configuration)
+    if (Math.abs(TOP10_SYSTEM.SPLIT_TOP10_PERCENT + TOP10_SYSTEM.SPLIT_WINNERS_PERCENT - 1.0) > 0.0001) {
+      throw new Error(`ERREUR CONSTANTES: Split ne fait pas 100% (${TOP10_SYSTEM.SPLIT_TOP10_PERCENT} + ${TOP10_SYSTEM.SPLIT_WINNERS_PERCENT})`);
     }
     
-    // Redistribuer aux investi-lecteurs vainqueurs
-    if (winners.length > 0) {
-      const sharePerWinner = winnersPool / winners.length;
-      for (const winner of winners) {
-        await this.distributeToWinner(winner, sharePerWinner, tx);
-      }
+    // CALCULS EXACTS EN CENTIMES (garantit précision absolue)
+    const top10PoolCents = Math.round(totalPoolCents * TOP10_SYSTEM.SPLIT_TOP10_PERCENT); // 60%
+    const winnersPoolCents = totalPoolCents - top10PoolCents; // 40% (garantit exactitude mathématique)
+    
+    // Vérification mathématique stricte (détecte toute corruption)
+    if (top10PoolCents + winnersPoolCents !== totalPoolCents) {
+      throw new Error(`ERREUR CRITIQUE Split centimes: ${totalPoolCents} != ${top10PoolCents} + ${winnersPoolCents}`);
     }
+    
+    console.log(`[TOP10] 📊 Redistribution EXACTE: ${totalPoolEUR.toFixed(2)}€ (${totalPoolCents} centimes)`);
+    console.log(`[TOP10] 💎 TOP10: ${(top10PoolCents/100).toFixed(2)}€ (${top10PoolCents} centimes)`);
+    console.log(`[TOP10] 🎉 Vainqueurs: ${(winnersPoolCents/100).toFixed(2)}€ (${winnersPoolCents} centimes)`);
+    
+    // DISTRIBUTION EXACTE avec gestion déterministe des restes
+    const distributedTop10Cents = await this.distributePoolExactly(top10Infoporteurs, top10PoolCents, 'infoporteur', tx);
+    const distributedWinnersCents = await this.distributePoolExactly(winners, winnersPoolCents, 'winner', tx);
+    
+    // Vérification finale de cohérence absolue (protection ultime)
+    const totalDistributedCents = distributedTop10Cents + distributedWinnersCents;
+    if (totalDistributedCents !== totalPoolCents) {
+      throw new Error(`ERREUR DISTRIBUTION FINALE: ${totalPoolCents} centimes != ${totalDistributedCents} centimes distribués (TOP10: ${distributedTop10Cents}, Winners: ${distributedWinnersCents})`);
+    }
+    
+    console.log(`[TOP10] ✅ Distribution mathématiquement parfaite: ${totalDistributedCents} centimes = ${(totalDistributedCents/100).toFixed(2)}€`);
     
     // Marquer la redistribution comme terminée
     const updateData = {
@@ -241,8 +252,57 @@ export class Top10Service {
     } else {
       await storage.updateTop10Redistribution(redistribution.id, updateData);
     }
+  }
+
+  /**
+   * DISTRIBUTION EXACTE - Méthode Largest Remainder pour allocation déterministe
+   * Garantit que sum(distributions) === poolCents EXACTEMENT
+   */
+  private static async distributePoolExactly(
+    recipients: (Top10Infoporteurs | Top10Winners)[], 
+    poolCents: number, 
+    recipientType: 'infoporteur' | 'winner',
+    tx?: any
+  ): Promise<number> {
+    if (recipients.length === 0) return 0;
     
-    console.log(`[TOP10] ✅ Redistribution terminée: ${top10Infoporteurs.length} infoporteurs, ${winners.length} vainqueurs`);
+    // Méthode "Largest Remainder" pour allocation déterministe
+    const baseShareCents = Math.floor(poolCents / recipients.length);
+    const remainderCents = poolCents - (baseShareCents * recipients.length);
+    
+    console.log(`[TOP10] 💵 Distribution ${recipientType}: ${recipients.length} destinataires, ${baseShareCents} centimes de base, ${remainderCents} centimes de reste`);
+    
+    // Trier les destinataires par ID pour allocation déterministe des restes
+    const sortedRecipients = [...recipients].sort((a, b) => a.id.localeCompare(b.id));
+    
+    let totalDistributedCents = 0;
+    
+    // Distribuer avec allocation déterministe du reste
+    for (let i = 0; i < sortedRecipients.length; i++) {
+      const recipient = sortedRecipients[i];
+      const extraCent = i < remainderCents ? 1 : 0; // Les premiers reçoivent le reste
+      const finalShareCents = baseShareCents + extraCent;
+      const finalShareEUR = finalShareCents / 100;
+      
+      totalDistributedCents += finalShareCents;
+      
+      // Distribuer selon le type
+      if (recipientType === 'infoporteur') {
+        await this.distributeToInfoporteur(recipient as Top10Infoporteurs, finalShareEUR, tx);
+      } else {
+        await this.distributeToWinner(recipient as Top10Winners, finalShareEUR, tx);
+      }
+      
+      console.log(`[TOP10] 💰 ${recipientType} ${i+1}/${recipients.length}: ${finalShareEUR.toFixed(2)}€ (${finalShareCents} centimes${extraCent ? ' +1 reste' : ''})`);
+    }
+    
+    // Vérification critique : distribution exacte
+    if (totalDistributedCents !== poolCents) {
+      throw new Error(`ERREUR ALLOCATION ${recipientType.toUpperCase()}: ${poolCents} centimes != ${totalDistributedCents} centimes distribués`);
+    }
+    
+    console.log(`[TOP10] ✅ Distribution ${recipientType} PARFAITE: ${totalDistributedCents} centimes = ${(totalDistributedCents/100).toFixed(2)}€`);
+    return totalDistributedCents;
   }
 
   /**

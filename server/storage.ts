@@ -38,6 +38,8 @@ import {
   top10Winners,
   top10Redistributions,
   weeklyStreaks,
+  // Table transferts Stripe idempotents
+  stripeTransfers,
   type User,
   type UpsertUser,
   type Project,
@@ -107,11 +109,14 @@ import {
   type Top10Winners,
   type Top10Redistributions,
   type WeeklyStreaks,
+  type StripeTransfer,
+  type InsertStripeTransfer,
   insertArticleSalesDailySchema,
   insertTop10InfoporteursSchema,
   insertTop10WinnersSchema,
   insertTop10RedistributionsSchema,
   insertWeeklyStreaksSchema,
+  insertStripeTransferSchema,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql, or } from "drizzle-orm";
@@ -350,6 +355,14 @@ export interface IStorage {
   // VISUpoints purchases operations
   createVisuPointsPurchase(purchase: InsertVisuPointsPurchase): Promise<VisuPointsPurchase>;
   getUserVisuPointsPurchases(userId: string): Promise<VisuPointsPurchase[]>;
+
+  // Stripe transfers operations (idempotent transfers)
+  createStripeTransfer(transfer: InsertStripeTransfer): Promise<StripeTransfer>;
+  getStripeTransferByIdempotencyKey(idempotencyKey: string): Promise<StripeTransfer | undefined>;
+  getStripeTransfersByUserId(userId: string): Promise<StripeTransfer[]>;
+  getScheduledStripeTransfers(): Promise<StripeTransfer[]>;
+  updateStripeTransfer(id: string, updates: Partial<StripeTransfer>): Promise<StripeTransfer>;
+  getStripeTransferById(id: string): Promise<StripeTransfer | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1774,6 +1787,63 @@ export class DatabaseStorage implements IStorage {
       .set(updates)
       .where(eq(articleSalesDaily.id, id))
       .returning();
+    return result;
+  }
+
+  // ===== STRIPE TRANSFERS OPERATIONS (IDEMPOTENT TRANSFERS) =====
+
+  async createStripeTransfer(transfer: InsertStripeTransfer): Promise<StripeTransfer> {
+    const [result] = await db.insert(stripeTransfers).values(transfer).returning();
+    return result;
+  }
+
+  async getStripeTransferByIdempotencyKey(idempotencyKey: string): Promise<StripeTransfer | undefined> {
+    const [result] = await db
+      .select()
+      .from(stripeTransfers)
+      .where(eq(stripeTransfers.idempotencyKey, idempotencyKey))
+      .limit(1);
+    return result;
+  }
+
+  async getStripeTransfersByUserId(userId: string): Promise<StripeTransfer[]> {
+    return await db
+      .select()
+      .from(stripeTransfers)
+      .where(eq(stripeTransfers.userId, userId))
+      .orderBy(desc(stripeTransfers.createdAt));
+  }
+
+  async getScheduledStripeTransfers(): Promise<StripeTransfer[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(stripeTransfers)
+      .where(and(
+        eq(stripeTransfers.status, 'scheduled'),
+        lte(stripeTransfers.scheduledProcessingAt, now)
+      ))
+      .orderBy(asc(stripeTransfers.scheduledProcessingAt));
+  }
+
+  async updateStripeTransfer(id: string, updates: Partial<StripeTransfer>): Promise<StripeTransfer> {
+    const [result] = await db
+      .update(stripeTransfers)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(stripeTransfers.id, id))
+      .returning();
+    return result;
+  }
+
+  async getStripeTransferById(id: string): Promise<StripeTransfer | undefined> {
+    const [result] = await db
+      .select()
+      .from(stripeTransfers)
+      .where(eq(stripeTransfers.id, id))
+      .limit(1);
     return result;
   }
 }

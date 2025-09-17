@@ -1,233 +1,414 @@
 import { storage } from '../storage.js';
+import { db } from '../db.js';
+import Stripe from 'stripe';
+import { stripeTransfers } from '../../shared/schema.js';
+import { eq, and, lte, sql } from 'drizzle-orm';
+import type { StripeTransfer, InsertStripeTransfer } from '../../shared/schema.js';
 import { VISUAL_PLATFORM_FEE } from '../../shared/constants.js';
-import { VISUPointsService } from './visuPointsService.js';
 
-/**
- * SERVICE STRIPE TRANSFERS - Gestion sécurisée des transferts différés
- * Intègre l'idempotence stricte et la prévention du double-paiement
- */
+// Lazy-init Stripe to avoid unsafe module-level initialization
+let stripeInstance: Stripe | null = null;
 
-export interface StripeTransferOptions {
-  recipientUserId: string;
-  amountEUR: number;
-  reason: string;
-  referenceId: string;
-  referenceType: 'top10_redistribution' | 'article_sale' | 'weekly_streak';
-  scheduledAt?: Date;
-  idempotencyKey: string;
+function getStripeInstance(): Stripe {
+  if (!stripeInstance) {
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      throw new Error('STRIPE_SECRET_KEY environment variable is required for financial transfers');
+    }
+    
+    stripeInstance = new Stripe(secretKey, {
+      apiVersion: "2025-08-27.basil", // Use required API version
+    });
+  }
+  return stripeInstance;
 }
 
-export interface StripeTransferResult {
-  transferId?: string;
-  status: 'scheduled' | 'processing' | 'completed' | 'failed' | 'duplicate';
-  message: string;
-  visuPointsAwarded: number;
+export interface ScheduleTransferOptions {
+  userId: string;
+  amountCents: number;
+  referenceType: string;
+  referenceId: string;
+  description: string;
+  delayHours?: number;
+  metadata?: Record<string, any>;
 }
 
 export class StripeTransferService {
   /**
-   * IDEMPOTENCE STRICTE - Planifier un transfert Stripe avec clé d'idempotence
-   * Prévient les doubles transferts même en cas d'erreur système
+   * PLANIFIER UN TRANSFERT STRIPE avec idempotence complète
+   * Garantit qu'aucun transfert en double ne sera créé
    */
-  static async scheduleTransfer(options: StripeTransferOptions): Promise<StripeTransferResult> {
-    const { recipientUserId, amountEUR, reason, referenceId, referenceType, scheduledAt, idempotencyKey } = options;
-    
-    try {
-      // 1. VALIDATION CRITIQUE des paramètres
-      if (amountEUR <= 0) {
-        throw new Error(`Montant invalide: ${amountEUR}€ (doit être > 0)`);
-      }
-      
-      if (amountEUR > 10000) { // Limite sécurité 10k€
-        throw new Error(`Montant excessif: ${amountEUR}€ (limite: 10,000€)`);
-      }
-      
-      // 2. IDEMPOTENCE - Vérifier si le transfert existe déjà
-      // TODO: Implémenter une table stripe_transfers pour stocker les transferts planifiés
-      // const existingTransfer = await storage.getStripeTransferByIdempotencyKey(idempotencyKey);
-      // if (existingTransfer) {
-      //   console.log(`[STRIPE] ⚠️ Transfert déjà planifié avec clé: ${idempotencyKey}`);
-      //   return {
-      //     transferId: existingTransfer.id,
-      //     status: 'duplicate',
-      //     message: 'Transfert déjà existant',
-      //     visuPointsAwarded: 0
-      //   };
-      // }
-      
-      // 3. ATTRIBUTION IMMÉDIATE de VISUpoints (système de backup)
-      const visuPoints = Math.round(amountEUR * VISUAL_PLATFORM_FEE.VISUPOINTS_TO_EUR);
-      
-      await VISUPointsService.awardPoints({
-        userId: recipientUserId,
-        amount: visuPoints,
-        reason: `${reason} (en attente de transfert Stripe)`,
-        referenceId,
-        referenceType,
-        idempotencyKey: `visupoints-${idempotencyKey}`
-      });
-      
-      // 4. PLANIFICATION du transfert Stripe pour plus tard (24h)
-      const transferDate = scheduledAt || new Date(Date.now() + VISUAL_PLATFORM_FEE.TRANSFER_DELAY_HOURS * 60 * 60 * 1000);
-      
-      // TODO: Créer l'entrée dans la table stripe_transfers
-      // const stripeTransfer = await storage.createStripeTransfer({
-      //   recipientUserId,
-      //   amountEUR: amountEUR.toString(),
-      //   reason,
-      //   referenceId,
-      //   referenceType,
-      //   scheduledAt: transferDate,
-      //   status: 'scheduled',
-      //   idempotencyKey,
-      //   visuPointsAwarded: visuPoints
-      // });
-      
-      console.log(`[STRIPE] 📅 Transfert planifié: ${amountEUR}€ vers ${recipientUserId} pour ${transferDate.toISOString()}`);
-      console.log(`[STRIPE] 💎 VISUpoints accordés immédiatement: ${visuPoints} VP (backup système)`);
-      
-      return {
-        // transferId: stripeTransfer.id,
-        status: 'scheduled',
-        message: `Transfert de ${amountEUR}€ planifié pour ${transferDate.toLocaleDateString()}`,
-        visuPointsAwarded: visuPoints
-      };
-      
-    } catch (error) {
-      console.error(`[STRIPE] ❌ Erreur planification transfert:`, error);
-      
-      return {
-        status: 'failed',
-        message: error instanceof Error ? error.message : 'Erreur inconnue',
-        visuPointsAwarded: 0
-      };
-    }
-  }
+  static async scheduleTransfer(options: ScheduleTransferOptions): Promise<StripeTransfer> {
+    const {
+      userId,
+      amountCents,
+      referenceType,
+      referenceId,
+      description,
+      delayHours = VISUAL_PLATFORM_FEE.TRANSFER_DELAY_HOURS,
+      metadata = {}
+    } = options;
 
-  /**
-   * EXÉCUTION SÉCURISÉE - Traiter les transferts planifiés (à appeler par cron job)
-   */
-  static async processScheduledTransfers(): Promise<{
-    processed: number;
-    successful: number;
-    failed: number;
-    errors: string[];
-  }> {
-    const result = {
-      processed: 0,
-      successful: 0,
-      failed: 0,
-      errors: [] as string[]
+    // Valider les paramètres
+    if (amountCents <= 0) {
+      throw new Error(`Montant invalide: ${amountCents} centimes (doit être positif)`);
+    }
+    if (amountCents > 100000) { // Limite sécurité 1000€
+      throw new Error(`Montant excessif: ${amountCents} centimes (limite: 100,000 centimes = 1000€)`);
+    }
+
+    // Générer clé d'idempotence unique basée sur la référence
+    const idempotencyKey = `${referenceType}_${referenceId}_${userId}`;
+
+    // Vérifier l'idempotence - transfert déjà existant ?
+    const existingTransfer = await this.getTransferByIdempotencyKey(idempotencyKey);
+    if (existingTransfer) {
+      console.log(`[STRIPE] ⚠️ Transfert déjà programmé avec clé ${idempotencyKey}: ${existingTransfer.id}`);
+      return existingTransfer;
+    }
+
+    // Calculer timestamp de traitement (délai 24h par défaut)
+    const scheduledProcessingAt = new Date();
+    scheduledProcessingAt.setHours(scheduledProcessingAt.getHours() + delayHours);
+
+    // Créer l'enregistrement de transfert
+    const transferData: InsertStripeTransfer = {
+      idempotencyKey,
+      status: 'scheduled',
+      amountCents,
+      amountEUR: (amountCents / 100).toFixed(2),
+      userId,
+      referenceType,
+      referenceId,
+      scheduledProcessingAt,
+      transferDescription: description,
+      metadata: {
+        ...metadata,
+        scheduledDelayHours: delayHours,
+        originalAmountCents: amountCents
+      }
     };
+
+    const newTransfer = await storage.createStripeTransfer(transferData);
+    console.log(`[STRIPE] 📅 Transfert programmé: ${amountCents} centimes pour ${userId} dans ${delayHours}h (${newTransfer.id})`);
     
-    try {
-      console.log(`[STRIPE] 🔄 Début traitement transferts planifiés...`);
-      
-      // TODO: Récupérer tous les transferts à traiter
-      // const pendingTransfers = await storage.getPendingStripeTransfers();
-      
-      // for (const transfer of pendingTransfers) {
-      //   try {
-      //     result.processed++;
-      //     
-      //     // IDEMPOTENCE Stripe - Utiliser la clé d'idempotence pour éviter double transfert
-      //     const stripeResult = await this.executeStripeTransfer(transfer);
-      //     
-      //     if (stripeResult.success) {
-      //       result.successful++;
-      //       await storage.updateStripeTransfer(transfer.id, {
-      //         status: 'completed',
-      //         stripeTransferId: stripeResult.transferId,
-      //         completedAt: new Date()
-      //       });
-      //     } else {
-      //       result.failed++;
-      //       result.errors.push(`Transfert ${transfer.id}: ${stripeResult.error}`);
-      //     }
-      //   } catch (error) {
-      //     result.failed++;
-      //     result.errors.push(`Erreur transfert ${transfer.id}: ${error}`);
-      //   }
-      // }
-      
-      console.log(`[STRIPE] ✅ Traitement terminé: ${result.successful}/${result.processed} réussis`);
-      
-    } catch (error) {
-      result.errors.push(`Erreur générale: ${error}`);
-      console.error(`[STRIPE] ❌ Erreur traitement global:`, error);
-    }
-    
-    return result;
+    return newTransfer;
   }
 
   /**
-   * STRIPE API - Exécution réelle du transfert avec idempotence
-   * PLACEHOLDER - À implémenter avec l'API Stripe réelle
+   * TRAITER LES TRANSFERTS PROGRAMMÉS - appelé par cron job
+   * Traite tous les transferts dont l'heure de traitement est arrivée
    */
-  private static async executeStripeTransfer(transfer: any): Promise<{
-    success: boolean;
-    transferId?: string;
-    error?: string;
-  }> {
+  static async processScheduledTransfers(): Promise<{ processed: number; failed: number }> {
+    console.log(`[STRIPE] 🔄 Démarrage du traitement des transferts programmés...`);
+
+    // Récupérer tous les transferts prêts à être traités
+    const readyTransfers = await this.getReadyTransfers();
+    console.log(`[STRIPE] 📋 ${readyTransfers.length} transferts prêts à être traités`);
+
+    let processed = 0;
+    let failed = 0;
+
+    for (const transfer of readyTransfers) {
+      try {
+        await this.processIndividualTransfer(transfer);
+        processed++;
+        console.log(`[STRIPE] ✅ Transfert traité avec succès: ${transfer.id}`);
+      } catch (error) {
+        failed++;
+        console.error(`[STRIPE] ❌ Échec traitement transfert ${transfer.id}:`, error);
+        await this.handleTransferFailure(transfer, error as Error);
+      }
+    }
+
+    console.log(`[STRIPE] 📊 Traitement terminé: ${processed} réussis, ${failed} échecs`);
+    return { processed, failed };
+  }
+
+  /**
+   * TRAITER UN TRANSFERT INDIVIDUEL vers Stripe
+   * Avec gestion complète des erreurs et nouvelles tentatives
+   */
+  private static async processIndividualTransfer(transfer: StripeTransfer): Promise<void> {
+    console.log(`[STRIPE] 🚀 Traitement transfert ${transfer.id}: ${transfer.amountCents} centimes vers ${transfer.userId}`);
+
+    // Marquer comme en cours de traitement
+    await this.updateTransferStatus(transfer.id, 'processing');
+
     try {
-      console.log(`[STRIPE] 💸 Exécution transfert: ${transfer.amountEUR}€ vers ${transfer.recipientUserId}`);
-      
-      // TODO: Implémenter l'appel réel à l'API Stripe
-      // const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      // 
-      // const stripeTransfer = await stripe.transfers.create({
-      //   amount: Math.round(parseFloat(transfer.amountEUR) * 100), // Convertir en centimes
-      //   currency: 'eur',
-      //   destination: transfer.stripeAccountId, // ID du compte Stripe Connect du destinataire
-      //   transfer_group: transfer.referenceId,
-      //   metadata: {
-      //     user_id: transfer.recipientUserId,
-      //     reference_type: transfer.referenceType,
-      //     reference_id: transfer.referenceId
-      //   }
-      // }, {
-      //   idempotencyKey: transfer.idempotencyKey // CRITIQUE pour éviter doublons
-      // });
-      // 
-      // return {
-      //   success: true,
-      //   transferId: stripeTransfer.id
-      // };
-      
-      // SIMULATION pour le développement
-      return {
-        success: true,
-        transferId: `sim_transfer_${Date.now()}`
-      };
-      
+      const stripe = getStripeInstance();
+
+      // Récupérer le compte Stripe Connect de l'utilisateur
+      const userStripeAccount = await this.getUserStripeAccount(transfer.userId);
+      if (!userStripeAccount) {
+        throw new Error(`Utilisateur ${transfer.userId} n'a pas de compte Stripe Connect configuré`);
+      }
+
+      // Créer le transfert Stripe avec idempotence native de Stripe
+      const stripeTransfer = await stripe.transfers.create({
+        amount: transfer.amountCents,
+        currency: 'eur',
+        destination: userStripeAccount,
+        description: transfer.transferDescription || `Transfert VISUAL ${transfer.referenceType}`,
+        metadata: {
+          visual_transfer_id: transfer.id,
+          visual_reference_type: transfer.referenceType,
+          visual_reference_id: transfer.referenceId,
+          visual_user_id: transfer.userId
+        }
+      }, {
+        idempotencyKey: transfer.idempotencyKey // Idempotence native Stripe
+      });
+
+      // Mettre à jour avec les informations Stripe
+      const destinationPayment = typeof stripeTransfer.destination_payment === 'string' 
+        ? stripeTransfer.destination_payment 
+        : stripeTransfer.destination_payment?.id || '';
+      await this.updateTransferCompleted(transfer.id, stripeTransfer.id, destinationPayment);
+
+      console.log(`[STRIPE] 🎉 Transfert Stripe créé avec succès: ${stripeTransfer.id}`);
+
     } catch (error: any) {
-      console.error(`[STRIPE] ❌ Erreur exécution transfert:`, error);
-      
-      return {
-        success: false,
-        error: error.message || 'Erreur Stripe inconnue'
-      };
+      // Relancer l'erreur pour gestion par le processus appelant
+      throw new Error(`Erreur transfert Stripe: ${error.message}`);
     }
   }
 
   /**
-   * ANNULATION sécurisée d'un transfert planifié
+   * GESTION DES ÉCHECS avec nouvelles tentatives automatiques
    */
-  static async cancelScheduledTransfer(transferId: string, reason: string): Promise<boolean> {
+  private static async handleTransferFailure(transfer: StripeTransfer, error: Error): Promise<void> {
+    const maxRetries = 3;
+    const retryCount = (transfer.retryCount || 0) + 1;
+
+    if (retryCount <= maxRetries) {
+      // Programmer une nouvelle tentative (délai exponentiel)
+      const retryDelayMinutes = Math.pow(2, retryCount - 1) * 30; // 30min, 1h, 2h
+      const nextRetryAt = new Date();
+      nextRetryAt.setMinutes(nextRetryAt.getMinutes() + retryDelayMinutes);
+
+      await this.updateTransferForRetry(transfer.id, retryCount, nextRetryAt, error.message);
+      console.log(`[STRIPE] 🔄 Nouvelle tentative programmée pour ${transfer.id} dans ${retryDelayMinutes} minutes (tentative ${retryCount}/${maxRetries})`);
+    } else {
+      // Échec définitif après 3 tentatives
+      await this.updateTransferStatus(transfer.id, 'failed', error.message);
+      console.error(`[STRIPE] 💀 Transfert ${transfer.id} définitivement échoué après ${maxRetries} tentatives: ${error.message}`);
+    }
+  }
+
+  /**
+   * MÉTHODES UTILITAIRES pour les opérations de base de données
+   */
+  private static async getTransferByIdempotencyKey(idempotencyKey: string): Promise<StripeTransfer | null> {
     try {
-      // TODO: Implémenter l'annulation
-      // await storage.updateStripeTransfer(transferId, {
-      //   status: 'cancelled',
-      //   cancelledAt: new Date(),
-      //   cancellationReason: reason
-      // });
+      const result = await db
+        .select()
+        .from(stripeTransfers)
+        .where(eq(stripeTransfers.idempotencyKey, idempotencyKey))
+        .limit(1);
       
-      console.log(`[STRIPE] ❌ Transfert annulé: ${transferId} - ${reason}`);
-      return true;
-      
+      return result[0] || null;
     } catch (error) {
-      console.error(`[STRIPE] ❌ Erreur annulation transfert:`, error);
-      return false;
+      console.error(`[STRIPE] Erreur récupération transfert par clé ${idempotencyKey}:`, error);
+      return null;
+    }
+  }
+
+  private static async getReadyTransfers(): Promise<StripeTransfer[]> {
+    try {
+      const now = new Date();
+      
+      const result = await db
+        .select()
+        .from(stripeTransfers)
+        .where(
+          and(
+            eq(stripeTransfers.status, 'scheduled'),
+            lte(stripeTransfers.scheduledProcessingAt, now)
+          )
+        )
+        .orderBy(stripeTransfers.scheduledProcessingAt);
+      
+      return result;
+    } catch (error) {
+      console.error(`[STRIPE] Erreur récupération transferts prêts:`, error);
+      return [];
+    }
+  }
+
+  private static async updateTransferStatus(
+    transferId: string, 
+    status: 'scheduled' | 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled',
+    failureReason?: string
+  ): Promise<void> {
+    try {
+      await db
+        .update(stripeTransfers)
+        .set({
+          status,
+          failureReason: failureReason || null,
+          updatedAt: new Date()
+        })
+        .where(eq(stripeTransfers.id, transferId));
+    } catch (error) {
+      console.error(`[STRIPE] Erreur mise à jour statut transfert ${transferId}:`, error);
+      throw error;
+    }
+  }
+
+  private static async updateTransferCompleted(
+    transferId: string,
+    stripeTransferId: string,
+    stripeDestinationPaymentId: string
+  ): Promise<void> {
+    try {
+      await db
+        .update(stripeTransfers)
+        .set({
+          status: 'completed',
+          stripeTransferId,
+          stripeDestinationPaymentId,
+          processedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(stripeTransfers.id, transferId));
+    } catch (error) {
+      console.error(`[STRIPE] Erreur finalisation transfert ${transferId}:`, error);
+      throw error;
+    }
+  }
+
+  private static async updateTransferForRetry(
+    transferId: string,
+    retryCount: number,
+    nextRetryAt: Date,
+    failureReason: string
+  ): Promise<void> {
+    try {
+      await db
+        .update(stripeTransfers)
+        .set({
+          status: 'scheduled', // Repasser en scheduled pour nouvelle tentative
+          retryCount,
+          nextRetryAt,
+          failureReason,
+          scheduledProcessingAt: nextRetryAt, // Reprogrammer à l'heure de nouvelle tentative
+          updatedAt: new Date()
+        })
+        .where(eq(stripeTransfers.id, transferId));
+    } catch (error) {
+      console.error(`[STRIPE] Erreur programmation nouvelle tentative ${transferId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * RÉCUPÉRER LE COMPTE STRIPE CONNECT d'un utilisateur
+   * TODO: Implémenter selon votre logique Stripe Connect
+   */
+  private static async getUserStripeAccount(userId: string): Promise<string | null> {
+    // TODO: Récupérer depuis votre table users ou stripe_accounts
+    // Pour l'instant, simuler un compte de test
+    console.log(`[STRIPE] 🔍 Recherche compte Stripe Connect pour utilisateur ${userId}`);
+    
+    // PLACEHOLDER - Remplacer par votre logique réelle
+    // return user.stripeConnectAccountId;
+    
+    // En développement, utiliser un compte de test fictif
+    if (process.env.NODE_ENV === 'development') {
+      return 'acct_test_account'; // Compte de test Stripe
+    }
+    
+    throw new Error(`Compte Stripe Connect non trouvé pour utilisateur ${userId} - intégration Stripe Connect requise`);
+  }
+
+  /**
+   * MÉTHODES PUBLIQUES pour intégration avec d'autres services
+   */
+
+  /**
+   * Planifier un transfert TOP10 avec idempotence
+   */
+  static async scheduleTop10Transfer(
+    userId: string,
+    amountCents: number,
+    referenceType: 'top10_infoporteur' | 'top10_winner',
+    referenceId: string,
+    rank?: number
+  ): Promise<StripeTransfer> {
+    const description = referenceType === 'top10_infoporteur' 
+      ? `Redistribution TOP10 - Rang ${rank || 'N/A'}`
+      : `Redistribution TOP10 - Investi-lecteur`;
+
+    return this.scheduleTransfer({
+      userId,
+      amountCents,
+      referenceType,
+      referenceId,
+      description,
+      metadata: {
+        top10_rank: rank,
+        transfer_type: 'top10_redistribution'
+      }
+    });
+  }
+
+  /**
+   * Planifier un transfert de conversion VISUpoints
+   */
+  static async scheduleVisuPointsTransfer(
+    userId: string,
+    amountCents: number,
+    visuPointsAmount: number,
+    referenceId: string
+  ): Promise<StripeTransfer> {
+    return this.scheduleTransfer({
+      userId,
+      amountCents,
+      referenceType: 'visupoints_conversion',
+      referenceId,
+      description: `Conversion VISUpoints vers EUR (${visuPointsAmount} VP)`,
+      metadata: {
+        visupoints_amount: visuPointsAmount,
+        conversion_rate: VISUAL_PLATFORM_FEE.VISUPOINTS_TO_EUR,
+        transfer_type: 'visupoints_conversion'
+      }
+    });
+  }
+
+  /**
+   * Obtenir le statut d'un transfert
+   */
+  static async getTransferStatus(transferId: string): Promise<StripeTransfer | null> {
+    try {
+      const result = await db
+        .select()
+        .from(stripeTransfers)
+        .where(eq(stripeTransfers.id, transferId))
+        .limit(1);
+      
+      return result[0] || null;
+    } catch (error) {
+      console.error(`[STRIPE] Erreur récupération transfert ${transferId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtenir tous les transferts d'un utilisateur
+   */
+  static async getUserTransfers(userId: string): Promise<StripeTransfer[]> {
+    try {
+      const result = await db
+        .select()
+        .from(stripeTransfers)
+        .where(eq(stripeTransfers.userId, userId))
+        .orderBy(sql`${stripeTransfers.createdAt} DESC`);
+      
+      return result;
+    } catch (error) {
+      console.error(`[STRIPE] Erreur récupération transferts utilisateur ${userId}:`, error);
+      return [];
     }
   }
 }

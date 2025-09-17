@@ -115,6 +115,11 @@ export const auditActionEnum = pgEnum('audit_action', [
   'content_reported', 'report_validated', 'report_rejected', 'visupoints_awarded'
 ]);
 
+// Stripe transfer status enum for idempotent financial operations
+export const stripeTransferStatusEnum = pgEnum('stripe_transfer_status', [
+  'scheduled', 'pending', 'processing', 'completed', 'failed', 'cancelled'
+]);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -757,6 +762,63 @@ export const weeklyStreaks = pgTable("weekly_streaks", {
   index("idx_weekly_streaks_user").on(table.userId),
 ]);
 
+// ===== TABLE IDEMPOTENCE STRIPE TRANSFERS =====
+
+// Stripe transfers table for idempotent financial operations
+export const stripeTransfers = pgTable("stripe_transfers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Clé d'idempotence UNIQUE - empêche double-transfert
+  idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull().unique(),
+  
+  // Statut du transfert Stripe
+  status: stripeTransferStatusEnum("status").default('scheduled'),
+  
+  // Montant en centimes (arithmétique exacte)
+  amountCents: integer("amount_cents").notNull(),
+  amountEUR: decimal("amount_eur", { precision: 10, scale: 2 }).notNull(),
+  
+  // Informations destinataire
+  userId: varchar("user_id").notNull().references(() => users.id),
+  userStripeAccountId: varchar("user_stripe_account_id"),
+  
+  // Référence à l'entité source (top10_redistribution, visupoints_conversion, etc.)
+  referenceType: varchar("reference_type", { length: 50 }).notNull(), // 'top10_infoporteur', 'top10_winner', 'visupoints_conversion'
+  referenceId: varchar("reference_id").notNull(), // ID de l'entité source
+  
+  // IDs Stripe après traitement
+  stripeTransferId: varchar("stripe_transfer_id"), // ID retourné par Stripe
+  stripeDestinationPaymentId: varchar("stripe_destination_payment_id"), // Payment ID chez le destinataire
+  
+  // Planification 24h
+  scheduledProcessingAt: timestamp("scheduled_processing_at").notNull(), // Quand traiter le transfert
+  processedAt: timestamp("processed_at"), // Quand effectivement traité
+  
+  // Détails d'erreur si échec
+  failureReason: text("failure_reason"),
+  retryCount: integer("retry_count").default(0),
+  nextRetryAt: timestamp("next_retry_at"),
+  
+  // Métadonnées pour debug et audit
+  transferDescription: varchar("transfer_description", { length: 255 }),
+  metadata: jsonb("metadata"), // Données supplémentaires (montants originaux, calculs, etc.)
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  // Index pour requêtes fréquentes
+  index("idx_stripe_transfers_status").on(table.status),
+  index("idx_stripe_transfers_user").on(table.userId),
+  index("idx_stripe_transfers_reference").on(table.referenceType, table.referenceId),
+  index("idx_stripe_transfers_scheduled").on(table.scheduledProcessingAt),
+  index("idx_stripe_transfers_processing").on(table.status, table.scheduledProcessingAt),
+  
+  // Contraintes uniques pour sécurité
+  unique("unique_idempotency_key").on(table.idempotencyKey),
+  unique("unique_reference_transfer").on(table.referenceType, table.referenceId), // Une seule tentative par référence
+]);
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
@@ -788,6 +850,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   top10Infoporteurs: many(top10Infoporteurs),
   top10Winners: many(top10Winners),
   weeklyStreaks: many(weeklyStreaks),
+  // Relations pour transferts Stripe idempotents
+  stripeTransfers: many(stripeTransfers),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -1085,6 +1149,13 @@ export const weeklyStreaksRelations = relations(weeklyStreaks, ({ one }) => ({
   }),
 }));
 
+export const stripeTransfersRelations = relations(stripeTransfers, ({ one }) => ({
+  user: one(users, {
+    fields: [stripeTransfers.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -1304,6 +1375,14 @@ export const insertWeeklyStreaksSchema = createInsertSchema(weeklyStreaks).omit(
   updatedAt: true,
 });
 
+export const insertStripeTransferSchema = createInsertSchema(stripeTransfers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  processedAt: true, // Géré automatiquement par le système
+  retryCount: true,  // Géré automatiquement par le système
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -1350,6 +1429,7 @@ export type Top10Infoporteurs = typeof top10Infoporteurs.$inferSelect;
 export type Top10Winners = typeof top10Winners.$inferSelect;
 export type Top10Redistributions = typeof top10Redistributions.$inferSelect;
 export type WeeklyStreaks = typeof weeklyStreaks.$inferSelect;
+export type StripeTransfer = typeof stripeTransfers.$inferSelect;
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
@@ -1385,3 +1465,6 @@ export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type InsertArticleInvestment = z.infer<typeof insertArticleInvestmentSchema>;
 export type InsertVisuPointsPack = z.infer<typeof insertVisuPointsPackSchema>;
 export type InsertVisuPointsPurchase = z.infer<typeof insertVisuPointsPurchaseSchema>;
+
+// Nouveaux types d'insertion TOP10 et transferts Stripe
+export type InsertStripeTransfer = z.infer<typeof insertStripeTransferSchema>;
