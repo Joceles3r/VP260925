@@ -20,7 +20,19 @@ export default function Projects() {
   const { user } = useAuth();
 
   const { data: projects, refetch } = useQuery<Project[]>({
-    queryKey: ['/api/projects', { category: selectedCategory }],
+    queryKey: ['projects', selectedCategory],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCategory) {
+        params.set('category', selectedCategory);
+      }
+      const url = `/api/projects${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    },
     refetchOnWindowFocus: false,
   });
 
