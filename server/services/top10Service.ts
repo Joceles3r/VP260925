@@ -9,7 +9,7 @@ import {
   INVESTMENT_CATEGORY_DISTRIBUTION,
   TOP10_DETAILED_DISTRIBUTION,
   LIVE_SHOWS_DISTRIBUTION,
-  ARTICLES_DISTRIBUTION
+  // ARTICLES_DISTRIBUTION // DÉPRÉCIÉ - utiliser VISUAL_PLATFORM_FEE
 } from '../../shared/constants.js';
 import type { 
   ArticleSalesDaily, 
@@ -141,8 +141,8 @@ export class Top10Service {
   }
 
   /**
-   * MÉTHODE AMÉLIORÉE - Calcule les vainqueurs parmi les investi-lecteurs
-   * Les vainqueurs sont ceux qui ont investi dans les articles rangs 11-100
+   * CORRIGÉ - Calcule les vainqueurs parmi les investi-lecteurs  
+   * Les vainqueurs sont ceux qui ont acheté des articles TOP10 (rangs 1-10)
    */
   private static async calculateWinners(
     date: Date, 
@@ -151,29 +151,26 @@ export class Top10Service {
   ): Promise<Top10Winners[]> {
     const winners: Top10Winners[] = [];
     
-    // Articles éligibles pour redistribution (rangs 11-100)
-    const redistributionArticles = articleRankings.slice(
-      TOP10_SYSTEM.REDISTRIBUTION_RANKS_START - 1, // rang 11 = index 10
-      TOP10_SYSTEM.REDISTRIBUTION_RANKS_END // rang 100 = index 99
-    );
+    // Articles TOP10 (rangs 1-10) - Les investi-lecteurs qui les ont achetés gagnent
+    const top10Articles = articleRankings.slice(0, TOP10_SYSTEM.RANKING_SIZE); // TOP 10
     
-    if (redistributionArticles.length === 0) {
-      console.log(`[TOP10] ⚠️ Aucun article éligible pour redistribution (rangs 11-100)`);
+    if (top10Articles.length === 0) {
+      console.log(`[TOP10] ⚠️ Aucun article TOP10 trouvé`);
       return winners;
     }
     
-    console.log(`[TOP10] 🎯 ${redistributionArticles.length} articles éligibles pour redistribution (rangs ${TOP10_SYSTEM.REDISTRIBUTION_RANKS_START}-${redistributionArticles.length + TOP10_SYSTEM.REDISTRIBUTION_RANKS_START - 1})`);
+    console.log(`[TOP10] 🎯 ${top10Articles.length} articles TOP10 - investi-lecteurs qui les ont achetés sont vainqueurs`);
     
-    // Récupérer tous les investissements pour ces articles
-    const articleIds = redistributionArticles.map(a => a.articleId);
+    // Récupérer tous les investissements pour les articles TOP10
+    const top10ArticleIds = top10Articles.map(a => a.articleId);
     const articleInvestments = await this.getArticleInvestmentsByDateWithTx(date, tx);
-    const relevantInvestments = articleInvestments.filter((inv: any) => articleIds.includes(inv.articleId));
+    const winningInvestments = articleInvestments.filter((inv: any) => top10ArticleIds.includes(inv.articleId));
     
-    console.log(`[TOP10] 💰 ${relevantInvestments.length} investissements trouvés sur les articles de redistribution`);
+    console.log(`[TOP10] 💰 ${winningInvestments.length} investissements gagnants trouvés sur articles TOP10`);
     
-    // Créer un winner pour chaque investissement éligible
-    for (const investment of relevantInvestments) {
-      const article = redistributionArticles.find(a => a.articleId === investment.articleId);
+    // Créer un winner pour chaque investissement gagnant
+    for (const investment of winningInvestments) {
+      const article = top10Articles.find(a => a.articleId === investment.articleId);
       if (!article) continue;
       
       const winnerData = {
@@ -510,21 +507,36 @@ export class Top10Service {
   }
 
   /**
-   * MÉTHODE HELPER - Calcule le pot de redistribution basé sur les ventes nettes
+   * CORRIGÉ - Calcule le pot basé sur les sommes des investi-lecteurs rangs 11-100
+   * Le pot = investissements des investi-lecteurs qui ont acheté des articles rangs 11-100
    */
-  private static calculateRedistributionPool(articleRankings: ArticleRankingData[]): number {
-    // Articles éligibles pour redistribution (rangs 11-100)
-    const redistributionArticles = articleRankings.slice(
+  private static async calculateRedistributionPool(
+    date: Date, 
+    articleRankings: ArticleRankingData[], 
+    tx?: any
+  ): Promise<number> {
+    // Articles rangs 11-100 - leurs investi-lecteurs alimentent le pot
+    const contributorArticles = articleRankings.slice(
       TOP10_SYSTEM.REDISTRIBUTION_RANKS_START - 1, // rang 11 = index 10
       TOP10_SYSTEM.REDISTRIBUTION_RANKS_END // rang 100 = index 99
     );
     
-    // IMPORTANT: Utiliser les montants NETS (70% après commission VISUAL 30%)
-    const totalPool = redistributionArticles.reduce((sum, article) => {
-      return sum + (article.dailySalesEUR * VISUAL_PLATFORM_FEE.NET_TO_INFOPORTEUR);
+    if (contributorArticles.length === 0) {
+      console.log(`[TOP10] ⚠️ Aucun article contributeur au pot (rangs 11-100)`);
+      return 0;
+    }
+    
+    // Récupérer les investissements des investi-lecteurs qui ont acheté ces articles
+    const contributorArticleIds = contributorArticles.map(a => a.articleId);
+    const articleInvestments = await this.getArticleInvestmentsByDateWithTx(date, tx);
+    const contributorInvestments = articleInvestments.filter((inv: any) => contributorArticleIds.includes(inv.articleId));
+    
+    // Le pot = somme des investissements des investi-lecteurs rangs 11-100
+    const totalPool = contributorInvestments.reduce((sum: number, investment: any) => {
+      return sum + parseFloat(investment.amount);
     }, 0);
     
-    console.log(`[TOP10] 💰 Pot de redistribution calculé: ${totalPool.toFixed(2)}€ (depuis ${redistributionArticles.length} articles nets)`);
+    console.log(`[TOP10] 💰 Pot alimenté par ${contributorInvestments.length} investi-lecteurs (rangs 11-100): ${totalPool.toFixed(2)}€`);
     return totalPool;
   }
 
@@ -536,7 +548,7 @@ export class Top10Service {
     articleRankings: ArticleRankingData[], 
     tx?: any
   ): Promise<Top10Redistributions> {
-    const totalPool = this.calculateRedistributionPool(articleRankings);
+    const totalPool = await this.calculateRedistributionPool(date, articleRankings, tx);
     const articlesInRedistribution = Math.min(
       articleRankings.length - TOP10_SYSTEM.REDISTRIBUTION_RANKS_START + 1,
       TOP10_SYSTEM.REDISTRIBUTION_RANKS_END - TOP10_SYSTEM.REDISTRIBUTION_RANKS_START + 1
