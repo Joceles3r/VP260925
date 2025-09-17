@@ -29,7 +29,7 @@ export const sessions = pgTable(
 );
 
 // User profile types enum
-export const profileTypeEnum = pgEnum('profile_type', ['investor', 'invested_reader', 'creator', 'admin']);
+export const profileTypeEnum = pgEnum('profile_type', ['investor', 'invested_reader', 'creator', 'admin', 'infoporteur']);
 
 // Project status enum
 export const projectStatusEnum = pgEnum('project_status', ['pending', 'active', 'completed', 'rejected']);
@@ -90,6 +90,18 @@ export const reportStatusEnum = pgEnum('report_status', ['pending', 'validating'
 
 // Content type enum for reports
 export const contentTypeEnum = pgEnum('content_type', ['article', 'video', 'social_post', 'comment']);
+
+// Emotional filters enum for content
+export const emotionTypeEnum = pgEnum('emotion_type', ['joie', 'tristesse', 'colère', 'peur', 'surprise', 'dégoût', 'confiance', 'anticipation']);
+
+// Referral status enum
+export const referralStatusEnum = pgEnum('referral_status', ['pending', 'completed', 'expired']);
+
+// Visitor activity type enum for tracking
+export const activityTypeEnum = pgEnum('activity_type', ['page_view', 'project_view', 'investment', 'social_interaction', 'login']);
+
+// Article type enum for Infoporteurs
+export const articleTypeEnum = pgEnum('article_type', ['news', 'analysis', 'tutorial', 'opinion', 'review']);
 
 // Audit action enum for tracking administrative operations
 export const auditActionEnum = pgEnum('audit_action', [
@@ -484,6 +496,178 @@ export const withdrawalRequests = pgTable("withdrawal_requests", {
   failureReason: varchar("failure_reason"),
 });
 
+// ===== NOUVELLES TABLES POUR FONCTIONNALITÉS AVANCÉES =====
+
+// Referral system table - Système de parrainage
+export const referrals = pgTable("referrals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sponsorId: varchar("sponsor_id").notNull().references(() => users.id), // Le parrain
+  refereeId: varchar("referee_id").references(() => users.id), // Le filleul (null avant inscription)
+  referralCode: varchar("referral_code").unique().notNull(), // Code unique du parrain
+  referralLink: varchar("referral_link").unique().notNull(), // Lien unique généré
+  status: referralStatusEnum("status").default('pending'),
+  sponsorBonusVP: integer("sponsor_bonus_vp").default(100), // Bonus parrain (100 VP = 1€)
+  refereeBonusVP: integer("referee_bonus_vp").default(50), // Bonus filleul (50 VP = 0.50€)
+  firstActionAt: timestamp("first_action_at"), // Première action du filleul
+  bonusAwardedAt: timestamp("bonus_awarded_at"),
+  expiresAt: timestamp("expires_at"), // Expiration du lien
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_referrals_sponsor").on(table.sponsorId),
+  index("idx_referrals_code").on(table.referralCode),
+  unique("unique_referral_code").on(table.referralCode),
+]);
+
+// Monthly referral limits table
+export const referralLimits = pgTable("referral_limits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  monthYear: varchar("month_year", { length: 7 }).notNull(), // "2025-09" format
+  successfulReferrals: integer("successful_referrals").default(0),
+  maxReferrals: integer("max_referrals").default(20), // Limite de 20/mois
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  unique("unique_user_month_limit").on(table.userId, table.monthYear),
+]);
+
+// Daily login streaks table - Gamification
+export const loginStreaks = pgTable("login_streaks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  currentStreak: integer("current_streak").default(0),
+  longestStreak: integer("longest_streak").default(0),
+  lastLoginDate: timestamp("last_login_date"),
+  streakStartDate: timestamp("streak_start_date"),
+  totalLogins: integer("total_logins").default(0),
+  visuPointsEarned: integer("visu_points_earned").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  unique("unique_user_streak").on(table.userId),
+]);
+
+// Visitor activity tracking table
+export const visitorActivities = pgTable("visitor_activities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id), // null for anonymous
+  sessionId: varchar("session_id").notNull(),
+  activityType: activityTypeEnum("activity_type").notNull(),
+  pageUrl: varchar("page_url"),
+  referenceId: varchar("reference_id"), // ID du projet/article visité
+  referenceType: varchar("reference_type"), // 'project', 'article', 'social_post'
+  duration: integer("duration"), // Durée en secondes
+  ipAddress: varchar("ip_address"),
+  userAgent: varchar("user_agent"),
+  deviceType: varchar("device_type"), // mobile, desktop, tablet
+  location: varchar("location"), // Pays/région
+  visuPointsEarned: integer("visu_points_earned").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_visitor_activities_user").on(table.userId),
+  index("idx_visitor_activities_session").on(table.sessionId),
+  index("idx_visitor_activities_created").on(table.createdAt),
+]);
+
+// Visitor of the month tracking
+export const visitorsOfMonth = pgTable("visitors_of_month", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  monthYear: varchar("month_year", { length: 7 }).notNull(), // "2025-09" format
+  activityScore: integer("activity_score").default(0), // Score d'activité calculé
+  totalActivities: integer("total_activities").default(0),
+  totalDuration: integer("total_duration").default(0), // En secondes
+  rank: integer("rank"), // Position dans le classement
+  isWinner: boolean("is_winner").default(false),
+  visuPointsReward: integer("visu_points_reward").default(0), // 2500 VP (25€) pour le gagnant
+  rewardAwardedAt: timestamp("reward_awarded_at"),
+  upgradeProposed: boolean("upgrade_proposed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_visitors_month_user").on(table.userId),
+  index("idx_visitors_month_period").on(table.monthYear),
+  index("idx_visitors_month_rank").on(table.rank),
+  unique("unique_user_month_visitor").on(table.userId, table.monthYear),
+]);
+
+// Articles table pour les Infoporteurs
+export const articles = pgTable("articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  excerpt: varchar("excerpt", { length: 500 }), // Résumé
+  category: varchar("category", { length: 100 }).notNull(),
+  type: articleTypeEnum("type").notNull(),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  unitPriceEUR: decimal("unit_price_eur", { precision: 5, scale: 2 }).notNull(), // 0, 0.2-5€
+  targetAmount: decimal("target_amount", { precision: 10, scale: 2 }).notNull(),
+  currentAmount: decimal("current_amount", { precision: 10, scale: 2 }).default('0.00'),
+  status: projectStatusEnum("status").default('pending'),
+  thumbnailUrl: varchar("thumbnail_url"),
+  readCount: integer("read_count").default(0),
+  avgRating: decimal("avg_rating", { precision: 3, scale: 2 }).default('0.00'),
+  ratingCount: integer("rating_count").default(0),
+  emotionalTags: emotionTypeEnum().array(), // Filtres émotionnels
+  investorCount: integer("investor_count").default(0),
+  visuPointsEarned: integer("visu_points_earned").default(0),
+  endDate: timestamp("end_date"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_articles_author").on(table.authorId),
+  index("idx_articles_status").on(table.status),
+  index("idx_articles_category").on(table.category),
+  index("idx_articles_created").on(table.createdAt),
+]);
+
+// Article investments table pour les Investi-lecteurs
+export const articleInvestments = pgTable("article_investments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  articleId: varchar("article_id").notNull().references(() => articles.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  visuPoints: integer("visu_points").notNull(), // 100 VP = 1 EUR
+  currentValue: decimal("current_value", { precision: 10, scale: 2 }).notNull(),
+  roi: decimal("roi", { precision: 5, scale: 2 }).default('0.00'),
+  rating: integer("rating"), // Note 1-5 étoiles
+  hasRead: boolean("has_read").default(false),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_article_investments_user").on(table.userId),
+  index("idx_article_investments_article").on(table.articleId),
+  unique("unique_user_article_investment").on(table.userId, table.articleId),
+]);
+
+// VISUpoints packs table for Investi-lecteurs
+export const visuPointsPacks = pgTable("visu_points_packs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  pointsAmount: integer("points_amount").notNull(), // Nombre de points
+  priceEUR: decimal("price_eur", { precision: 5, scale: 2 }).notNull(), // Prix en euros
+  bonusPoints: integer("bonus_points").default(0), // Points bonus
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// VISUpoints pack purchases
+export const visuPointsPurchases = pgTable("visu_points_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  packId: varchar("pack_id").notNull().references(() => visuPointsPacks.id),
+  pointsPurchased: integer("points_purchased").notNull(),
+  bonusPointsReceived: integer("bonus_points_received").default(0),
+  totalPointsReceived: integer("total_points_received").notNull(),
+  paidAmount: decimal("paid_amount", { precision: 5, scale: 2 }).notNull(),
+  paymentIntentId: varchar("payment_intent_id"),
+  stripeSessionId: varchar("stripe_session_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
@@ -500,6 +684,16 @@ export const usersRelations = relations(users, ({ many }) => ({
   withdrawalRequests: many(withdrawalRequests),
   auditLogs: many(auditLogs),
   contentReports: many(contentReports),
+  // Nouvelles relations pour fonctionnalités avancées
+  referralsAsSponsor: many(referrals, { relationName: "sponsor" }),
+  referralsAsReferee: many(referrals, { relationName: "referee" }),
+  referralLimits: many(referralLimits),
+  loginStreak: many(loginStreaks),
+  visitorActivities: many(visitorActivities),
+  visitorsOfMonth: many(visitorsOfMonth),
+  articles: many(articles),
+  articleInvestments: many(articleInvestments),
+  visuPointsPurchases: many(visuPointsPurchases),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -687,6 +881,83 @@ export const withdrawalRequestsRelations = relations(withdrawalRequests, ({ one 
   }),
 }));
 
+// ===== NOUVELLES RELATIONS POUR FONCTIONNALITÉS AVANCÉES =====
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  sponsor: one(users, {
+    fields: [referrals.sponsorId],
+    references: [users.id],
+    relationName: "sponsor",
+  }),
+  referee: one(users, {
+    fields: [referrals.refereeId],
+    references: [users.id],
+    relationName: "referee",
+  }),
+}));
+
+export const referralLimitsRelations = relations(referralLimits, ({ one }) => ({
+  user: one(users, {
+    fields: [referralLimits.userId],
+    references: [users.id],
+  }),
+}));
+
+export const loginStreaksRelations = relations(loginStreaks, ({ one }) => ({
+  user: one(users, {
+    fields: [loginStreaks.userId],
+    references: [users.id],
+  }),
+}));
+
+export const visitorActivitiesRelations = relations(visitorActivities, ({ one }) => ({
+  user: one(users, {
+    fields: [visitorActivities.userId],
+    references: [users.id],
+  }),
+}));
+
+export const visitorsOfMonthRelations = relations(visitorsOfMonth, ({ one }) => ({
+  user: one(users, {
+    fields: [visitorsOfMonth.userId],
+    references: [users.id],
+  }),
+}));
+
+export const articlesRelations = relations(articles, ({ one, many }) => ({
+  author: one(users, {
+    fields: [articles.authorId],
+    references: [users.id],
+  }),
+  investments: many(articleInvestments),
+}));
+
+export const articleInvestmentsRelations = relations(articleInvestments, ({ one }) => ({
+  user: one(users, {
+    fields: [articleInvestments.userId],
+    references: [users.id],
+  }),
+  article: one(articles, {
+    fields: [articleInvestments.articleId],
+    references: [articles.id],
+  }),
+}));
+
+export const visuPointsPacksRelations = relations(visuPointsPacks, ({ many }) => ({
+  purchases: many(visuPointsPurchases),
+}));
+
+export const visuPointsPurchasesRelations = relations(visuPointsPurchases, ({ one }) => ({
+  user: one(users, {
+    fields: [visuPointsPurchases.userId],
+    references: [users.id],
+  }),
+  pack: one(visuPointsPacks, {
+    fields: [visuPointsPurchases.packId],
+    references: [visuPointsPacks.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -700,7 +971,7 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   updatedAt: true,
 }).refine((data) => {
   // Nouvelles règles de prix 16/09/2025 : prix autorisés pour les porteurs
-  const price = parseFloat(data.unitPriceEUR);
+  const price = parseFloat(data.unitPriceEUR || '5.00');
   return isValidProjectPrice(price);
 }, {
   message: "Le prix unitaire du projet doit être l'un des montants autorisés : 2, 3, 4, 5, 10 €",
@@ -819,6 +1090,64 @@ export const insertContentReportSchema = createInsertSchema(contentReports).omit
   updatedAt: true,
 });
 
+// ===== NOUVEAUX SCHÉMAS D'INSERTION POUR FONCTIONNALITÉS AVANCÉES =====
+
+export const insertReferralSchema = createInsertSchema(referrals).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertReferralLimitSchema = createInsertSchema(referralLimits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLoginStreakSchema = createInsertSchema(loginStreaks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVisitorActivitySchema = createInsertSchema(visitorActivities).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertVisitorOfMonthSchema = createInsertSchema(visitorsOfMonth).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertArticleSchema = createInsertSchema(articles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).refine((data) => {
+  // Vérification des prix autorisés pour les articles Infoporteurs
+  const price = parseFloat(data.unitPriceEUR);
+  return [0, 0.2, 0.5, 1, 2, 3, 4, 5].includes(price);
+}, {
+  message: "Le prix unitaire de l'article doit être 0€, 0.2€, 0.5€, 1€, 2€, 3€, 4€ ou 5€",
+  path: ["unitPriceEUR"],
+});
+
+export const insertArticleInvestmentSchema = createInsertSchema(articleInvestments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertVisuPointsPackSchema = createInsertSchema(visuPointsPacks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertVisuPointsPurchaseSchema = createInsertSchema(visuPointsPurchases).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -847,6 +1176,18 @@ export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type ContentReport = typeof contentReports.$inferSelect;
 
+// ===== NOUVEAUX TYPES POUR FONCTIONNALITÉS AVANCÉES =====
+
+export type Referral = typeof referrals.$inferSelect;
+export type ReferralLimit = typeof referralLimits.$inferSelect;
+export type LoginStreak = typeof loginStreaks.$inferSelect;
+export type VisitorActivity = typeof visitorActivities.$inferSelect;
+export type VisitorOfMonth = typeof visitorsOfMonth.$inferSelect;
+export type Article = typeof articles.$inferSelect;
+export type ArticleInvestment = typeof articleInvestments.$inferSelect;
+export type VisuPointsPack = typeof visuPointsPacks.$inferSelect;
+export type VisuPointsPurchase = typeof visuPointsPurchases.$inferSelect;
+
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
@@ -869,3 +1210,15 @@ export type InsertPurgeJob = z.infer<typeof insertPurgeJobSchema>;
 export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type InsertContentReport = z.infer<typeof insertContentReportSchema>;
+
+// ===== NOUVEAUX TYPES D'INSERTION POUR FONCTIONNALITÉS AVANCÉES =====
+
+export type InsertReferral = z.infer<typeof insertReferralSchema>;
+export type InsertReferralLimit = z.infer<typeof insertReferralLimitSchema>;
+export type InsertLoginStreak = z.infer<typeof insertLoginStreakSchema>;
+export type InsertVisitorActivity = z.infer<typeof insertVisitorActivitySchema>;
+export type InsertVisitorOfMonth = z.infer<typeof insertVisitorOfMonthSchema>;
+export type InsertArticle = z.infer<typeof insertArticleSchema>;
+export type InsertArticleInvestment = z.infer<typeof insertArticleInvestmentSchema>;
+export type InsertVisuPointsPack = z.infer<typeof insertVisuPointsPackSchema>;
+export type InsertVisuPointsPurchase = z.infer<typeof insertVisuPointsPurchaseSchema>;
