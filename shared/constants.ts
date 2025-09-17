@@ -226,3 +226,57 @@ export const EMOTIONAL_FILTERS = {
   confiance: { color: '#06b6d4', icon: '😌' },
   anticipation: { color: '#f59e0b', icon: '🤗' },
 } as const;
+
+// ===== PRÉLÈVEMENT VISUAL 30% SUR VENTES ARTICLES =====
+// Additif v.16/09/2025 - Prélèvement automatique sur chaque vente d'article
+export const VISUAL_PLATFORM_FEE = {
+  PLATFORM_FEE_INFOARTICLE: 0.30, // 30% pour VISUAL
+  NET_TO_INFOPORTEUR: 0.70, // 70% pour l'infoporteur
+  VISUPOINTS_TO_EUR: 100, // 100 pts = 1 € (référence VISU_POINTS.conversionRate)
+  VISUPOINTS_CONVERSION_THRESHOLD: 2500, // Seuil conversion (référence VISU_POINTS.conversionThreshold)
+  TRANSFER_DELAY_HOURS: 24, // Délai avant transfert Stripe (24h)
+} as const;
+
+// ===== TOP10 SYSTEM - Classements et Redistributions =====
+// Système de classement quotidien des infoporteurs et investi-lecteurs
+export const TOP10_SYSTEM = {
+  RANKING_SIZE: 10, // TOP 10 articles/jour
+  TOTAL_ARTICLES_POOL: 100, // Pool total de 100 articles
+  REDISTRIBUTION_RANKS_START: 11, // Redistribution commence au rang 11
+  REDISTRIBUTION_RANKS_END: 100, // Redistribution termine au rang 100
+  SPLIT_TOP10_PERCENT: 0.60, // 60% du pot pour TOP10 infoporteurs
+  SPLIT_WINNERS_PERCENT: 0.40, // 40% du pot pour investi-lecteurs vainqueurs
+  PROCESSING_DELAY_HOURS: 24, // Délai avant transfert Stripe (24h)
+  MIN_DAILY_SALES_FOR_RANKING: 1, // Minimum 1 vente pour être classé
+} as const;
+
+// ===== FIDÉLITÉ AMÉLIORÉE - Streaks Quotidiens et Hebdomadaires =====
+// Nouveau système de fidélité avec cycles quotidiens et hebdomadaires
+export const ENHANCED_FIDELITY = {
+  // Barème quotidien - cycle de 7 jours
+  DAILY_STREAK_REWARDS: [
+    { day: 1, points: 1 }, // 1er jour consécutif = 1 VP
+    { day: 2, points: 2 }, // 2ème jour consécutif = 2 VP
+    { day: 3, points: 3 }, // 3ème jour consécutif = 3 VP
+    { day: 4, points: 4 }, // 4ème jour consécutif = 4 VP
+    { day: 5, points: 6 }, // 5ème jour consécutif = 6 VP
+    { day: 6, points: 8 }, // 6ème jour consécutif = 8 VP
+    { day: 7, points: 10 } // 7ème jour consécutif = 10 VP (puis reset)
+  ],
+  DAILY_CYCLE_LENGTH: 7, // Cycle de 7 jours
+  
+  // Barème hebdomadaire - cycle de 4 semaines
+  WEEKLY_STREAK_REWARDS: [
+    { week: 1, points: 5 },  // 1ère semaine consécutive = 5 VP
+    { week: 2, points: 10 }, // 2ème semaine consécutive = 10 VP
+    { week: 3, points: 15 }, // 3ème semaine consécutive = 15 VP
+    { week: 4, points: 20 }  // 4ème semaine consécutive = 20 VP (puis reset)
+  ],
+  WEEKLY_CYCLE_LENGTH: 4, // Cycle de 4 semaines
+  
+  // Combinaison possible des deux systèmes
+  SYSTEMS_ARE_CUMULATIVE: true,
+  
+  // Gestion des streaks
+  STREAK_RESET_HOURS: 30, // Reset si pas de connexion pendant 30h
+} as const;
