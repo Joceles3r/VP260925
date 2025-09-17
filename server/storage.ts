@@ -32,6 +32,12 @@ import {
   articleInvestments,
   visuPointsPacks,
   visuPointsPurchases,
+  // Nouvelles tables TOP10 et fidélité
+  articleSalesDaily,
+  top10Infoporteurs,
+  top10Winners,
+  top10Redistributions,
+  weeklyStreaks,
   type User,
   type UpsertUser,
   type Project,
@@ -95,6 +101,17 @@ import {
   type InsertArticleInvestment,
   type InsertVisuPointsPack,
   type InsertVisuPointsPurchase,
+  // Nouveaux types TOP10 et fidélité
+  type ArticleSalesDaily,
+  type Top10Infoporteurs,
+  type Top10Winners,
+  type Top10Redistributions,
+  type WeeklyStreaks,
+  insertArticleSalesDailySchema,
+  insertTop10InfoporteursSchema,
+  insertTop10WinnersSchema,
+  insertTop10RedistributionsSchema,
+  insertWeeklyStreaksSchema,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql, or } from "drizzle-orm";
@@ -299,6 +316,26 @@ export interface IStorage {
   getArticleInvestments(articleId: string): Promise<ArticleInvestment[]>;
   getUserArticleInvestments(userId: string): Promise<ArticleInvestment[]>;
   updateArticleInvestment(id: string, updates: Partial<ArticleInvestment>): Promise<ArticleInvestment>;
+  getArticleInvestmentsByDate(date: Date): Promise<ArticleInvestment[]>;
+  getArticlesByAuthor(authorId: string): Promise<Article[]>;
+
+  // TOP10 system operations
+  createTop10Infoporteur(data: any): Promise<Top10Infoporteurs>;
+  getTop10ByDate(date: Date): Promise<Top10Infoporteurs[]>;
+  updateTop10Infoporteur(id: string, updates: any): Promise<Top10Infoporteurs>;
+  
+  createTop10Winner(data: any): Promise<Top10Winners>;
+  getTop10WinnersByDate(date: Date): Promise<Top10Winners[]>;
+  updateTop10Winner(id: string, updates: any): Promise<Top10Winners>;
+  
+  createTop10Redistribution(data: any): Promise<Top10Redistributions>;
+  getTop10RedistributionByDate(date: Date): Promise<Top10Redistributions | undefined>;
+  updateTop10Redistribution(id: string, updates: any): Promise<Top10Redistributions>;
+
+  // Weekly streaks operations
+  getUserWeeklyStreak(userId: string): Promise<WeeklyStreaks | undefined>;
+  createWeeklyStreak(streak: any): Promise<WeeklyStreaks>;
+  updateWeeklyStreak(userId: string, updates: any): Promise<WeeklyStreaks>;
 
   // VISUpoints packs operations
   getVisuPointsPacks(): Promise<VisuPointsPack[]>;
@@ -1552,6 +1589,151 @@ export class DatabaseStorage implements IStorage {
       .from(visuPointsPurchases)
       .where(eq(visuPointsPurchases.userId, userId))
       .orderBy(desc(visuPointsPurchases.createdAt));
+  }
+
+  // Nouvelles méthodes pour TOP10 et fidélité
+  async getArticleInvestmentsByDate(date: Date): Promise<ArticleInvestment[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db
+      .select()
+      .from(articleInvestments)
+      .where(and(
+        gte(articleInvestments.createdAt, startOfDay),
+        lte(articleInvestments.createdAt, endOfDay)
+      ))
+      .orderBy(desc(articleInvestments.createdAt));
+  }
+
+  async getArticlesByAuthor(authorId: string): Promise<Article[]> {
+    return await db
+      .select()
+      .from(articles)
+      .where(eq(articles.authorId, authorId))
+      .orderBy(desc(articles.createdAt));
+  }
+
+  // TOP10 Infoporteurs methods
+  async createTop10Infoporteur(data: any): Promise<Top10Infoporteurs> {
+    const [result] = await db.insert(top10Infoporteurs).values(data).returning();
+    return result;
+  }
+
+  async getTop10ByDate(date: Date): Promise<Top10Infoporteurs[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db
+      .select()
+      .from(top10Infoporteurs)
+      .where(and(
+        gte(top10Infoporteurs.rankingDate, startOfDay),
+        lte(top10Infoporteurs.rankingDate, endOfDay)
+      ))
+      .orderBy(asc(top10Infoporteurs.rank));
+  }
+
+  async updateTop10Infoporteur(id: string, updates: any): Promise<Top10Infoporteurs> {
+    const [result] = await db
+      .update(top10Infoporteurs)
+      .set(updates)
+      .where(eq(top10Infoporteurs.id, id))
+      .returning();
+    return result;
+  }
+
+  // TOP10 Winners methods
+  async createTop10Winner(data: any): Promise<Top10Winners> {
+    const [result] = await db.insert(top10Winners).values(data).returning();
+    return result;
+  }
+
+  async getTop10WinnersByDate(date: Date): Promise<Top10Winners[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db
+      .select()
+      .from(top10Winners)
+      .where(and(
+        gte(top10Winners.rankingDate, startOfDay),
+        lte(top10Winners.rankingDate, endOfDay)
+      ))
+      .orderBy(desc(top10Winners.totalInvestedEUR));
+  }
+
+  async updateTop10Winner(id: string, updates: any): Promise<Top10Winners> {
+    const [result] = await db
+      .update(top10Winners)
+      .set(updates)
+      .where(eq(top10Winners.id, id))
+      .returning();
+    return result;
+  }
+
+  // TOP10 Redistributions methods
+  async createTop10Redistribution(data: any): Promise<Top10Redistributions> {
+    const [result] = await db.insert(top10Redistributions).values(data).returning();
+    return result;
+  }
+
+  async getTop10RedistributionByDate(date: Date): Promise<Top10Redistributions | undefined> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const [result] = await db
+      .select()
+      .from(top10Redistributions)
+      .where(and(
+        gte(top10Redistributions.redistributionDate, startOfDay),
+        lte(top10Redistributions.redistributionDate, endOfDay)
+      ))
+      .limit(1);
+    
+    return result;
+  }
+
+  async updateTop10Redistribution(id: string, updates: any): Promise<Top10Redistributions> {
+    const [result] = await db
+      .update(top10Redistributions)
+      .set(updates)
+      .where(eq(top10Redistributions.id, id))
+      .returning();
+    return result;
+  }
+
+  // Weekly streaks methods
+  async getUserWeeklyStreak(userId: string): Promise<WeeklyStreaks | undefined> {
+    const [result] = await db
+      .select()
+      .from(weeklyStreaks)
+      .where(eq(weeklyStreaks.userId, userId))
+      .limit(1);
+    
+    return result;
+  }
+
+  async createWeeklyStreak(streak: any): Promise<WeeklyStreaks> {
+    const [result] = await db.insert(weeklyStreaks).values(streak).returning();
+    return result;
+  }
+
+  async updateWeeklyStreak(userId: string, updates: any): Promise<WeeklyStreaks> {
+    const [result] = await db
+      .update(weeklyStreaks)
+      .set(updates)
+      .where(eq(weeklyStreaks.userId, userId))
+      .returning();
+    return result;
   }
 }
 

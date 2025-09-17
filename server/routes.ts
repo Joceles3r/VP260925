@@ -53,6 +53,8 @@ import { receiptsRouter } from "./receipts/routes";
 import { categoriesRouter } from "./categories/routes";
 import { generateReceiptPDF } from "./receipts/handlers";
 import { VISUPointsService } from "./services/visuPointsService.js";
+import { Top10Service } from "./services/top10Service.js";
+import { FidelityService } from "./services/fidelityService.js";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -3420,6 +3422,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching visitor stats:", error);
       res.status(500).json({ message: "Erreur lors de la récupération des statistiques" });
+    }
+  });
+
+  // ===== NOUVELLES ROUTES TOP10 ET FIDÉLITÉ =====
+
+  // TOP10 System Routes
+  
+  // Get current TOP10 ranking
+  app.get('/api/top10/current', async (req, res) => {
+    try {
+      const ranking = await Top10Service.getCurrentRanking();
+      
+      if (!ranking) {
+        return res.json({
+          ranking: null,
+          message: "Aucun classement disponible pour aujourd'hui"
+        });
+      }
+      
+      res.json({
+        ranking: {
+          top10Infoporteurs: ranking.top10Infoporteurs,
+          winnersCount: ranking.winners.length,
+          totalPool: ranking.redistribution.totalPoolEUR,
+          poolDistributed: ranking.redistribution.poolDistributed
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching current TOP10 ranking:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération du classement TOP10" });
+    }
+  });
+
+  // Get TOP10 ranking history
+  app.get('/api/top10/history', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 7; // 7 derniers jours par défaut
+      const history = await Top10Service.getRankingHistory(limit);
+      
+      res.json({
+        history: history.map(ranking => ({
+          date: ranking.redistribution.redistributionDate,
+          top10Count: ranking.top10Infoporteurs.length,
+          winnersCount: ranking.winners.length,
+          totalPool: ranking.redistribution.totalPoolEUR,
+          poolDistributed: ranking.redistribution.poolDistributed
+        }))
+      });
+    } catch (error) {
+      console.error("Error fetching TOP10 history:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération de l'historique TOP10" });
+    }
+  });
+
+  // Manual TOP10 ranking generation (admin only)
+  app.post('/api/top10/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès interdit" });
+      }
+      
+      const date = req.body.date ? new Date(req.body.date) : new Date();
+      const ranking = await Top10Service.generateDailyRanking(date);
+      
+      res.json({
+        message: "Classement TOP10 généré avec succès",
+        ranking: {
+          date: date.toISOString().split('T')[0],
+          top10Count: ranking.top10Infoporteurs.length,
+          winnersCount: ranking.winners.length,
+          totalPool: ranking.redistribution.totalPoolEUR
+        }
+      });
+    } catch (error) {
+      console.error("Error generating TOP10 ranking:", error);
+      res.status(500).json({ message: "Erreur lors de la génération du classement TOP10" });
+    }
+  });
+
+  // Fidelity System Routes
+  
+  // Process user login (for streak calculation)
+  app.post('/api/fidelity/login', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await FidelityService.processUserLogin(userId);
+      
+      res.json({
+        message: "Connexion traitée",
+        rewards: {
+          daily: result.dailyReward,
+          weekly: result.weeklyReward,
+          totalPoints: result.totalPoints
+        }
+      });
+    } catch (error) {
+      console.error("Error processing user login:", error);
+      res.status(500).json({ message: "Erreur lors du traitement de la connexion" });
+    }
+  });
+
+  // Get user fidelity stats
+  app.get('/api/fidelity/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const stats = await FidelityService.getUserFidelityStats(userId);
+      
+      res.json({
+        stats
+      });
+    } catch (error) {
+      console.error("Error fetching fidelity stats:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération des statistiques de fidélité" });
+    }
+  });
+
+  // Get fidelity reward scales
+  app.get('/api/fidelity/rewards', async (req, res) => {
+    try {
+      const scales = FidelityService.getRewardScales();
+      
+      res.json({
+        scales: {
+          daily: scales.daily,
+          weekly: scales.weekly
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching reward scales:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération des barèmes" });
     }
   });
 
