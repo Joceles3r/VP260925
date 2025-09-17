@@ -133,11 +133,11 @@ export function calculateCommissionDistribution(
       losers: totalCommission * 0.07,  // 7% to losing investors (ranks 11-100)
     };
   } else {
-    // Live show redistribution
+    // Live show redistribution - Aligned with LIVE_SHOWS_DISTRIBUTION constants
     return {
-      platform: totalCommission * 0.10, // 10% platform
-      winners: totalCommission * 0.70, // 70% to winners (40% winning artist + 30% top investors)
-      losers: totalCommission * 0.20,  // 20% to losing side
+      platform: 0, // 0% platform (no VISUAL commission for live shows per constants)
+      winners: totalCommission * 0.70, // 70% to winners (40% winning artist + 30% winning investors)
+      losers: totalCommission * 0.30,  // 30% to losing side (20% losing artist + 10% losing investors)
     };
   }
 }
