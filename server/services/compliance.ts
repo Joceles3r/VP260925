@@ -126,11 +126,11 @@ export function calculateCommissionDistribution(
   losers: number;
 } {
   if (projectType === 'investment') {
-    // Classic investment redistribution
+    // Classic investment redistribution - Updated 40/30/7/23 rules
     return {
       platform: totalCommission * 0.23, // 23% platform
-      winners: totalCommission * 0.70, // 70% to winners (40% creators + 30% top investors)
-      losers: totalCommission * 0.07,  // 7% to losing investors
+      winners: totalCommission * 0.70, // 70% to winners (40% top investors + 30% creators)
+      losers: totalCommission * 0.07,  // 7% to losing investors (ranks 11-100)
     };
   } else {
     // Live show redistribution
