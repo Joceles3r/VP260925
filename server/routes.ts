@@ -13,10 +13,32 @@ import {
   insertSocialLikeSchema,
   insertVisuPointsTransactionSchema,
   updateSocialPostSchema,
-  updateSocialCommentSchema
+  updateSocialCommentSchema,
+  // Nouveaux schémas pour fonctionnalités avancées
+  insertReferralSchema,
+  insertReferralLimitSchema,
+  insertLoginStreakSchema,
+  insertVisitorActivitySchema,
+  insertVisitorOfMonthSchema,
+  insertArticleSchema,
+  insertArticleInvestmentSchema,
+  insertVisuPointsPackSchema,
+  insertVisuPointsPurchaseSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
-import { ALLOWED_INVESTMENT_AMOUNTS, isValidInvestmentAmount, ALLOWED_PROJECT_PRICES, isValidProjectPrice } from "@shared/constants";
+import { 
+  ALLOWED_INVESTMENT_AMOUNTS, 
+  isValidInvestmentAmount, 
+  ALLOWED_PROJECT_PRICES, 
+  isValidProjectPrice,
+  REFERRAL_SYSTEM,
+  STREAK_REWARDS,
+  VISITOR_OF_MONTH,
+  ALLOWED_ARTICLE_PRICES,
+  isValidArticlePrice,
+  VISU_POINTS_PACKS,
+  VISU_POINTS
+} from "@shared/constants";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -30,6 +52,7 @@ import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
 import { categoriesRouter } from "./categories/routes";
 import { generateReceiptPDF } from "./receipts/handlers";
+import { VISUPointsService } from "./services/visuPointsService.js";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -1814,7 +1837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         posts = await storage.getAllSocialPosts(
           parseInt(limit as string),
           parseInt(offset as string),
-          req.user?.claims?.sub
+          (req as any).user?.claims?.sub
         );
       }
       
@@ -2953,6 +2976,450 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting report:", error);
       res.status(500).json({ message: "Erreur lors du rejet du signalement" });
+    }
+  });
+
+  // ===== NOUVELLES ROUTES POUR FONCTIONNALITÉS AVANCÉES =====
+
+  // Utility function to generate unique referral codes
+  function generateReferralCode(length = REFERRAL_SYSTEM.codeLength): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  // Utility function to check monthly referral limit
+  async function checkReferralLimit(userId: string): Promise<boolean> {
+    const monthYear = new Date().toISOString().slice(0, 7); // "2025-09" format
+    const limit = await storage.getUserReferralLimit(userId, monthYear);
+    
+    if (!limit) {
+      // Create initial limit record
+      await storage.createReferralLimit({
+        userId,
+        monthYear,
+        successfulReferrals: 0,
+        maxReferrals: REFERRAL_SYSTEM.maxReferralsPerMonth
+      });
+      return true;
+    }
+    
+    return (limit.successfulReferrals || 0) < (limit.maxReferrals || REFERRAL_SYSTEM.maxReferralsPerMonth);
+  }
+
+  // SYSTÈME DE PARRAINAGE - Referral System Routes
+
+  // Create or get user's referral link
+  app.post('/api/referral/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Check if user already has an active referral code
+      const existingReferrals = await storage.getUserReferrals(userId);
+      const activeReferral = existingReferrals.find(r => r.status !== 'expired');
+      
+      if (activeReferral) {
+        return res.json({
+          referralCode: activeReferral.referralCode,
+          referralLink: activeReferral.referralLink,
+          expiresAt: activeReferral.expiresAt,
+          successfulReferrals: existingReferrals.filter(r => r.status === 'completed').length
+        });
+      }
+
+      // Check monthly limit
+      const canRefer = await checkReferralLimit(userId);
+      if (!canRefer) {
+        return res.status(400).json({ 
+          message: "Limite mensuelle atteinte. Vous avez déjà parrainé 20 personnes ce mois-ci." 
+        });
+      }
+
+      // Generate unique code
+      let code = generateReferralCode();
+      let existing = await storage.getReferralByCode(code);
+      while (existing) {
+        code = generateReferralCode();
+        existing = await storage.getReferralByCode(code);
+      }
+
+      // Create referral record
+      const expirationDate = new Date();
+      expirationDate.setDate(expirationDate.getDate() + REFERRAL_SYSTEM.linkExpiryDays);
+
+      const referralLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/register?ref=${code}`;
+
+      const newReferral = await storage.createReferral({
+        sponsorId: userId,
+        referralCode: code,
+        referralLink: referralLink,
+        status: 'pending',
+        sponsorBonusVP: REFERRAL_SYSTEM.sponsorBonusVP,
+        refereeBonusVP: REFERRAL_SYSTEM.refereeBonusVP,
+        expiresAt: expirationDate
+      });
+
+      res.json({
+        referralCode: newReferral.referralCode,
+        referralLink: newReferral.referralLink,
+        expiresAt: newReferral.expiresAt,
+        successfulReferrals: 0
+      });
+    } catch (error) {
+      console.error("Error generating referral:", error);
+      res.status(500).json({ message: "Erreur lors de la génération du lien de parrainage" });
+    }
+  });
+
+  // Get user's referral statistics
+  app.get('/api/referral/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const referrals = await storage.getUserReferrals(userId);
+      const monthYear = new Date().toISOString().slice(0, 7);
+      const monthlyLimit = await storage.getUserReferralLimit(userId, monthYear);
+
+      const stats = {
+        totalReferrals: referrals.length,
+        successfulReferrals: referrals.filter(r => r.status === 'completed').length,
+        pendingReferrals: referrals.filter(r => r.status === 'pending').length,
+        monthlyLimit: monthlyLimit?.maxReferrals || REFERRAL_SYSTEM.maxReferralsPerMonth,
+        monthlyUsed: monthlyLimit?.successfulReferrals || 0,
+        totalEarnedVP: referrals.filter(r => r.status === 'completed').length * REFERRAL_SYSTEM.sponsorBonusVP,
+        activeReferralLink: referrals.find(r => r.status !== 'expired')?.referralLink || null
+      };
+
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching referral stats:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération des statistiques" });
+    }
+  });
+
+  // Validate referral code during registration
+  app.get('/api/referral/validate/:code', async (req, res) => {
+    try {
+      const { code } = req.params;
+      const referral = await storage.getReferralByCode(code);
+
+      if (!referral) {
+        return res.status(404).json({ message: "Code de parrainage invalide" });
+      }
+
+      if (referral.expiresAt && new Date() > referral.expiresAt) {
+        return res.status(400).json({ message: "Code de parrainage expiré" });
+      }
+
+      if (referral.refereeId) {
+        return res.status(400).json({ message: "Code de parrainage déjà utilisé" });
+      }
+
+      // Get sponsor info (without sensitive data)
+      const sponsor = await storage.getUser(referral.sponsorId);
+      
+      res.json({
+        valid: true,
+        referralBonus: referral.refereeBonusVP,
+        sponsorName: sponsor ? `${sponsor.firstName} ${sponsor.lastName}` : 'Utilisateur VISUAL'
+      });
+    } catch (error) {
+      console.error("Error validating referral:", error);
+      res.status(500).json({ message: "Erreur lors de la validation du code" });
+    }
+  });
+
+  // Apply referral bonus after user's first action (called by other endpoints)
+  async function processReferralBonus(userId: string, action: string) {
+    try {
+      // Check if user was referred (with potential for race conditions)
+      const referral = await storage.getReferralByRefereeId(userId);
+      if (!referral || referral.status !== 'pending') return;
+
+      // ATOMIC operation: Update referral status AND check monthly limits
+      const monthYear = new Date().toISOString().slice(0, 7);
+      const limit = await storage.getUserReferralLimit(referral.sponsorId, monthYear);
+      
+      // Check limit again to prevent race conditions
+      if (limit && (limit.successfulReferrals || 0) >= (limit.maxReferrals || REFERRAL_SYSTEM.maxReferralsPerMonth)) {
+        console.log(`Monthly referral limit exceeded for sponsor ${referral.sponsorId}`);
+        return;
+      }
+
+      // Update referral status
+      await storage.updateReferral(referral.id, {
+        status: 'completed',
+        firstActionAt: new Date(),
+        bonusAwardedAt: new Date()
+      });
+
+      // Award bonuses using centralized VISUpoints service
+      await VISUPointsService.awardReferralBonus(
+        referral.sponsorId,
+        userId,
+        referral.id,
+        referral.sponsorBonusVP || REFERRAL_SYSTEM.sponsorBonusVP,
+        referral.refereeBonusVP || REFERRAL_SYSTEM.refereeBonusVP
+      );
+
+      // Update monthly limit counter atomically
+      if (limit) {
+        await storage.updateReferralLimit(referral.sponsorId, monthYear, {
+          successfulReferrals: (limit.successfulReferrals || 0) + 1
+        });
+      }
+
+      console.log(`Referral bonus processed for user ${userId} (action: ${action})`);
+    } catch (error) {
+      console.error("Error processing referral bonus:", error);
+      // Don't re-throw to avoid breaking user actions
+    }
+  }
+
+  // STREAKS DE CONNEXION - Login Streaks Routes
+
+  // Update user's login streak
+  app.post('/api/streaks/login', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      let streak = await storage.getUserLoginStreak(userId);
+      
+      if (!streak) {
+        // Create initial streak
+        streak = await storage.createLoginStreak({
+          userId,
+          currentStreak: 1,
+          longestStreak: 1,
+          lastLoginDate: new Date(),
+          streakStartDate: new Date(),
+          totalLogins: 1,
+          visuPointsEarned: STREAK_REWARDS.daily
+        });
+
+        // Award daily login points using centralized service
+        await VISUPointsService.awardStreakBonus(
+          userId,
+          STREAK_REWARDS.daily,
+          1,
+          streak.id
+        );
+      } else {
+        const lastLoginDate = streak.lastLoginDate ? new Date(streak.lastLoginDate).toISOString().split('T')[0] : null;
+        
+        if (lastLoginDate === today) {
+          // Already logged in today
+          return res.json({ streak, alreadyLoggedToday: true });
+        }
+
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        let newStreak = streak.currentStreak || 0;
+        let streakStartDate = streak.streakStartDate;
+        
+        if (lastLoginDate === yesterdayStr) {
+          // Consecutive day login
+          newStreak += 1;
+        } else {
+          // Streak broken, restart
+          newStreak = 1;
+          streakStartDate = new Date();
+        }
+
+        const newLongestStreak = Math.max(streak.longestStreak || 0, newStreak);
+        
+        // Calculate bonus points for milestones
+        let bonusPoints = STREAK_REWARDS.daily;
+        if (newStreak % 30 === 0) {
+          bonusPoints += STREAK_REWARDS.monthly;
+        } else if (newStreak % 7 === 0) {
+          bonusPoints += STREAK_REWARDS.weekly;
+        }
+
+        // Update streak
+        streak = await storage.updateLoginStreak(userId, {
+          currentStreak: newStreak,
+          longestStreak: newLongestStreak,
+          lastLoginDate: new Date(),
+          streakStartDate: streakStartDate,
+          totalLogins: (streak.totalLogins || 0) + 1,
+          visuPointsEarned: (streak.visuPointsEarned || 0) + bonusPoints
+        });
+
+        // Award points using centralized service
+        await VISUPointsService.awardStreakBonus(
+          userId,
+          bonusPoints,
+          newStreak,
+          streak.id
+        );
+      }
+
+      res.json({ streak });
+    } catch (error) {
+      console.error("Error updating login streak:", error);
+      res.status(500).json({ message: "Erreur lors de la mise à jour du streak" });
+    }
+  });
+
+  // Get user's login streak stats
+  app.get('/api/streaks/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const streak = await storage.getUserLoginStreak(userId);
+      
+      if (!streak) {
+        return res.json({
+          currentStreak: 0,
+          longestStreak: 0,
+          totalLogins: 0,
+          visuPointsEarned: 0,
+          nextMilestone: 7,
+          nextMilestoneReward: STREAK_REWARDS.weekly
+        });
+      }
+
+      // Calculate next milestone
+      let nextMilestone = 7;
+      let nextMilestoneReward: number = STREAK_REWARDS.weekly;
+      const currentStreak = streak.currentStreak || 0;
+      
+      if (currentStreak >= 30) {
+        nextMilestone = Math.ceil(currentStreak / 30) * 30;
+        nextMilestoneReward = STREAK_REWARDS.monthly;
+      } else if (currentStreak >= 7) {
+        nextMilestone = Math.ceil(currentStreak / 7) * 7;
+        nextMilestoneReward = STREAK_REWARDS.weekly;
+      }
+
+      res.json({
+        ...streak,
+        nextMilestone,
+        nextMilestoneReward
+      });
+    } catch (error) {
+      console.error("Error fetching streak stats:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération des statistiques" });
+    }
+  });
+
+  // SUIVI D'ACTIVITÉ VISITEURS - Visitor Activity Routes
+
+  // Track visitor activity
+  app.post('/api/visitor/activity', async (req, res) => {
+    try {
+      const activityData = insertVisitorActivitySchema.parse(req.body);
+      
+      // Get session ID from request or generate one
+      const sessionId = req.sessionID || activityData.sessionId;
+      
+      // Get user info from session if available
+      const userId = (req as any).user?.claims?.sub || null;
+      
+      const activity = await storage.createVisitorActivity({
+        ...activityData,
+        sessionId,
+        userId,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent') || '',
+        deviceType: /Mobile|Android|iPhone|iPad/.test(req.get('User-Agent') || '') ? 'mobile' : 'desktop'
+      });
+
+      // Award activity points if user is logged in
+      if (userId && activityData.activityType in VISITOR_OF_MONTH.activityPoints) {
+        const points = VISITOR_OF_MONTH.activityPoints[activityData.activityType as keyof typeof VISITOR_OF_MONTH.activityPoints];
+        
+        await VISUPointsService.awardActivityPoints(
+          userId,
+          points,
+          activityData.activityType,
+          activity.id
+        );
+
+        // Update visitor of month stats
+        const monthYear = new Date().toISOString().slice(0, 7);
+        let visitorStats = await storage.getVisitorOfMonth(userId, monthYear);
+        
+        if (!visitorStats) {
+          visitorStats = await storage.createVisitorOfMonth({
+            userId,
+            monthYear,
+            activityScore: points,
+            totalActivities: 1,
+            totalDuration: activityData.duration || 0
+          });
+        } else {
+          await storage.updateVisitorOfMonth(userId, monthYear, {
+            activityScore: (visitorStats.activityScore || 0) + points,
+            totalActivities: (visitorStats.totalActivities || 0) + 1,
+            totalDuration: (visitorStats.totalDuration || 0) + (activityData.duration || 0)
+          });
+        }
+      }
+
+      res.json({ success: true, activity });
+    } catch (error) {
+      console.error("Error tracking visitor activity:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Données d'activité invalides", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erreur lors de l'enregistrement de l'activité" });
+    }
+  });
+
+  // Get monthly visitor rankings (Visiteur du Mois)
+  app.get('/api/visitor/rankings/:monthYear?', async (req, res) => {
+    try {
+      const monthYear = req.params.monthYear || new Date().toISOString().slice(0, 7);
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      const rankings = await storage.getMonthlyVisitorRankings(monthYear, limit);
+      
+      res.json({
+        monthYear,
+        rankings: rankings.map(r => ({
+          ...r,
+          // Don't expose sensitive user info in rankings
+          userId: r.isWinner ? r.userId : undefined
+        }))
+      });
+    } catch (error) {
+      console.error("Error fetching visitor rankings:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération du classement" });
+    }
+  });
+
+  // Get user's visitor stats
+  app.get('/api/visitor/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const monthYear = req.query.monthYear as string || new Date().toISOString().slice(0, 7);
+      
+      const visitorStats = await storage.getVisitorOfMonth(userId, monthYear);
+      const userActivities = await storage.getUserActivities(userId, 50);
+      
+      res.json({
+        monthYear,
+        stats: visitorStats || {
+          userId,
+          monthYear,
+          activityScore: 0,
+          totalActivities: 0,
+          totalDuration: 0,
+          rank: null,
+          isWinner: false
+        },
+        recentActivities: userActivities
+      });
+    } catch (error) {
+      console.error("Error fetching visitor stats:", error);
+      res.status(500).json({ message: "Erreur lors de la récupération des statistiques" });
     }
   });
 
