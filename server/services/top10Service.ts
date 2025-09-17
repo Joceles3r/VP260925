@@ -130,7 +130,7 @@ export class Top10Service {
     }
     
     // 3. OPTIMISATION N+1 - Récupérer tous les articles nécessaires en une seule requête
-    const uniqueArticleIds = [...new Set(investments.map(i => i.articleId))];
+    const uniqueArticleIds = Array.from(new Set(investments.map(i => i.articleId)));
     const articles = tx 
       ? await this.getArticlesBatchWithTx(uniqueArticleIds, tx)
       : await this.getArticlesBatch(uniqueArticleIds);

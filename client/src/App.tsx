@@ -18,6 +18,8 @@ import KYCOnboarding from "@/pages/KYCOnboarding";
 import WalletPage from "@/pages/wallet";
 import SocialPage from "@/pages/social";
 import ReceiptsPage from "@/pages/receipts";
+import Top10Page from "@/pages/top10";
+import FidelityPage from "@/pages/fidelity";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -52,6 +54,8 @@ function Router() {
             <Route path="/wallet" component={WalletPage} />
             <Route path="/social" component={SocialPage} />
             <Route path="/receipts" component={ReceiptsPage} />
+            <Route path="/top10" component={Top10Page} />
+            <Route path="/fidelity" component={FidelityPage} />
             <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </>
