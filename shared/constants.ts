@@ -1,6 +1,12 @@
 // Centralized constants for VISUAL platform
 // Updated with video deposit modules - 2024
 
+// Stripe API configuration
+export const STRIPE_CONFIG = {
+  // Version par défaut stable, peut être surchargée via STRIPE_API_VERSION env var
+  API_VERSION: process.env.STRIPE_API_VERSION || "2024-06-20"
+} as const;
+
 // Project categories and their properties
 export const PROJECT_CATEGORIES = {
   documentaire: {

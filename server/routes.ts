@@ -37,7 +37,8 @@ import {
   ALLOWED_ARTICLE_PRICES,
   isValidArticlePrice,
   VISU_POINTS_PACKS,
-  VISU_POINTS
+  VISU_POINTS,
+  STRIPE_CONFIG
 } from "@shared/constants";
 import { z } from "zod";
 import multer from "multer";
@@ -61,7 +62,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil",
+  apiVersion: STRIPE_CONFIG.API_VERSION as any, // Configuration centralisée et configurable
 });
 
 // Function getMinimumCautionAmount is now imported from @shared/utils

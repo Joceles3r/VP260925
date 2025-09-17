@@ -4,7 +4,7 @@ import Stripe from 'stripe';
 import { stripeTransfers } from '../../shared/schema.js';
 import { eq, and, lte, sql } from 'drizzle-orm';
 import type { StripeTransfer, InsertStripeTransfer } from '../../shared/schema.js';
-import { VISUAL_PLATFORM_FEE } from '../../shared/constants.js';
+import { VISUAL_PLATFORM_FEE, STRIPE_CONFIG } from '../../shared/constants.js';
 
 // Lazy-init Stripe to avoid unsafe module-level initialization
 let stripeInstance: Stripe | null = null;
@@ -17,7 +17,7 @@ function getStripeInstance(): Stripe {
     }
     
     stripeInstance = new Stripe(secretKey, {
-      apiVersion: "2025-08-27.basil", // Use required API version
+      apiVersion: STRIPE_CONFIG.API_VERSION as any, // Configuration centralisée et configurable
     });
   }
   return stripeInstance;
@@ -98,18 +98,19 @@ export class StripeTransferService {
   /**
    * TRAITER LES TRANSFERTS PROGRAMMÉS - appelé par cron job
    * Traite tous les transferts dont l'heure de traitement est arrivée
+   * Utilise une réclamation atomique pour éviter les courses en concurrence
    */
   static async processScheduledTransfers(): Promise<{ processed: number; failed: number }> {
     console.log(`[STRIPE] 🔄 Démarrage du traitement des transferts programmés...`);
 
-    // Récupérer tous les transferts prêts à être traités
-    const readyTransfers = await this.getReadyTransfers();
-    console.log(`[STRIPE] 📋 ${readyTransfers.length} transferts prêts à être traités`);
+    // Réclamation atomique des transferts prêts (passe de 'scheduled' à 'processing')
+    const claimedTransfers = await this.claimReadyTransfers();
+    console.log(`[STRIPE] 📋 ${claimedTransfers.length} transferts réclamés atomiquement`);
 
     let processed = 0;
     let failed = 0;
 
-    for (const transfer of readyTransfers) {
+    for (const transfer of claimedTransfers) {
       try {
         await this.processIndividualTransfer(transfer);
         processed++;
@@ -132,9 +133,7 @@ export class StripeTransferService {
   private static async processIndividualTransfer(transfer: StripeTransfer): Promise<void> {
     console.log(`[STRIPE] 🚀 Traitement transfert ${transfer.id}: ${transfer.amountCents} centimes vers ${transfer.userId}`);
 
-    // Marquer comme en cours de traitement
-    await this.updateTransferStatus(transfer.id, 'processing');
-
+    // Le statut 'processing' est déjà défini atomiquement par claimReadyTransfers()
     try {
       const stripe = getStripeInstance();
 
@@ -214,24 +213,34 @@ export class StripeTransferService {
     }
   }
 
-  private static async getReadyTransfers(): Promise<StripeTransfer[]> {
+  /**
+   * Réclamation atomique des transferts prêts pour éviter les courses en concurrence.
+   * Cette méthode fait un UPDATE atomique qui passe de 'scheduled' à 'processing'
+   * et retourne uniquement les enregistrements qu'elle a réussi à réclamer.
+   */
+  private static async claimReadyTransfers(): Promise<StripeTransfer[]> {
     try {
       const now = new Date();
       
-      const result = await db
-        .select()
-        .from(stripeTransfers)
+      // UPDATE atomique avec RETURNING pour récupérer les transferts réclamés
+      const claimedTransfers = await db
+        .update(stripeTransfers)
+        .set({
+          status: 'processing',
+          updatedAt: new Date()
+        })
         .where(
           and(
             eq(stripeTransfers.status, 'scheduled'),
             lte(stripeTransfers.scheduledProcessingAt, now)
           )
         )
-        .orderBy(stripeTransfers.scheduledProcessingAt);
+        .returning();
       
-      return result;
+      console.log(`[STRIPE] 🔒 Réclamation atomique de ${claimedTransfers.length} transferts prêts`);
+      return claimedTransfers;
     } catch (error) {
-      console.error(`[STRIPE] Erreur récupération transferts prêts:`, error);
+      console.error(`[STRIPE] Erreur réclamation atomique des transferts:`, error);
       return [];
     }
   }

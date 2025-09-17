@@ -4,7 +4,8 @@ import { db } from '../db.js';
 import Stripe from 'stripe';
 import { 
   TOP10_SYSTEM, 
-  VISUAL_PLATFORM_FEE 
+  VISUAL_PLATFORM_FEE,
+  STRIPE_CONFIG 
 } from '../../shared/constants.js';
 import type { 
   ArticleSalesDaily, 
@@ -36,7 +37,7 @@ function getStripeInstance(): Stripe {
     }
     
     stripeInstance = new Stripe(secretKey, {
-      apiVersion: "2025-08-27.basil", // Use required API version
+      apiVersion: STRIPE_CONFIG.API_VERSION as any, // Configuration centralisée et configurable
     });
   }
   return stripeInstance;
