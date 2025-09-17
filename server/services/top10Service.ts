@@ -5,7 +5,11 @@ import Stripe from 'stripe';
 import { 
   TOP10_SYSTEM, 
   VISUAL_PLATFORM_FEE,
-  STRIPE_CONFIG 
+  STRIPE_CONFIG,
+  INVESTMENT_CATEGORY_DISTRIBUTION,
+  TOP10_DETAILED_DISTRIBUTION,
+  LIVE_SHOWS_DISTRIBUTION,
+  ARTICLES_DISTRIBUTION
 } from '../../shared/constants.js';
 import type { 
   ArticleSalesDaily, 
@@ -253,6 +257,115 @@ export class Top10Service {
     } else {
       await storage.updateTop10Redistribution(redistribution.id, updateData);
     }
+  }
+
+  /**
+   * NOUVELLE MÉTHODE - Redistribution des événements d'investissement de catégorie
+   * Utilise les règles 40% Investisseurs TOP10 / 30% Porteurs TOP10 / 23% VISUAL / 7% Investisseurs 11-100
+   */
+  static async executeInvestmentCategoryRedistribution(
+    totalAmountEUR: number,
+    investorsTop10: { id: string; rank: number }[],
+    creatorsTop10: { id: string; rank: number }[],
+    investors11to100: { id: string }[]
+  ): Promise<{
+    investorsTop10Payouts: { userId: string; amountCents: number; rank: number }[];
+    creatorsTop10Payouts: { userId: string; amountCents: number; rank: number }[];
+    investors11to100Payouts: { userId: string; amountCents: number }[];
+    visualCommissionCents: number;
+    totalDistributedCents: number;
+  }> {
+    console.log(`[INVESTMENT] 🚀 Démarrage redistribution événement d'investissement: ${totalAmountEUR.toFixed(2)}€`);
+    
+    // CONVERSION EN CENTIMES pour arithmétique exacte
+    const totalAmountCents = Math.round(totalAmountEUR * 100);
+    
+    // VALIDATION DES POURCENTAGES (sécurité)
+    const totalPercent = INVESTMENT_CATEGORY_DISTRIBUTION.INVESTORS_TOP10_PERCENT +
+                        INVESTMENT_CATEGORY_DISTRIBUTION.CREATORS_TOP10_PERCENT +
+                        INVESTMENT_CATEGORY_DISTRIBUTION.VISUAL_PLATFORM_PERCENT +
+                        INVESTMENT_CATEGORY_DISTRIBUTION.INVESTORS_11_100_PERCENT;
+    
+    if (Math.abs(totalPercent - 1.0) > 0.0001) {
+      throw new Error(`ERREUR CONSTANTES: Total ≠ 100% (${totalPercent})`);
+    }
+    
+    // CALCULS POOLS EN CENTIMES (précision absolue)
+    const investorsTop10PoolCents = Math.round(totalAmountCents * INVESTMENT_CATEGORY_DISTRIBUTION.INVESTORS_TOP10_PERCENT); // 40%
+    const creatorsTop10PoolCents = Math.round(totalAmountCents * INVESTMENT_CATEGORY_DISTRIBUTION.CREATORS_TOP10_PERCENT);   // 30%
+    const visualCommissionCents = Math.round(totalAmountCents * INVESTMENT_CATEGORY_DISTRIBUTION.VISUAL_PLATFORM_PERCENT);   // 23%
+    const investors11to100PoolCents = Math.round(totalAmountCents * INVESTMENT_CATEGORY_DISTRIBUTION.INVESTORS_11_100_PERCENT); // 7%
+    
+    console.log(`[INVESTMENT] 📊 Pools calculés:`);
+    console.log(`[INVESTMENT] 💎 Investisseurs TOP10: ${(investorsTop10PoolCents/100).toFixed(2)}€`);
+    console.log(`[INVESTMENT] 🎨 Porteurs TOP10: ${(creatorsTop10PoolCents/100).toFixed(2)}€`);
+    console.log(`[INVESTMENT] 🏛️ VISUAL: ${(visualCommissionCents/100).toFixed(2)}€`);
+    console.log(`[INVESTMENT] 📈 Investisseurs 11-100: ${(investors11to100PoolCents/100).toFixed(2)}€`);
+    
+    // DISTRIBUTION INVESTISSEURS TOP10 (avec tableaux détaillés)
+    const investorsTop10Payouts = investorsTop10.slice(0, 10).map((investor, index) => {
+      const percentageAbs = TOP10_DETAILED_DISTRIBUTION.INVESTORS_PERCENTAGES[index] || 0;
+      const amountCents = Math.floor((percentageAbs / 100) * totalAmountCents);
+      const amountEURFloor = Math.floor(amountCents / 100) * 100; // Arrondi à l'euro inférieur
+      
+      return {
+        userId: investor.id,
+        amountCents: amountEURFloor,
+        rank: investor.rank
+      };
+    });
+    
+    // DISTRIBUTION PORTEURS TOP10 (avec tableaux détaillés)
+    const creatorsTop10Payouts = creatorsTop10.slice(0, 10).map((creator, index) => {
+      const percentageAbs = TOP10_DETAILED_DISTRIBUTION.CREATORS_PERCENTAGES[index] || 0;
+      const amountCents = Math.floor((percentageAbs / 100) * totalAmountCents);
+      const amountEURFloor = Math.floor(amountCents / 100) * 100; // Arrondi à l'euro inférieur
+      
+      return {
+        userId: creator.id,
+        amountCents: amountEURFloor,
+        rank: creator.rank
+      };
+    });
+    
+    // DISTRIBUTION INVESTISSEURS 11-100 (équipartition)
+    const investors11to100Payouts = [];
+    if (investors11to100.length > 0) {
+      const amountPerInvestorCents = Math.floor(investors11to100PoolCents / investors11to100.length);
+      const amountPerInvestorEURFloor = Math.floor(amountPerInvestorCents / 100) * 100; // Arrondi à l'euro inférieur
+      
+      for (const investor of investors11to100) {
+        investors11to100Payouts.push({
+          userId: investor.id,
+          amountCents: amountPerInvestorEURFloor
+        });
+      }
+    }
+    
+    // CALCUL DES RESTES (vont à VISUAL)
+    const totalUserPayoutsCents = 
+      investorsTop10Payouts.reduce((sum, p) => sum + p.amountCents, 0) +
+      creatorsTop10Payouts.reduce((sum, p) => sum + p.amountCents, 0) +
+      investors11to100Payouts.reduce((sum, p) => sum + p.amountCents, 0);
+    
+    const totalDistributedCents = totalUserPayoutsCents + visualCommissionCents;
+    const remainderCents = totalAmountCents - totalDistributedCents;
+    
+    // VISUAL récupère sa commission + les restes d'arrondis
+    const finalVisualCommissionCents = visualCommissionCents + remainderCents;
+    
+    console.log(`[INVESTMENT] ✅ Distribution terminée:`);
+    console.log(`[INVESTMENT] 👥 Utilisateurs: ${(totalUserPayoutsCents/100).toFixed(2)}€`);
+    console.log(`[INVESTMENT] 🏛️ VISUAL (commission + restes): ${(finalVisualCommissionCents/100).toFixed(2)}€`);
+    console.log(`[INVESTMENT] 🎯 Total exact: ${((totalUserPayoutsCents + finalVisualCommissionCents)/100).toFixed(2)}€`);
+    
+    return {
+      investorsTop10Payouts,
+      creatorsTop10Payouts,
+      investors11to100Payouts,
+      visualCommissionCents: finalVisualCommissionCents,
+      totalDistributedCents: totalUserPayoutsCents + finalVisualCommissionCents
+    };
   }
 
   /**
