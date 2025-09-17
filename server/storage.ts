@@ -337,6 +337,11 @@ export interface IStorage {
   createWeeklyStreak(streak: any): Promise<WeeklyStreaks>;
   updateWeeklyStreak(userId: string, updates: any): Promise<WeeklyStreaks>;
 
+  // Article sales daily operations (for TOP10 system)
+  getArticleSaleDaily(articleId: string, saleDate: string): Promise<ArticleSalesDaily | undefined>;
+  createArticleSaleDaily(saleData: any): Promise<ArticleSalesDaily>;
+  updateArticleSaleDaily(id: string, updates: any): Promise<ArticleSalesDaily>;
+
   // VISUpoints packs operations
   getVisuPointsPacks(): Promise<VisuPointsPack[]>;
   createVisuPointsPack(pack: InsertVisuPointsPack): Promise<VisuPointsPack>;
@@ -1486,6 +1491,15 @@ export class DatabaseStorage implements IStorage {
     return article;
   }
 
+  async getArticlesByIds(ids: string[]): Promise<Article[]> {
+    if (ids.length === 0) return [];
+    
+    return await db
+      .select()
+      .from(articles)
+      .where(sql`${articles.id} = ANY(${ids})`);
+  }
+
   async getArticles(limit = 20, offset = 0, category?: string): Promise<Article[]> {
     const query = db.select().from(articles);
     if (category) {
@@ -1732,6 +1746,33 @@ export class DatabaseStorage implements IStorage {
       .update(weeklyStreaks)
       .set(updates)
       .where(eq(weeklyStreaks.userId, userId))
+      .returning();
+    return result;
+  }
+
+  // Article sales daily operations implementation
+  async getArticleSaleDaily(articleId: string, saleDate: string): Promise<ArticleSalesDaily | undefined> {
+    const dateObj = new Date(saleDate + 'T00:00:00Z'); // Convert string to Date
+    const [result] = await db
+      .select()
+      .from(articleSalesDaily)
+      .where(and(
+        eq(articleSalesDaily.articleId, articleId), 
+        sql`DATE(${articleSalesDaily.salesDate}) = DATE(${dateObj})`
+      ));
+    return result;
+  }
+
+  async createArticleSaleDaily(saleData: any): Promise<ArticleSalesDaily> {
+    const [result] = await db.insert(articleSalesDaily).values(saleData).returning();
+    return result;
+  }
+
+  async updateArticleSaleDaily(id: string, updates: any): Promise<ArticleSalesDaily> {
+    const [result] = await db
+      .update(articleSalesDaily)
+      .set(updates)
+      .where(eq(articleSalesDaily.id, id))
       .returning();
     return result;
   }

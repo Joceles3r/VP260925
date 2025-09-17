@@ -243,12 +243,12 @@ export class FidelityService {
     
     // Mettre à jour les points gagnés
     await storage.updateWeeklyStreak(userId, {
-      visuPointsEarned: weeklyStreak.visuPointsEarned + rewardInfo.visuPoints
+      visuPointsEarned: (weeklyStreak.visuPointsEarned || 0) + rewardInfo.visuPoints
     });
     
     return {
       points: rewardInfo.visuPoints,
-      week: weeklyStreak.currentWeeklyStreak,
+      week: weeklyStreak.currentWeeklyStreak || 1,
       description: rewardInfo.description
     };
   }
@@ -277,12 +277,12 @@ export class FidelityService {
     
     // Calculer la prochaine récompense quotidienne
     const nextDailyDay = dailyStreak ? 
-      (dailyStreak.currentStreak >= 7 ? 1 : dailyStreak.currentStreak + 1) : 1;
+      ((dailyStreak.currentStreak || 0) >= 7 ? 1 : (dailyStreak.currentStreak || 0) + 1) : 1;
     const nextDailyReward = this.DAILY_STREAK_REWARDS.find(r => r.day === nextDailyDay);
     
     // Calculer la prochaine récompense hebdomadaire
     const nextWeeklyWeek = weeklyStreak ? 
-      (weeklyStreak.currentWeeklyStreak >= 4 ? 1 : weeklyStreak.currentWeeklyStreak + 1) : 1;
+      ((weeklyStreak.currentWeeklyStreak || 0) >= 4 ? 1 : (weeklyStreak.currentWeeklyStreak || 0) + 1) : 1;
     const nextWeeklyReward = this.WEEKLY_STREAK_REWARDS.find(r => r.week === nextWeeklyWeek);
     
     return {
