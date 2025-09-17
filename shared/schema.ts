@@ -669,6 +669,94 @@ export const visuPointsPurchases = pgTable("visu_points_purchases", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ===== NOUVELLES TABLES POUR TOP10 INFOPORTEURS/INVESTILECTEURS =====
+
+// Article sales tracking per day for TOP10 ranking
+export const articleSalesDaily = pgTable("article_sales_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  infoporteurId: varchar("infoporteur_id").notNull().references(() => users.id),
+  articleId: varchar("article_id").notNull().references(() => articles.id),
+  salesDate: timestamp("sales_date").notNull(), // Date de la vente (jour complet)
+  totalSalesEUR: decimal("total_sales_eur", { precision: 10, scale: 2 }).default('0.00'),
+  salesCount: integer("sales_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_article_sales_infoporteur").on(table.infoporteurId),
+  index("idx_article_sales_date").on(table.salesDate),
+  unique("unique_article_sales_day").on(table.articleId, table.salesDate),
+]);
+
+// Daily TOP10 Infoporteurs ranking
+export const top10Infoporteurs = pgTable("top10_infoporteurs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rankingDate: timestamp("ranking_date").notNull(), // Date du classement (00:00:00)
+  infoporteurId: varchar("infoporteur_id").notNull().references(() => users.id),
+  rank: integer("rank").notNull(), // Position 1-10
+  totalSalesEUR: decimal("total_sales_eur", { precision: 10, scale: 2 }).notNull(),
+  totalArticlesSold: integer("total_articles_sold").notNull(),
+  redistributionShareEUR: decimal("redistribution_share_eur", { precision: 10, scale: 2 }).default('0.00'),
+  redistributionPaid: boolean("redistribution_paid").default(false),
+  redistributionPaidAt: timestamp("redistribution_paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_top10_infoporteurs_date").on(table.rankingDate),
+  index("idx_top10_infoporteurs_rank").on(table.rank),
+  unique("unique_top10_ranking_day").on(table.rankingDate, table.infoporteurId),
+]);
+
+// Investi-lecteurs winners (who bought TOP10 articles)
+export const top10Winners = pgTable("top10_winners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rankingDate: timestamp("ranking_date").notNull(),
+  investilecteurId: varchar("investilecteur_id").notNull().references(() => users.id),
+  top10ArticlesBought: integer("top10_articles_bought").notNull(), // Nombre d'articles TOP10 achetés
+  totalInvestedEUR: decimal("total_invested_eur", { precision: 10, scale: 2 }).notNull(),
+  redistributionShareEUR: decimal("redistribution_share_eur", { precision: 10, scale: 2 }).default('0.00'),
+  redistributionPaid: boolean("redistribution_paid").default(false),
+  redistributionPaidAt: timestamp("redistribution_paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_top10_winners_date").on(table.rankingDate),
+  index("idx_top10_winners_user").on(table.investilecteurId),
+  unique("unique_top10_winner_day").on(table.rankingDate, table.investilecteurId),
+]);
+
+// TOP10 redistribution pool tracking
+export const top10Redistributions = pgTable("top10_redistributions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  redistributionDate: timestamp("redistribution_date").notNull(),
+  totalPoolEUR: decimal("total_pool_eur", { precision: 10, scale: 2 }).notNull(), // Pot commun des rangs 11-100
+  infoporteursCount: integer("infoporteurs_count").notNull(), // Nombre d'infoporteurs TOP10 (max 10)
+  winnersCount: integer("winners_count").notNull(), // Nombre d'investi-lecteurs vainqueurs
+  poolDistributed: boolean("pool_distributed").default(false),
+  distributionCompletedAt: timestamp("distribution_completed_at"),
+  metadata: jsonb("metadata"), // Détails de la redistribution
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_top10_redistributions_date").on(table.redistributionDate),
+  unique("unique_redistribution_day").on(table.redistributionDate),
+]);
+
+// ===== AMÉLIORATION SYSTÈME FIDÉLITÉ VISUPOINTS =====
+
+// Weekly login streaks table
+export const weeklyStreaks = pgTable("weekly_streaks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  currentWeeklyStreak: integer("current_weekly_streak").default(0), // Semaines consécutives
+  longestWeeklyStreak: integer("longest_weekly_streak").default(0),
+  lastWeekDate: varchar("last_week_date", { length: 10 }), // "2025-W37" format
+  weeklyStreakStartDate: varchar("weekly_streak_start_date", { length: 10 }),
+  totalWeeksLogged: integer("total_weeks_logged").default(0),
+  visuPointsEarned: integer("visu_points_earned").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  unique("unique_user_weekly_streak").on(table.userId),
+  index("idx_weekly_streaks_user").on(table.userId),
+]);
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
@@ -695,6 +783,11 @@ export const usersRelations = relations(users, ({ many }) => ({
   articles: many(articles),
   articleInvestments: many(articleInvestments),
   visuPointsPurchases: many(visuPointsPurchases),
+  // Nouvelles relations pour TOP10 et fidélité
+  articleSalesDaily: many(articleSalesDaily),
+  top10Infoporteurs: many(top10Infoporteurs),
+  top10Winners: many(top10Winners),
+  weeklyStreaks: many(weeklyStreaks),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -959,6 +1052,39 @@ export const visuPointsPurchasesRelations = relations(visuPointsPurchases, ({ on
   }),
 }));
 
+// Nouvelles relations pour TOP10 et fidélité
+export const articleSalesDailyRelations = relations(articleSalesDaily, ({ one }) => ({
+  infoporteur: one(users, {
+    fields: [articleSalesDaily.infoporteurId],
+    references: [users.id],
+  }),
+  article: one(articles, {
+    fields: [articleSalesDaily.articleId],
+    references: [articles.id],
+  }),
+}));
+
+export const top10InfoporteursRelations = relations(top10Infoporteurs, ({ one }) => ({
+  infoporteur: one(users, {
+    fields: [top10Infoporteurs.infoporteurId],
+    references: [users.id],
+  }),
+}));
+
+export const top10WinnersRelations = relations(top10Winners, ({ one }) => ({
+  investilecteur: one(users, {
+    fields: [top10Winners.investilecteurId],
+    references: [users.id],
+  }),
+}));
+
+export const weeklyStreaksRelations = relations(weeklyStreaks, ({ one }) => ({
+  user: one(users, {
+    fields: [weeklyStreaks.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -1149,6 +1275,35 @@ export const insertVisuPointsPurchaseSchema = createInsertSchema(visuPointsPurch
   createdAt: true,
 });
 
+// ===== NOUVEAUX SCHÉMAS POUR TOP10 ET FIDÉLITÉ =====
+
+export const insertArticleSalesDailySchema = createInsertSchema(articleSalesDaily).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTop10InfoporteursSchema = createInsertSchema(top10Infoporteurs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTop10WinnersSchema = createInsertSchema(top10Winners).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTop10RedistributionsSchema = createInsertSchema(top10Redistributions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWeeklyStreaksSchema = createInsertSchema(weeklyStreaks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -1188,6 +1343,13 @@ export type Article = typeof articles.$inferSelect;
 export type ArticleInvestment = typeof articleInvestments.$inferSelect;
 export type VisuPointsPack = typeof visuPointsPacks.$inferSelect;
 export type VisuPointsPurchase = typeof visuPointsPurchases.$inferSelect;
+
+// Nouveaux types TOP10 et fidélité
+export type ArticleSalesDaily = typeof articleSalesDaily.$inferSelect;
+export type Top10Infoporteurs = typeof top10Infoporteurs.$inferSelect;
+export type Top10Winners = typeof top10Winners.$inferSelect;
+export type Top10Redistributions = typeof top10Redistributions.$inferSelect;
+export type WeeklyStreaks = typeof weeklyStreaks.$inferSelect;
 
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
