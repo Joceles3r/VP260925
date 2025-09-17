@@ -384,7 +384,7 @@ export class Top10Service {
   /**
    * NOUVELLE MÉTHODE - Redistribution intelligente selon les règles 60/40
    * 60% pour TOP10 infoporteurs, 40% pour investi-lecteurs vainqueurs
-   * SÉCURISÉ - Support transactionnel pour garantir l'atomicité
+   * MATHÉMATIQUES EXACTES - Arithmétique en centimes pour précision absolue
    */
   private static async executeSmartRedistribution(
     top10Infoporteurs: Top10Infoporteurs[], 
@@ -392,33 +392,77 @@ export class Top10Service {
     redistribution: Top10Redistributions,
     tx?: any
   ): Promise<void> {
-    const totalPool = parseFloat(redistribution.totalPoolEUR);
-    if (totalPool <= 0) {
-      console.log(`[TOP10] ⚠️ Pas de pot de redistribution (${totalPool}€)`);
+    const totalPoolEUR = parseFloat(redistribution.totalPoolEUR);
+    if (totalPoolEUR <= 0) {
+      console.log(`[TOP10] ⚠️ Pas de pot de redistribution (${totalPoolEUR}€)`);
       return;
     }
     
-    // Calculs selon la répartition 60/40
-    const top10Pool = totalPool * TOP10_SYSTEM.SPLIT_TOP10_PERCENT; // 60%
-    const winnersPool = totalPool * TOP10_SYSTEM.SPLIT_WINNERS_PERCENT; // 40%
+    // CONVERSION EN CENTIMES pour arithmétique exacte
+    const totalPoolCents = Math.round(totalPoolEUR * 100);
     
-    console.log(`[TOP10] 📊 Redistribution: ${totalPool.toFixed(2)}€ total → TOP10: ${top10Pool.toFixed(2)}€ (60%), Vainqueurs: ${winnersPool.toFixed(2)}€ (40%)`);
+    // Validation des pourcentages constants
+    if (TOP10_SYSTEM.SPLIT_TOP10_PERCENT + TOP10_SYSTEM.SPLIT_WINNERS_PERCENT !== 1.0) {
+      throw new Error(`ERREUR CONSTANTES: Split ne fait pas 100% (${TOP10_SYSTEM.SPLIT_TOP10_PERCENT} + ${TOP10_SYSTEM.SPLIT_WINNERS_PERCENT})`);
+    }
     
-    // Redistribuer aux TOP10 infoporteurs
-    if (top10Infoporteurs.length > 0) {
-      const sharePerInfoporteur = top10Pool / top10Infoporteurs.length;
-      for (const infoporteur of top10Infoporteurs) {
-        await this.distributeToInfoporteur(infoporteur, sharePerInfoporteur, tx);
+    // CALCULS EXACTS EN CENTIMES
+    const top10PoolCents = Math.round(totalPoolCents * TOP10_SYSTEM.SPLIT_TOP10_PERCENT); // 60%
+    const winnersPoolCents = totalPoolCents - top10PoolCents; // 40% (calculé pour garantir exactitude)
+    
+    // Vérification mathématique stricte
+    if (top10PoolCents + winnersPoolCents !== totalPoolCents) {
+      throw new Error(`ERREUR CRITIQUE Split centimes: ${totalPoolCents} != ${top10PoolCents} + ${winnersPoolCents}`);
+    }
+    
+    console.log(`[TOP10] 📊 Redistribution EXACTE: ${(totalPoolCents/100).toFixed(2)}€ total → TOP10: ${(top10PoolCents/100).toFixed(2)}€, Vainqueurs: ${(winnersPoolCents/100).toFixed(2)}€`);
+    
+    // DISTRIBUTION EXACTE avec gestion des restes d'arrondi
+    await this.distributePoolExactly(top10Infoporteurs, top10PoolCents, 'infoporteur', tx);
+    await this.distributePoolExactly(winners, winnersPoolCents, 'winner', tx);
+  }
+
+  /**
+   * DISTRIBUTION EXACTE - Répartition précise en centimes avec gestion des restes
+   */
+  private static async distributePoolExactly(
+    recipients: any[], 
+    poolCents: number, 
+    recipientType: 'infoporteur' | 'winner',
+    tx?: any
+  ): Promise<void> {
+    if (recipients.length === 0) return;
+    
+    // Calculer la part de base par destinataire (en centimes)
+    const baseShareCents = Math.floor(poolCents / recipients.length);
+    const remainderCents = poolCents - (baseShareCents * recipients.length);
+    
+    console.log(`[TOP10] 💵 Distribution ${recipientType}: ${recipients.length} destinataires, part base: ${baseShareCents/100}€, reste: ${remainderCents/100}€`);
+    
+    // Distribuer avec gestion du reste (attribué aux premiers destinataires)
+    let distributedCents = 0;
+    
+    for (let i = 0; i < recipients.length; i++) {
+      const recipient = recipients[i];
+      const shareCents = baseShareCents + (i < remainderCents ? 1 : 0); // 1 centime supplémentaire pour les premiers
+      const shareEUR = shareCents / 100;
+      
+      distributedCents += shareCents;
+      
+      if (recipientType === 'infoporteur') {
+        await this.distributeToInfoporteur(recipient, shareEUR, tx);
+      } else {
+        await this.distributeToWinner(recipient, shareEUR, tx);
       }
     }
     
-    // Redistribuer aux investi-lecteurs vainqueurs
-    if (winners.length > 0) {
-      const sharePerWinner = winnersPool / winners.length;
-      for (const winner of winners) {
-        await this.distributeToWinner(winner, sharePerWinner, tx);
-      }
+    // Vérification finale de cohérence
+    if (distributedCents !== poolCents) {
+      throw new Error(`ERREUR DISTRIBUTION: ${poolCents} centimes != ${distributedCents} centimes distribués`);
     }
+    
+    console.log(`[TOP10] ✅ Distribution ${recipientType} terminée: ${distributedCents/100}€ distribués exactement`);
+  }
     
     // Marquer la redistribution comme terminée
     const updateData = {
@@ -715,9 +759,10 @@ export class Top10Service {
     
     for (const investment of investments) {
       try {
-        // CORRECTION CRITIQUE : Calculer le montant NET après commission VISUAL 30%
-        const grossAmount = parseFloat(investment.amount);
-        const netAmount = Math.round(grossAmount * VISUAL_PLATFORM_FEE.NET_TO_INFOPORTEUR * 100) / 100;
+        // CORRECTION CRITIQUE : Calculer le montant NET en centimes pour précision exacte
+        const grossCents = Math.round(parseFloat(investment.amount) * 100);
+        const netCents = Math.round(grossCents * VISUAL_PLATFORM_FEE.NET_TO_INFOPORTEUR); // 70%
+        const netAmount = netCents / 100;
         
         console.log(`[TOP10] 💰 Vente ${investment.articleId}: Brut ${grossAmount}€ → Net ${netAmount}€ (après 30% VISUAL)`);
         
