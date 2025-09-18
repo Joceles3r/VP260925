@@ -1401,11 +1401,23 @@ export const projectRenewals = pgTable("project_renewals", {
   paymentIntentId: varchar("payment_intent_id"), // Stripe PaymentIntent ID
   amountEUR: decimal("amount_eur", { precision: 10, scale: 2 }).notNull().default('25.00'),
   paidAt: timestamp("paid_at"),
+  activatedAt: timestamp("activated_at"), // Quand le renouvellement devient actif
   expiresAt: timestamp("expires_at").notNull(), // 15 minutes pour décider
   renewalApproved: boolean("renewal_approved").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
-});
+}, (table) => [
+  // Contraintes business critiques
+  unique("unique_payment_intent").on(table.paymentIntentId), // Éviter doublons Stripe
+  // Note: Contrainte unique partielle sera appliquée via code - max 1 renouvellement actif par projet/catégorie
+  // Vérifier que le montant est exactement 25€
+  sql`CHECK (${table.amountEUR} = 25.00)`,
+  // Vérifier que le rang est entre 11 et 100
+  sql`CHECK (${table.currentRank} >= 11 AND ${table.currentRank} <= 100)`,
+  // Index pour performance
+  index("idx_renewals_category_status").on(table.categoryId, table.status),
+  index("idx_renewals_creator").on(table.creatorId)
+]);
 
 // File d'attente des projets en attente
 export const projectQueue = pgTable("project_queue", {
@@ -1415,13 +1427,21 @@ export const projectQueue = pgTable("project_queue", {
   categoryId: varchar("category_id").notNull().references(() => videoCategories.id, { onDelete: 'cascade' }),
   queuePosition: integer("queue_position").notNull(), // Position dans la file
   priority: integer("priority").notNull().default(0), // Priorité (0 = normale)
+  status: varchar("status", { length: 20 }).notNull().default('waiting'), // 'waiting', 'ready', 'assigned'
+  readyAt: timestamp("ready_at"), // Quand le projet sera prêt (après délai 15min)
   isActive: boolean("is_active").notNull().default(true),
   submittedAt: timestamp("submitted_at").defaultNow(),
   assignedAt: timestamp("assigned_at"), // Quand le projet a été assigné à une place
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 }, (table) => [
-  unique("unique_project_category_queue").on(table.projectId, table.categoryId)
+  // Contraintes d'unicité critiques
+  unique("unique_project_category_queue").on(table.projectId, table.categoryId),
+  unique("unique_category_position").on(table.categoryId, table.queuePosition),
+  // Index pour performance et contraintes
+  index("idx_queue_category_status").on(table.categoryId, table.status),
+  index("idx_queue_ready_at").on(table.readyAt),
+  index("idx_queue_position").on(table.categoryId, table.queuePosition)
 ]);
 
 // Historique des remplacements automatiques
@@ -1434,9 +1454,19 @@ export const projectReplacements = pgTable("project_replacements", {
   newCreatorId: varchar("new_creator_id").references(() => users.id, { onDelete: 'cascade' }),
   replacedRank: integer("replaced_rank").notNull(), // Rang du projet remplacé (11-100)
   reason: varchar("reason").notNull(), // 'auto_replacement', 'renewal_expired', 'manual'
+  idempotencyKey: varchar("idempotency_key"), // Pour éviter doubles remplacements
   replacementDate: timestamp("replacement_date").defaultNow(),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => [
+  // Contraintes pour éviter doublons et assurer cohérence
+  unique("unique_category_rank_replacement").on(table.categoryId, table.replacedRank, table.replacementDate),
+  unique("unique_idempotency_replacement").on(table.idempotencyKey),
+  // Vérifier que le rang remplacé est entre 11 et 100
+  sql`CHECK (${table.replacedRank} >= 11 AND ${table.replacedRank} <= 100)`,
+  // Index pour performance
+  index("idx_replacements_category").on(table.categoryId, table.replacementDate),
+  index("idx_replacements_creator").on(table.replacedCreatorId)
+]);
 
 // Schémas d'insertion pour système de renouvellement
 export const insertProjectRenewalSchema = createInsertSchema(projectRenewals).omit({
