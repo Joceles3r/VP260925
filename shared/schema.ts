@@ -1581,3 +1581,159 @@ export type InsertStripeTransfer = z.infer<typeof insertStripeTransferSchema>;
 export type InsertProjectRenewal = z.infer<typeof insertProjectRenewalSchema>;
 export type InsertProjectQueue = z.infer<typeof insertProjectQueueSchema>;
 export type InsertProjectReplacement = z.infer<typeof insertProjectReplacementSchema>;
+
+// ===== SYSTÈME D'AGENTS IA AUTONOMES =====
+
+// Énums pour les agents IA
+export const agentTypeEnum = pgEnum("agent_type", ["visualai", "visualfinanceai", "admin"]);
+export const decisionStatusEnum = pgEnum("decision_status", ["pending", "approved", "rejected", "auto", "escalated"]);
+export const agentAuditActionEnum = pgEnum("agent_audit_action", [
+  "decision_made", "payout_executed", "user_blocked", "category_closed", 
+  "extension_granted", "points_converted", "policy_updated", "parameters_changed"
+]);
+
+// Table des décisions des agents IA
+export const agentDecisions = pgTable("agent_decisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentType: agentTypeEnum("agent_type").notNull(),
+  decisionType: varchar("decision_type").notNull(), // 'user_block', 'payout', 'extension', etc.
+  subjectId: varchar("subject_id"), // ID du sujet concerné (user, project, category)
+  subjectType: varchar("subject_type"), // 'user', 'project', 'category', 'transaction'
+  ruleApplied: varchar("rule_applied").notNull(),
+  score: decimal("score", { precision: 10, scale: 4 }), // Score de confiance/sévérité
+  justification: text("justification").notNull(),
+  parameters: jsonb("parameters"), // Paramètres de la décision
+  status: decisionStatusEnum("status").notNull().default('pending'),
+  adminComment: text("admin_comment"), // Commentaire admin si validé/rejeté
+  validatedBy: varchar("validated_by").references(() => users.id, { onDelete: 'set null' }),
+  validatedAt: timestamp("validated_at"),
+  executedAt: timestamp("executed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  index("idx_decisions_agent_status").on(table.agentType, table.status),
+  index("idx_decisions_subject").on(table.subjectType, table.subjectId),
+  index("idx_decisions_created").on(table.createdAt)
+]);
+
+// Table d'audit immuable avec hash chaîné
+export const agentAuditLog = pgTable("agent_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), // ID standard pour cohérence
+  agentType: agentTypeEnum("agent_type").notNull(),
+  action: agentAuditActionEnum("action").notNull(),
+  subjectId: varchar("subject_id"),
+  subjectType: varchar("subject_type"),
+  details: jsonb("details").notNull(),
+  previousHash: varchar("previous_hash"), // Hash de l'entrée précédente
+  currentHash: varchar("current_hash").notNull(), // Hash de cette entrée
+  idempotencyKey: varchar("idempotency_key"),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  actor: varchar("actor").notNull() // 'visualai', 'visualfinanceai', 'admin:{userId}'
+}, (table) => [
+  unique("unique_idempotency").on(table.idempotencyKey),
+  index("idx_audit_timestamp").on(table.timestamp),
+  index("idx_audit_subject").on(table.subjectType, table.subjectId),
+  index("idx_audit_agent_action").on(table.agentType, table.action)
+]);
+
+// Ledger financier pour toutes les transactions
+export const financialLedger = pgTable("financial_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionType: varchar("transaction_type").notNull(), // 'payout', 'fee', 'conversion', 'extension'
+  referenceId: varchar("reference_id").notNull(), // ID de référence (orderId, categoryId, etc)
+  referenceType: varchar("reference_type").notNull(), // 'category_close', 'article_sale', 'points_conversion'
+  recipientId: varchar("recipient_id"), // User ID bénéficiaire (null pour VISUAL)
+  grossAmountCents: integer("gross_amount_cents").notNull(),
+  netAmountCents: integer("net_amount_cents").notNull(),
+  feeCents: integer("fee_cents").notNull().default(0),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  stripeTransferId: varchar("stripe_transfer_id"),
+  idempotencyKey: varchar("idempotency_key").notNull(),
+  payoutRule: varchar("payout_rule"), // Version de la règle appliquée
+  signature: varchar("signature"), // Signature cryptographique
+  status: varchar("status").notNull().default('pending'), // 'pending', 'completed', 'failed'
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  unique("unique_ledger_idempotency").on(table.idempotencyKey),
+  index("idx_ledger_reference").on(table.referenceType, table.referenceId),
+  index("idx_ledger_recipient").on(table.recipientId),
+  index("idx_ledger_status").on(table.status),
+  index("idx_ledger_created").on(table.createdAt)
+]);
+
+// Recettes de paiement versionnées 
+export const payoutRecipes = pgTable("payout_recipes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  version: varchar("version").notNull(), // 'cat_close_40_30_7_23_v1'
+  ruleType: varchar("rule_type").notNull(), // 'category_close', 'article_sale', 'pot24h', 'points'
+  formula: jsonb("formula").notNull(), // Formule complète en JSON
+  description: text("description").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: varchar("created_by").notNull(), // 'visualfinanceai' ou 'admin:{userId}'
+  createdAt: timestamp("created_at").defaultNow(),
+  activatedAt: timestamp("activated_at")
+}, (table) => [
+  unique("unique_recipe_version").on(table.version),
+  index("idx_recipes_type_active").on(table.ruleType, table.isActive)
+]);
+
+// Paramètres runtime des agents
+export const agentParameters = pgTable("agent_parameters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parameterKey: varchar("parameter_key").notNull(),
+  parameterValue: varchar("parameter_value").notNull(),
+  parameterType: varchar("parameter_type").notNull(), // 'number', 'string', 'boolean', 'json'
+  description: text("description").notNull(),
+  modifiableByAdmin: boolean("modifiable_by_admin").notNull().default(true),
+  lastModifiedBy: varchar("last_modified_by"),
+  lastModifiedAt: timestamp("last_modified_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  unique("unique_parameter_key").on(table.parameterKey),
+  index("idx_parameters_modifiable").on(table.modifiableByAdmin)
+]);
+
+// Schémas d'insertion pour système d'agents IA
+export const insertAgentDecisionSchema = createInsertSchema(agentDecisions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertAgentAuditLogSchema = createInsertSchema(agentAuditLog).omit({
+  id: true,
+  timestamp: true
+});
+
+export const insertFinancialLedgerSchema = createInsertSchema(financialLedger).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertPayoutRecipeSchema = createInsertSchema(payoutRecipes).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertAgentParameterSchema = createInsertSchema(agentParameters).omit({
+  id: true,
+  createdAt: true,
+  lastModifiedAt: true
+});
+
+// Types d'insertion et de sélection pour agents IA
+export type InsertAgentDecision = z.infer<typeof insertAgentDecisionSchema>;
+export type AgentDecision = typeof agentDecisions.$inferSelect;
+
+export type InsertAgentAuditLog = z.infer<typeof insertAgentAuditLogSchema>;
+export type AgentAuditLog = typeof agentAuditLog.$inferSelect;
+
+export type InsertFinancialLedger = z.infer<typeof insertFinancialLedgerSchema>;
+export type FinancialLedger = typeof financialLedger.$inferSelect;
+
+export type InsertPayoutRecipe = z.infer<typeof insertPayoutRecipeSchema>;
+export type PayoutRecipe = typeof payoutRecipes.$inferSelect;
+
+export type InsertAgentParameter = z.infer<typeof insertAgentParameterSchema>;
+export type AgentParameter = typeof agentParameters.$inferSelect;
