@@ -53,6 +53,7 @@ import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
 import { categoriesRouter } from "./categories/routes";
 import { generateReceiptPDF } from "./receipts/handlers";
+import agentRoutes from "./routes/agentRoutes";
 import { VISUPointsService } from "./services/visuPointsService.js";
 import { Top10Service } from "./services/top10Service.js";
 import { FidelityService } from "./services/fidelityService.js";
@@ -2526,6 +2527,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE 5: RÈGLES CATÉGORIES VIDÉOS =====
   // Video category management with automated lifecycle rules
   app.use('/api/categories', categoriesRouter);
+
+  // ===== AGENTS IA: ORCHESTRATION ET ADMINISTRATION =====
+  // AI agents for platform automation and financial management
+  app.use('/api/agents', agentRoutes);
 
   // ===== MODULE 6: SEUILS DE RETRAIT PAR PROFIL =====
   // Withdrawal request management with profile-based minimum thresholds
