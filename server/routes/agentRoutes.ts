@@ -13,6 +13,77 @@ import { visualFinanceAI } from '../services/visualFinanceAI';
 import { storage } from '../storage';
 import { isAuthenticated } from '../replitAuth';
 
+// SCHÉMAS DE VALIDATION STRICTE ZOD
+const categoryCloseSchema = z.object({
+  categoryId: z.string().min(1, "ID catégorie requis"),
+  projects: z.array(z.object({
+    id: z.string(),
+    finalRank: z.number().min(1),
+    totalInvestments: z.number().min(0)
+  })).min(1, "Au moins un projet requis"),
+  investments: z.array(z.object({
+    userId: z.string(),
+    projectId: z.string(),
+    amountCents: z.number().min(1)
+  })).min(1, "Au moins un investissement requis")
+});
+
+const extensionSchema = z.object({
+  projectId: z.string().min(1, "ID projet requis"),
+  userId: z.string().min(1, "ID utilisateur requis"),
+  paymentIntentId: z.string().min(1, "ID paiement requis")
+});
+
+const pointsConversionSchema = z.object({
+  userId: z.string().min(1, "ID utilisateur requis"),
+  availablePoints: z.number().min(2500, "Minimum 2500 points requis")
+});
+
+const goldenTicketSchema = z.object({
+  userId: z.string().min(1, "ID utilisateur requis"),
+  categoryId: z.string().min(1, "ID catégorie requis"),
+  purchaseAmountCents: z.number().min(100, "Montant minimum 1€"),
+  finalRank: z.number().min(1, "Rang final requis")
+});
+
+const articleSaleSchema = z.object({
+  articleId: z.string().min(1, "ID article requis"),
+  buyerId: z.string().min(1, "ID acheteur requis"),
+  priceEUR: z.number().min(0.2, "Prix minimum 0.20€")
+});
+
+const adminDecisionSchema = z.object({
+  adminUserId: z.string().min(1, "ID admin requis"),
+  comment: z.string().optional()
+});
+
+const parameterUpdateSchema = z.object({
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  adminUserId: z.string().min(1, "ID admin requis")
+});
+
+const complianceReportSchema = z.object({
+  period: z.enum(['daily', 'weekly', 'monthly'], { errorMap: () => ({ message: "Période invalide" }) })
+});
+
+// MIDDLEWARE DE VALIDATION
+const validateBody = (schema: z.ZodSchema) => {
+  return (req: any, res: any, next: any) => {
+    try {
+      req.validatedBody = schema.parse(req.body);
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          error: 'Données invalides', 
+          details: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+        });
+      }
+      return res.status(400).json({ error: 'Format de données invalide' });
+    }
+  };
+};
+
 const router = express.Router();
 
 // MIDDLEWARE SÉCURITÉ ADMIN - CRITIQUE POUR PROTECTION
@@ -80,13 +151,9 @@ const requireOrchestrationAccess = async (req: any, res: any, next: any) => {
  * POST /api/agents/orchestrate/category-close
  * Déclencher workflow automatique de clôture catégorie
  */
-router.post('/orchestrate/category-close', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+router.post('/orchestrate/category-close', isAuthenticated, requireOrchestrationAccess, validateBody(categoryCloseSchema), async (req, res) => {
   try {
-    const { categoryId, projects, investments } = req.body;
-    
-    if (!categoryId || !projects || !investments) {
-      return res.status(400).json({ error: 'Paramètres manquants' });
-    }
+    const { categoryId, projects, investments } = req.validatedBody;
 
     const execution = await agentOrchestrator.executeCategoryCloseWorkflow(
       categoryId,
@@ -117,9 +184,9 @@ router.post('/orchestrate/category-close', isAuthenticated, requireOrchestration
  * POST /api/agents/orchestrate/extension
  * Traiter extension payante 168h
  */
-router.post('/orchestrate/extension', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+router.post('/orchestrate/extension', isAuthenticated, requireOrchestrationAccess, validateBody(extensionSchema), async (req, res) => {
   try {
-    const { projectId, userId, paymentIntentId } = req.body;
+    const { projectId, userId, paymentIntentId } = req.validatedBody;
     
     const execution = await agentOrchestrator.executeExtensionWorkflow(
       projectId,
@@ -143,9 +210,9 @@ router.post('/orchestrate/extension', isAuthenticated, requireOrchestrationAcces
  * POST /api/agents/orchestrate/points-conversion
  * Convertir VISUpoints en euros
  */
-router.post('/orchestrate/points-conversion', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+router.post('/orchestrate/points-conversion', isAuthenticated, requireOrchestrationAccess, validateBody(pointsConversionSchema), async (req, res) => {
   try {
-    const { userId, availablePoints } = req.body;
+    const { userId, availablePoints } = req.validatedBody;
     
     const execution = await agentOrchestrator.executePointsConversionWorkflow(
       userId,
@@ -168,13 +235,9 @@ router.post('/orchestrate/points-conversion', isAuthenticated, requireOrchestrat
  * POST /api/agents/orchestrate/golden-ticket
  * Traiter remboursement Golden Ticket
  */
-router.post('/orchestrate/golden-ticket', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+router.post('/orchestrate/golden-ticket', isAuthenticated, requireOrchestrationAccess, validateBody(goldenTicketSchema), async (req, res) => {
   try {
-    const { userId, categoryId, purchaseAmountCents, finalRank } = req.body;
-    
-    if (!userId || !categoryId || !purchaseAmountCents || finalRank === undefined) {
-      return res.status(400).json({ error: 'Paramètres manquants pour Golden Ticket' });
-    }
+    const { userId, categoryId, purchaseAmountCents, finalRank } = req.validatedBody;
 
     // Calcul du remboursement selon les règles de rang
     const refundResult = await visualFinanceAI.calculateGoldenTicketRefund({
@@ -208,13 +271,9 @@ router.post('/orchestrate/golden-ticket', isAuthenticated, requireOrchestrationA
  * POST /api/agents/orchestrate/article-sale
  * Traiter vente d'article avec partage 30/70
  */
-router.post('/orchestrate/article-sale', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+router.post('/orchestrate/article-sale', isAuthenticated, requireOrchestrationAccess, validateBody(articleSaleSchema), async (req, res) => {
   try {
-    const { articleId, buyerId, priceEUR } = req.body;
-    
-    if (!articleId || !buyerId || !priceEUR) {
-      return res.status(400).json({ error: 'Paramètres manquants pour vente article' });
-    }
+    const { articleId, buyerId, priceEUR } = req.validatedBody;
 
     // Calcul de la répartition 30% plateforme / 70% créateur
     const saleResult = await visualFinanceAI.processArticleSale({
@@ -278,10 +337,10 @@ router.get('/admin/decisions/pending', isAuthenticated, requireAdminAccess, asyn
  * POST /api/agents/admin/decisions/:decisionId/approve
  * Approuver une décision en attente
  */
-router.post('/admin/decisions/:decisionId/approve', isAuthenticated, requireAdminAccess, async (req, res) => {
+router.post('/admin/decisions/:decisionId/approve', isAuthenticated, requireAdminAccess, validateBody(adminDecisionSchema), async (req, res) => {
   try {
     const { decisionId } = req.params;
-    const { adminUserId, comment } = req.body;
+    const { adminUserId, comment } = req.validatedBody;
     
     if (!adminUserId) {
       return res.status(400).json({ error: 'ID administrateur requis' });
@@ -306,10 +365,10 @@ router.post('/admin/decisions/:decisionId/approve', isAuthenticated, requireAdmi
  * POST /api/agents/admin/decisions/:decisionId/reject
  * Rejeter une décision en attente
  */
-router.post('/admin/decisions/:decisionId/reject', isAuthenticated, requireAdminAccess, async (req, res) => {
+router.post('/admin/decisions/:decisionId/reject', isAuthenticated, requireAdminAccess, validateBody(adminDecisionSchema.extend({ reason: z.string().min(1, "Raison requise") })), async (req, res) => {
   try {
     const { decisionId } = req.params;
-    const { adminUserId, reason } = req.body;
+    const { adminUserId, reason } = req.validatedBody;
     
     if (!adminUserId || !reason) {
       return res.status(400).json({ error: 'ID administrateur et raison requis' });
@@ -377,10 +436,10 @@ router.get('/admin/parameters', isAuthenticated, requireAdminAccess, async (req,
  * PUT /api/agents/admin/parameters/:parameterKey
  * Modifier un paramètre runtime
  */
-router.put('/admin/parameters/:parameterKey', isAuthenticated, requireAdminAccess, async (req, res) => {
+router.put('/admin/parameters/:parameterKey', isAuthenticated, requireAdminAccess, validateBody(parameterUpdateSchema), async (req, res) => {
   try {
     const { parameterKey } = req.params;
-    const { value, adminUserId } = req.body;
+    const { value, adminUserId } = req.validatedBody;
     
     if (!value || !adminUserId) {
       return res.status(400).json({ error: 'Valeur et ID administrateur requis' });
@@ -420,13 +479,9 @@ router.get('/admin/system-health', isAuthenticated, requireAdminAccess, async (r
  * POST /api/agents/admin/reports/compliance
  * Générer rapport de compliance
  */
-router.post('/admin/reports/compliance', isAuthenticated, requireAdminAccess, async (req, res) => {
+router.post('/admin/reports/compliance', isAuthenticated, requireAdminAccess, validateBody(complianceReportSchema), async (req, res) => {
   try {
-    const { period } = req.body; // 'daily', 'weekly', 'monthly'
-    
-    if (!['daily', 'weekly', 'monthly'].includes(period)) {
-      return res.status(400).json({ error: 'Période invalide' });
-    }
+    const { period } = req.validatedBody;
 
     const report = await adminConsole.generateComplianceReport(period);
     
