@@ -11,8 +11,68 @@ import { adminConsole } from '../services/adminConsole';
 import { visualAI } from '../services/visualAI';
 import { visualFinanceAI } from '../services/visualFinanceAI';
 import { storage } from '../storage';
+import { isAuthenticated } from '../replitAuth';
 
 const router = express.Router();
+
+// MIDDLEWARE SÉCURITÉ ADMIN - CRITIQUE POUR PROTECTION
+const requireAdminAccess = async (req: any, res: any, next: any) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentification requise' });
+    }
+
+    const user = await storage.getUser(userId);
+    if (!user || user.profileType !== 'admin') {
+      // Log tentative d'accès non autorisé pour sécurité
+      await storage.createAuditLogEntry({
+        agentType: 'admin',
+        action: 'policy_updated',
+        subjectType: 'unauthorized_access',
+        subjectId: userId,
+        details: {
+          endpoint: req.originalUrl,
+          method: req.method,
+          userAgent: req.get('User-Agent'),
+          ip: req.ip,
+          profileType: user?.profileType || 'none'
+        },
+        actor: `security:${userId}`,
+        currentHash: '',
+        previousHash: ''
+      });
+      return res.status(403).json({ error: 'Accès administrateur requis' });
+    }
+
+    req.adminUser = user;
+    next();
+  } catch (error) {
+    console.error('[AgentRoutes] Erreur vérification admin:', error);
+    res.status(500).json({ error: 'Erreur de vérification des droits' });
+  }
+};
+
+// MIDDLEWARE ORCHESTRATION - Seulement pour systèmes autorisés
+const requireOrchestrationAccess = async (req: any, res: any, next: any) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentification requise' });
+    }
+
+    const user = await storage.getUser(userId);
+    if (!user || !['admin', 'system'].includes(user.profileType)) {
+      return res.status(403).json({ error: 'Accès orchestration non autorisé' });
+    }
+
+    req.orchestrationUser = user;
+    next();
+  } catch (error) {
+    console.error('[AgentRoutes] Erreur vérification orchestration:', error);
+    res.status(500).json({ error: 'Erreur de vérification des droits' });
+  }
+};
 
 // ===== ENDPOINTS ORCHESTRATION =====
 
@@ -20,7 +80,7 @@ const router = express.Router();
  * POST /api/agents/orchestrate/category-close
  * Déclencher workflow automatique de clôture catégorie
  */
-router.post('/orchestrate/category-close', async (req, res) => {
+router.post('/orchestrate/category-close', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
   try {
     const { categoryId, projects, investments } = req.body;
     
@@ -57,7 +117,7 @@ router.post('/orchestrate/category-close', async (req, res) => {
  * POST /api/agents/orchestrate/extension
  * Traiter extension payante 168h
  */
-router.post('/orchestrate/extension', async (req, res) => {
+router.post('/orchestrate/extension', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
   try {
     const { projectId, userId, paymentIntentId } = req.body;
     
@@ -83,7 +143,7 @@ router.post('/orchestrate/extension', async (req, res) => {
  * POST /api/agents/orchestrate/points-conversion
  * Convertir VISUpoints en euros
  */
-router.post('/orchestrate/points-conversion', async (req, res) => {
+router.post('/orchestrate/points-conversion', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
   try {
     const { userId, availablePoints } = req.body;
     
@@ -110,7 +170,7 @@ router.post('/orchestrate/points-conversion', async (req, res) => {
  * GET /api/agents/admin/dashboard
  * Tableau de bord administrateur complet
  */
-router.get('/admin/dashboard', async (req, res) => {
+router.get('/admin/dashboard', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const dashboard = await adminConsole.getDashboard();
     res.json(dashboard);
@@ -124,7 +184,7 @@ router.get('/admin/dashboard', async (req, res) => {
  * GET /api/agents/admin/decisions/pending
  * Récupérer décisions en attente de validation
  */
-router.get('/admin/decisions/pending', async (req, res) => {
+router.get('/admin/decisions/pending', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const pendingDecisions = await adminConsole.getPendingDecisions();
     res.json(pendingDecisions);
@@ -138,7 +198,7 @@ router.get('/admin/decisions/pending', async (req, res) => {
  * POST /api/agents/admin/decisions/:decisionId/approve
  * Approuver une décision en attente
  */
-router.post('/admin/decisions/:decisionId/approve', async (req, res) => {
+router.post('/admin/decisions/:decisionId/approve', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const { decisionId } = req.params;
     const { adminUserId, comment } = req.body;
@@ -166,7 +226,7 @@ router.post('/admin/decisions/:decisionId/approve', async (req, res) => {
  * POST /api/agents/admin/decisions/:decisionId/reject
  * Rejeter une décision en attente
  */
-router.post('/admin/decisions/:decisionId/reject', async (req, res) => {
+router.post('/admin/decisions/:decisionId/reject', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const { decisionId } = req.params;
     const { adminUserId, reason } = req.body;
@@ -195,7 +255,7 @@ router.post('/admin/decisions/:decisionId/reject', async (req, res) => {
  * GET /api/agents/admin/slo-status
  * Statut des SLOs et performance
  */
-router.get('/admin/slo-status', async (req, res) => {
+router.get('/admin/slo-status', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const sloStatus = await adminConsole.getSLOStatus();
     res.json(sloStatus);
@@ -209,7 +269,7 @@ router.get('/admin/slo-status', async (req, res) => {
  * GET /api/agents/admin/financial-summary
  * Résumé financier et réconciliation
  */
-router.get('/admin/financial-summary', async (req, res) => {
+router.get('/admin/financial-summary', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const summary = await adminConsole.getFinancialSummary();
     res.json(summary);
@@ -223,7 +283,7 @@ router.get('/admin/financial-summary', async (req, res) => {
  * GET /api/agents/admin/parameters
  * Récupérer paramètres configurables
  */
-router.get('/admin/parameters', async (req, res) => {
+router.get('/admin/parameters', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const parameters = await adminConsole.getAgentParameters();
     res.json(parameters);
@@ -237,7 +297,7 @@ router.get('/admin/parameters', async (req, res) => {
  * PUT /api/agents/admin/parameters/:parameterKey
  * Modifier un paramètre runtime
  */
-router.put('/admin/parameters/:parameterKey', async (req, res) => {
+router.put('/admin/parameters/:parameterKey', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const { parameterKey } = req.params;
     const { value, adminUserId } = req.body;
@@ -266,7 +326,7 @@ router.put('/admin/parameters/:parameterKey', async (req, res) => {
  * GET /api/agents/admin/system-health
  * Santé du système et recommandations
  */
-router.get('/admin/system-health', async (req, res) => {
+router.get('/admin/system-health', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const health = await adminConsole.getSystemHealth();
     res.json(health);
@@ -280,7 +340,7 @@ router.get('/admin/system-health', async (req, res) => {
  * POST /api/agents/admin/reports/compliance
  * Générer rapport de compliance
  */
-router.post('/admin/reports/compliance', async (req, res) => {
+router.post('/admin/reports/compliance', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const { period } = req.body; // 'daily', 'weekly', 'monthly'
     
@@ -304,7 +364,7 @@ router.post('/admin/reports/compliance', async (req, res) => {
  * POST /api/agents/visualai/manual-moderation
  * Modération manuelle via VisualAI
  */
-router.post('/visualai/manual-moderation', async (req, res) => {
+router.post('/visualai/manual-moderation', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const { projectId, reason } = req.body;
     
@@ -325,7 +385,7 @@ router.post('/visualai/manual-moderation', async (req, res) => {
  * POST /api/agents/visualfinanceai/manual-payout
  * Paiement manuel via VisualFinanceAI  
  */
-router.post('/visualfinanceai/manual-payout', async (req, res) => {
+router.post('/visualfinanceai/manual-payout', isAuthenticated, requireAdminAccess, async (req, res) => {
   try {
     const { userId, amountCents, reason } = req.body;
     
