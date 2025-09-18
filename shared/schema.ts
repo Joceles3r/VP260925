@@ -120,6 +120,9 @@ export const stripeTransferStatusEnum = pgEnum('stripe_transfer_status', [
   'scheduled', 'pending', 'processing', 'completed', 'failed', 'cancelled'
 ]);
 
+// Renewal status enum for project renewal system (25€)
+export const renewalStatusEnum = pgEnum('renewal_status', ['pending', 'paid', 'active', 'expired', 'cancelled']);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1383,6 +1386,76 @@ export const insertStripeTransferSchema = createInsertSchema(stripeTransfers).om
   retryCount: true,  // Géré automatiquement par le système
 });
 
+// ===== SYSTÈME DE RENOUVELLEMENT PAYANT (25€) =====
+
+// Table des renouvellements de projets (25€)
+export const projectRenewals = pgTable("project_renewals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  categoryId: varchar("category_id").notNull().references(() => videoCategories.id, { onDelete: 'cascade' }),
+  currentRank: integer("current_rank").notNull(), // Rang actuel (11-100)
+  renewalCount: integer("renewal_count").notNull().default(0), // Nombre de renouvellements utilisés
+  maxRenewals: integer("max_renewals").notNull().default(1), // Maximum 1 renouvellement par porteur
+  status: renewalStatusEnum("status").notNull().default('pending'),
+  paymentIntentId: varchar("payment_intent_id"), // Stripe PaymentIntent ID
+  amountEUR: decimal("amount_eur", { precision: 10, scale: 2 }).notNull().default('25.00'),
+  paidAt: timestamp("paid_at"),
+  expiresAt: timestamp("expires_at").notNull(), // 15 minutes pour décider
+  renewalApproved: boolean("renewal_approved").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+// File d'attente des projets en attente
+export const projectQueue = pgTable("project_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  categoryId: varchar("category_id").notNull().references(() => videoCategories.id, { onDelete: 'cascade' }),
+  queuePosition: integer("queue_position").notNull(), // Position dans la file
+  priority: integer("priority").notNull().default(0), // Priorité (0 = normale)
+  isActive: boolean("is_active").notNull().default(true),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  assignedAt: timestamp("assigned_at"), // Quand le projet a été assigné à une place
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  unique("unique_project_category_queue").on(table.projectId, table.categoryId)
+]);
+
+// Historique des remplacements automatiques
+export const projectReplacements = pgTable("project_replacements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  categoryId: varchar("category_id").notNull().references(() => videoCategories.id, { onDelete: 'cascade' }),
+  replacedProjectId: varchar("replaced_project_id").notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  replacedCreatorId: varchar("replaced_creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  newProjectId: varchar("new_project_id").references(() => projects.id, { onDelete: 'cascade' }),
+  newCreatorId: varchar("new_creator_id").references(() => users.id, { onDelete: 'cascade' }),
+  replacedRank: integer("replaced_rank").notNull(), // Rang du projet remplacé (11-100)
+  reason: varchar("reason").notNull(), // 'auto_replacement', 'renewal_expired', 'manual'
+  replacementDate: timestamp("replacement_date").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow()
+});
+
+// Schémas d'insertion pour système de renouvellement
+export const insertProjectRenewalSchema = createInsertSchema(projectRenewals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProjectQueueSchema = createInsertSchema(projectQueue).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProjectReplacementSchema = createInsertSchema(projectReplacements).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema> & { id?: string };
 export type User = typeof users.$inferSelect;
@@ -1431,6 +1504,11 @@ export type Top10Redistributions = typeof top10Redistributions.$inferSelect;
 export type WeeklyStreaks = typeof weeklyStreaks.$inferSelect;
 export type StripeTransfer = typeof stripeTransfers.$inferSelect;
 
+// Types pour système de renouvellement payant (25€)
+export type ProjectRenewal = typeof projectRenewals.$inferSelect;
+export type ProjectQueue = typeof projectQueue.$inferSelect;
+export type ProjectReplacement = typeof projectReplacements.$inferSelect;
+
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
@@ -1468,3 +1546,8 @@ export type InsertVisuPointsPurchase = z.infer<typeof insertVisuPointsPurchaseSc
 
 // Nouveaux types d'insertion TOP10 et transferts Stripe
 export type InsertStripeTransfer = z.infer<typeof insertStripeTransferSchema>;
+
+// Types d'insertion pour système de renouvellement payant (25€)
+export type InsertProjectRenewal = z.infer<typeof insertProjectRenewalSchema>;
+export type InsertProjectQueue = z.infer<typeof insertProjectQueueSchema>;
+export type InsertProjectReplacement = z.infer<typeof insertProjectReplacementSchema>;
