@@ -49,11 +49,14 @@ export const VISUAL_FINANCE_CONFIG = {
   // Extension 168h
   extension_price_eur: 25,
   
-  // Golden Tickets remboursements
-  golden_ticket_refund_ranks_1_10: 1.0, // 100%
-  golden_ticket_refund_rank_11: 1.0, // 100%
-  golden_ticket_refund_ranks_12_20: 0.5, // 50%
-  golden_ticket_refund_others: 0.0, // 0%
+  // Golden Tickets remboursements - RÈGLES BUSINESS CORRECTES
+  golden_ticket_refund_rank_1: 1.00, // 100% pour rang 1
+  golden_ticket_refund_rank_2: 0.85, // 85% pour rang 2
+  golden_ticket_refund_rank_3: 0.70, // 70% pour rang 3
+  golden_ticket_refund_rank_4: 0.55, // 55% pour rang 4
+  golden_ticket_refund_rank_5: 0.40, // 40% pour rang 5
+  golden_ticket_refund_rank_6: 0.25, // 25% pour rang 6
+  golden_ticket_refund_others: 0.0, // 0% pour rangs 7+
   
   // SLOs VisualFinanceAI
   payout_generation_latency_ms: 2000,
@@ -382,15 +385,29 @@ export class VisualFinanceAIService {
     const config = ticketConfig[ticketType];
     let refundPercentage = 0;
     
-    // Règles de remboursement selon rang final
-    if (finalRank >= 1 && finalRank <= 10) {
-      refundPercentage = this.config.golden_ticket_refund_ranks_1_10; // 100%
-    } else if (finalRank === 11) {
-      refundPercentage = this.config.golden_ticket_refund_rank_11; // 100%
-    } else if (finalRank >= 12 && finalRank <= 20) {
-      refundPercentage = this.config.golden_ticket_refund_ranks_12_20; // 50%
-    } else {
-      refundPercentage = this.config.golden_ticket_refund_others; // 0%
+    // Règles de remboursement selon rang final - RÈGLES BUSINESS CORRECTES
+    switch (finalRank) {
+      case 1:
+        refundPercentage = this.config.golden_ticket_refund_rank_1; // 100%
+        break;
+      case 2:
+        refundPercentage = this.config.golden_ticket_refund_rank_2; // 85%
+        break;
+      case 3:
+        refundPercentage = this.config.golden_ticket_refund_rank_3; // 70%
+        break;
+      case 4:
+        refundPercentage = this.config.golden_ticket_refund_rank_4; // 55%
+        break;
+      case 5:
+        refundPercentage = this.config.golden_ticket_refund_rank_5; // 40%
+        break;
+      case 6:
+        refundPercentage = this.config.golden_ticket_refund_rank_6; // 25%
+        break;
+      default:
+        refundPercentage = this.config.golden_ticket_refund_others; // 0% pour rangs 7+
+        break;
     }
     
     const refundAmount = config.investment * refundPercentage;
@@ -420,7 +437,7 @@ export class VisualFinanceAIService {
       });
     }
     
-    await this.logAuditEntry('payout_executed', 'golden_ticket', userId, goldenTicket);
+    await this.logAuditEntry('payout_executed', 'golden_ticket', userId, goldenTicket, 'visualfinanceai');
     
     return goldenTicket;
   }
