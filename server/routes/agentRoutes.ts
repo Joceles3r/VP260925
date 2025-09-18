@@ -13,18 +13,19 @@ import { visualFinanceAI } from '../services/visualFinanceAI';
 import { storage } from '../storage';
 import { isAuthenticated } from '../replitAuth';
 
-// SCHÉMAS DE VALIDATION STRICTE ZOD
+// SCHÉMAS DE VALIDATION STRICTE ZOD - ALIGNÉS AVEC shared/schema.ts
 const categoryCloseSchema = z.object({
   categoryId: z.string().min(1, "ID catégorie requis"),
   projects: z.array(z.object({
     id: z.string(),
+    creatorId: z.string().min(1, "Creator ID requis"), // AJOUTÉ: manquait dans le schéma original
     finalRank: z.number().min(1),
-    totalInvestments: z.number().min(0)
+    currentAmount: z.number().min(0) // CORRIGÉ: currentAmount au lieu de totalInvestments
   })).min(1, "Au moins un projet requis"),
   investments: z.array(z.object({
     userId: z.string(),
     projectId: z.string(),
-    amountCents: z.number().min(1)
+    amount: z.number().min(0.01) // CORRIGÉ: amount en EUR au lieu de amountCents
   })).min(1, "Au moins un investissement requis")
 });
 
@@ -42,7 +43,7 @@ const pointsConversionSchema = z.object({
 const goldenTicketSchema = z.object({
   userId: z.string().min(1, "ID utilisateur requis"),
   categoryId: z.string().min(1, "ID catégorie requis"),
-  purchaseAmountCents: z.number().min(100, "Montant minimum 1€"),
+  purchaseAmount: z.number().min(1, "Montant minimum 1€"), // CORRIGÉ: amount en EUR
   finalRank: z.number().min(1, "Rang final requis")
 });
 
@@ -237,13 +238,13 @@ router.post('/orchestrate/points-conversion', isAuthenticated, requireOrchestrat
  */
 router.post('/orchestrate/golden-ticket', isAuthenticated, requireOrchestrationAccess, validateBody(goldenTicketSchema), async (req, res) => {
   try {
-    const { userId, categoryId, purchaseAmountCents, finalRank } = req.validatedBody;
+    const { userId, categoryId, purchaseAmount, finalRank } = req.validatedBody;
 
     // Calcul du remboursement selon les règles de rang
     const refundResult = await visualFinanceAI.calculateGoldenTicketRefund({
       userId,
       categoryId, 
-      purchaseAmountCents,
+      purchaseAmount, // CORRIGÉ: amount en EUR
       finalRank
     });
 
@@ -257,7 +258,7 @@ router.post('/orchestrate/golden-ticket', isAuthenticated, requireOrchestrationA
     res.json({
       success: true,
       refundPercentage: refundResult.refundPercentage,
-      refundAmountCents: refundResult.refundAmountCents,
+      refundAmount: refundResult.refundAmount, // CORRIGÉ: en EUR
       executionId: orchestrationResult.executionId,
       status: orchestrationResult.status
     });
@@ -291,9 +292,9 @@ router.post('/orchestrate/article-sale', isAuthenticated, requireOrchestrationAc
 
     res.json({
       success: true,
-      platformShare: saleResult.platformShareCents,
-      creatorShare: saleResult.creatorShareCents,
-      totalPriceCents: saleResult.totalPriceCents,
+      platformShare: saleResult.platformShare, // CORRIGÉ: en EUR
+      creatorShare: saleResult.creatorShare, // CORRIGÉ: en EUR  
+      totalPrice: saleResult.totalPrice, // CORRIGÉ: en EUR
       executionId: orchestrationResult.executionId,
       status: orchestrationResult.status
     });
