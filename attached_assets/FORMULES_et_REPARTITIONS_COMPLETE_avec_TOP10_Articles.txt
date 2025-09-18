@@ -1,0 +1,299 @@
+REPARTITION_CATEGORIE — CORRECTIF (v.16/09/2025)
+=================================================
+
+Objet
+-----
+Corriger et figer la règle de redistribution à la clôture d'un évènement de catégorie.
+Profil concernés : Investisseurs, Porteurs, VISUAL.
+Cette version applique le schéma **40 / 30 / 7 / 23** (au lieu de 40 / 30 / 23 / 7).
+
+Définitions
+-----------
+- S : somme totale à répartir au moment de la clôture (avant arrondis).
+
+Règle globale de répartition (absolu de S)
+------------------------------------------
+- Investisseurs TOP 10 : **40 %** de S
+- Porteurs TOP 10      : **30 %** de S
+- Investisseurs 11–100 : **7 %**  de S (équipartition)
+- VISUAL               : **23 %** de S
+
+Détail TOP 10 (pourcentages absolus de S)
+-----------------------------------------
+- Investisseurs (40 %) répartis par rang approx. :
+  [13.66, 6.83, 4.55, 3.41, 2.73, 2.28, 1.95, 1.71, 1.52, 1.37] %
+- Porteurs (30 %) répartis par rang approx. :
+  [10.24, 5.12, 3.41, 2.56, 2.05, 1.71, 1.46, 1.28, 1.14, 1.02] %
+
+Investisseurs 11–100 (équipartition)
+------------------------------------
+- Si N investisseurs éligibles (rangs 11–100, uniques) :
+  Part individuelle = floor((0.07 × S) / N).
+
+Arrondis
+--------
+- Tous les paiements UTILISATEURS (investisseurs, porteurs) sont **arrondis à l'euro inférieur**.
+- Les **restes (centimes/écarts)** alimentent VISUAL (**intégrés aux 23 %** pour couvrir coûts Bunny.net et autres).
+
+Profils & où ils gagnent
+------------------------
+- Porteurs     : parts **30 %** (TOP 10 porteurs) ; ventes directes de leurs visuels (articles = infoporteurs).
+- Investisseurs: parts **40 %** (TOP 10) + **7 %** (rangs 11–100, équipartition) ; Golden Ticket (selon rangs).
+- Visiteurs    : Visiteur du Mois = **2 500 VISUpoints**.
+- Infoporteurs : **70 %** par vente d'article ; **pot 24h** (s'ils sont TOP 10 articles).
+- Investi-lecteurs : **part du pot 24h** s'ils ont acheté ≥ 1 article du TOP 10 articles.
+- VISUAL       : **23 %** sur évènement de catégorie + **30 %** sur chaque vente d'article (infoporteurs) + restes d'arrondis.
+
+Mini-formulaire "dev" (pseudocode TypeScript-like)
+--------------------------------------------------
+/**
+ * Entrées :
+ *   S_eur : number — somme totale en euros (peut contenir des centimes).
+ *   invTop10Ids[10], porteurTop10Ids[10] : tableaux triés par rang (1 -> 10).
+ *   inv11to100Ids : liste des investisseurs uniques classés 11–100.
+ * Sorties :
+ *   payouts : enregistrements de paiements par acteur.
+ * Règles :
+ *   - Calcul en CENTIMES pour la précision, conversion à l'euro pour les utilisateurs par plancher.
+ *   - Les restes (cents et écarts liés au floor) sont ajoutés à VISUAL.
+ */
+
+const INV_TOP10_ABS = [0.1366, 0.0683, 0.0455, 0.0341, 0.0273, 0.0228, 0.0195, 0.0171, 0.0152, 0.0137]; // ≈ 40 %
+const PORT_TOP10_ABS = [0.1024, 0.0512, 0.0341, 0.0256, 0.0205, 0.0171, 0.0146, 0.0128, 0.0114, 0.0102]; // ≈ 30 %
+
+function distributeCategory(S_eur) {
+  const S_cents = Math.round(S_eur * 100);
+
+  // Bases en centimes
+  const base_inv40_cents   = Math.floor(0.40 * S_cents);
+  const base_port30_cents  = Math.floor(0.30 * S_cents);
+  const base_inv7_cents    = Math.floor(0.07 * S_cents);
+  const base_visual23_cents= Math.floor(0.23 * S_cents);
+
+  let payouts_cents_sum_users = 0;
+  const payouts = [];
+
+  // Investisseurs TOP 10 (parts absolues de S)
+  for (let i = 0; i < 10; i++) {
+    const amount_cents = Math.floor(INV_TOP10_ABS[i] * S_cents);
+    const amount_eur_floor = Math.floor(amount_cents / 100);
+    payouts.push({ type: "investor_top10", rank: i+1, cents: amount_eur_floor * 100 });
+    payouts_cents_sum_users += amount_eur_floor * 100;
+  }
+
+  // Porteurs TOP 10 (parts absolues de S)
+  for (let i = 0; i < 10; i++) {
+    const amount_cents = Math.floor(PORT_TOP10_ABS[i] * S_cents);
+    const amount_eur_floor = Math.floor(amount_cents / 100);
+    payouts.push({ type: "creator_top10", rank: i+1, cents: amount_eur_floor * 100 });
+    payouts_cents_sum_users += amount_eur_floor * 100;
+  }
+
+  // Investisseurs 11–100 (équipartition sur 7 %)
+  const N = inv11to100Ids.length;
+  if (N > 0) {
+    const part_each_cents = Math.floor(base_inv7_cents / N);
+    const part_each_euro_floor = Math.floor(part_each_cents / 100) * 100; // plancher à l'euro
+    for (const id of inv11to100Ids) {
+      payouts.push({ type: "investor_11_100", user: id, cents: part_each_euro_floor });
+      payouts_cents_sum_users += part_each_euro_floor;
+    }
+  }
+
+  // VISUAL : base 23 % + restes (centimes/écarts)
+  const visual_base_cents = base_visual23_cents;
+
+  // Somme totale affectée (utilisateurs + base VISUAL)
+  const allocated_cents = payouts_cents_sum_users + visual_base_cents;
+
+  // Reste (toujours >= 0, ce sont les centimes/écarts suite aux floors à l'euro)
+  const residual_cents = Math.max(0, S_cents - allocated_cents);
+
+  const visual_total_cents = visual_base_cents + residual_cents;
+
+  payouts.push({ type: "visual_platform", cents: visual_total_cents });
+
+  return payouts;
+}
+
+=========================================================================
+SYSTÈME TOP10 ARTICLES - REDISTRIBUTION QUOTIDIENNE (60/40)
+=========================================================================
+
+Objet
+-----
+Système de classement et redistribution quotidien pour les **infoporteurs** et **investi-lecteurs**.
+Profils concernés : Infoporteurs, Investi-lecteurs, VISUAL.
+Ce système fonctionne **indépendamment** des événements de catégorie (règle 40/30/7/23).
+
+Contexte et Objectif
+--------------------
+Renforcer l'engagement des **investi-lecteurs** à explorer et acheter les articles des **infoporteurs**.
+Double incitation économique :
+- **Créateurs** → Motivation à produire du contenu de qualité (60% du pot)
+- **Investisseurs** → Motivation à découvrir les talents tôt (40% du pot)
+
+Règles de Base - Ventes Directes
+--------------------------------
+- **Prix articles** : 0,2 € à 5 € max (fixés par infoporteurs)
+- **Tranches investi-lecteurs** : 0,2 € à 10 € max
+- **Commission VISUAL** : **30%** de chaque vente
+- **Revenus infoporteur** : **70%** de chaque vente
+
+Exemple vente directe (Article à 2,00 €) :
+├── 0,60 € → VISUAL (30% commission plateforme)
+└── 1,40 € → Infoporteur (70% revenus directs)
+
+Classement Quotidien (minuit CET)
+---------------------------------
+1. **Calcul du classement** : Articles classés 1-100 par volume de ventes nettes de la journée
+2. **TOP 10 infoporteurs** : Auteurs des articles rangs 1-10
+3. **Pool de redistribution** : Sommes investies par investi-lecteurs ayant acheté des articles rangs **11-100**
+4. **Investi-lecteurs vainqueurs** : Tous ceux ayant acheté ≥1 article du TOP 10 (rangs 1-10)
+
+Définitions TOP10 Articles
+--------------------------
+- P : pot total de redistribution en euros (avant arrondis)
+- P = Σ(sommes investies par investi-lecteurs sur articles rangs 11-100 du jour J)
+
+Règle Globale de Redistribution TOP10 (absolu de P)
+---------------------------------------------------
+- **TOP10 infoporteurs** : **60%** de P (équipartition entre les 10)
+- **Investi-lecteurs vainqueurs** : **40%** de P (équipartition par investissement gagnant)
+- **VISUAL** : 0% du pot P + restes d'arrondis
+
+Distribution TOP10 Infoporteurs (60% de P)
+------------------------------------------
+- Répartition **équipartie** entre les 10 infoporteurs TOP10
+- Part individuelle = floor((0.60 × P) / 10) euros plancher
+- Si 10 infoporteurs TOP10 → chacun reçoit floor(0.06 × P) euros
+
+Distribution Investi-lecteurs Vainqueurs (40% de P)
+---------------------------------------------------
+- Répartition **équipartie** entre tous les investissements gagnants
+- Si N investissements sur articles TOP10 → chaque investissement reçoit floor((0.40 × P) / N) euros
+- **Important** : Un même investi-lecteur avec plusieurs achats TOP10 = plusieurs parts
+
+Arrondis TOP10 Articles
+-----------------------
+- Tous les paiements aux **infoporteurs** et **investi-lecteurs** : **arrondis à l'euro inférieur**
+- Les **restes (centimes)** alimentent VISUAL
+
+Exemple Concret TOP10 Articles
+------------------------------
+**Situation du jour J** :
+- Article "Guide IA" de Marie → Rang 1 (TOP10)
+- Article "Crypto 2025" de Paul → Rang 1 (TOP10)
+- Pierre a acheté "Guide IA" à 2€
+- Sophie a acheté "Guide IA" à 3€ 
+- Pool P = 50€ (sommes investi-lecteurs rangs 11-100)
+
+**Distribution** :
+```
+💰 50€ de redistribution :
+├── 30€ (60%) → Marie + Paul + 8 autres TOP10 infoporteurs = 3€ chacun
+└── 20€ (40%) → Pierre + Sophie (2 investissements gagnants) = 10€ chacun
+```
+
+Mini-formulaire TOP10 Articles (pseudocode TypeScript-like)
+----------------------------------------------------------
+/**
+ * Entrées :
+ *   P_eur : number — pot total en euros (sommes investi-lecteurs rangs 11-100).
+ *   top10InfoporteurIds[10] : infoporteurs TOP10 par rang de vente.
+ *   winningInvestments[] : liste des investissements sur articles TOP10.
+ * Sorties :
+ *   payouts : enregistrements de paiements par acteur.
+ * Règles :
+ *   - Calcul en CENTIMES pour la précision.
+ *   - Équipartition stricte (pas de pondération par rang).
+ *   - Floor à l'euro pour utilisateurs, restes → VISUAL.
+ */
+
+function distributeTop10Articles(P_eur, top10InfoporteurIds, winningInvestments) {
+  const P_cents = Math.round(P_eur * 100);
+  
+  // Bases en centimes
+  const infoporteurs_pool_cents = Math.floor(0.60 * P_cents); // 60%
+  const winners_pool_cents = Math.floor(0.40 * P_cents);      // 40%
+  
+  let payouts_cents_sum_users = 0;
+  const payouts = [];
+  
+  // TOP10 Infoporteurs (60% équipartition)
+  const nb_infoporteurs = top10InfoporteurIds.length; // Normalement 10
+  if (nb_infoporteurs > 0) {
+    const part_each_infoporteur_cents = Math.floor(infoporteurs_pool_cents / nb_infoporteurs);
+    const part_each_infoporteur_euro_floor = Math.floor(part_each_infoporteur_cents / 100);
+    
+    for (const infoporteurId of top10InfoporteurIds) {
+      const amount_cents = part_each_infoporteur_euro_floor * 100;
+      payouts.push({ type: "top10_infoporteur", user: infoporteurId, cents: amount_cents });
+      payouts_cents_sum_users += amount_cents;
+    }
+  }
+  
+  // Investi-lecteurs Vainqueurs (40% équipartition par investissement)
+  const nb_winning_investments = winningInvestments.length;
+  if (nb_winning_investments > 0) {
+    const part_each_investment_cents = Math.floor(winners_pool_cents / nb_winning_investments);
+    const part_each_investment_euro_floor = Math.floor(part_each_investment_cents / 100);
+    
+    for (const investment of winningInvestments) {
+      const amount_cents = part_each_investment_euro_floor * 100;
+      payouts.push({ type: "investilecteur_winner", user: investment.userId, cents: amount_cents });
+      payouts_cents_sum_users += amount_cents;
+    }
+  }
+  
+  // VISUAL : restes d'arrondis uniquement (pas de commission sur le pot)
+  const total_distributed_cents = payouts_cents_sum_users;
+  const residual_cents = Math.max(0, P_cents - total_distributed_cents);
+  
+  if (residual_cents > 0) {
+    payouts.push({ type: "visual_platform_residual", cents: residual_cents });
+  }
+  
+  return payouts;
+}
+
+Timing et Automatisation TOP10
+------------------------------
+- **Fréquence** : Redistribution automatique **quotidienne à minuit CET**
+- **Processus** : Classement → Calcul pot → Distribution → Virements Stripe
+- **Délai virements** : **24h** après calcul (conformité bancaire)
+- **Persistance** : Toutes les redistributions sont archivées pour audit
+
+Paiements et Conformité TOP10
+-----------------------------
+- **Plateforme** : Stripe Connect (virements automatiques)
+- **KYC obligatoire** : Vérification identité avant premier retrait
+- **Seuils de retrait** :
+  - Infoporteurs : 50€ minimum
+  - Investi-lecteurs : 25€ minimum
+
+Interaction avec Autres Systèmes
+--------------------------------
+Le système TOP10 Articles est **totalement indépendant** :
+- ❌ **N'affecte PAS** les événements de catégorie (40/30/7/23)
+- ❌ **N'affecte PAS** les Live Shows (40/30/20/10)  
+- ✅ **Fonctionne EN PARALLÈLE** avec tous les autres systèmes VISUAL
+
+Résumé TOP10 Articles
+--------------------
+- ✅ **Ventes directes** : VISUAL 30% / Infoporteur 70% (immédiat)
+- ✅ **TOP10 infoporteurs** : 60% du pot quotidien (équipartition)
+- ✅ **Investi-lecteurs vainqueurs** : 40% du pot quotidien (par investissement)
+- ✅ **Pot quotidien** : Constitué des sommes investi-lecteurs rangs 11-100
+- ✅ **Redistribution automatique** : Chaque minuit via Stripe Connect
+
+Notes
+-----
+- Les tableaux de répartition TOP 10 sont aproximatifs (arrondis). Les écarts infimes se retrouvent dans les restes → VISUAL.
+- Tous les montants versés aux UTILISATEURS sont au minimum à l'euro (pas de centimes côté utilisateurs).
+- Les transferts sont effectués via Stripe Connect ; KYC requis pour retrait.
+
+Historique
+----------
+- (16/09/2025) Correctif validé : **Investisseurs 11–100 = 7 % ; VISUAL = 23 %**.
+- (16/09/2025) Ajout : **Système TOP10 Articles détaillé (60/40)** avec pot quotidien et redistribution automatique.
