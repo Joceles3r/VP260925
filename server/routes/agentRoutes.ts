@@ -19,13 +19,13 @@ const categoryCloseSchema = z.object({
   projects: z.array(z.object({
     id: z.string(),
     creatorId: z.string().min(1, "Creator ID requis"), // AJOUTÉ: manquait dans le schéma original
-    finalRank: z.number().min(1),
-    currentAmount: z.number().min(0) // CORRIGÉ: currentAmount au lieu de totalInvestments
+    finalRank: z.coerce.number().min(1), // COERCE pour consistency
+    currentAmount: z.coerce.number().min(0) // COERCE: decimal DB → string → number
   })).min(1, "Au moins un projet requis"),
   investments: z.array(z.object({
     userId: z.string(),
     projectId: z.string(),
-    amount: z.number().min(0.01) // CORRIGÉ: amount en EUR au lieu de amountCents
+    amount: z.coerce.number().min(0.01) // CRITIQUE: decimal DB → string → coerce to number
   })).min(1, "Au moins un investissement requis")
 });
 
@@ -37,20 +37,20 @@ const extensionSchema = z.object({
 
 const pointsConversionSchema = z.object({
   userId: z.string().min(1, "ID utilisateur requis"),
-  availablePoints: z.number().min(2500, "Minimum 2500 points requis")
+  availablePoints: z.coerce.number().min(2500, "Minimum 2500 points requis") // COERCE pour consistency
 });
 
 const goldenTicketSchema = z.object({
   userId: z.string().min(1, "ID utilisateur requis"),
   categoryId: z.string().min(1, "ID catégorie requis"),
-  purchaseAmount: z.number().min(1, "Montant minimum 1€"), // CORRIGÉ: amount en EUR
-  finalRank: z.number().min(1, "Rang final requis")
+  purchaseAmount: z.coerce.number().min(1, "Montant minimum 1€"), // COERCE: string → number
+  finalRank: z.coerce.number().min(1, "Rang final requis") // COERCE pour consistency
 });
 
 const articleSaleSchema = z.object({
   articleId: z.string().min(1, "ID article requis"),
   buyerId: z.string().min(1, "ID acheteur requis"),
-  priceEUR: z.number().min(0.2, "Prix minimum 0.20€")
+  priceEUR: z.coerce.number().min(0.2, "Prix minimum 0.20€") // COERCE: string → number
 });
 
 const adminDecisionSchema = z.object({
@@ -59,7 +59,7 @@ const adminDecisionSchema = z.object({
 });
 
 const parameterUpdateSchema = z.object({
-  value: z.union([z.string(), z.number(), z.boolean()]),
+  value: z.union([z.string(), z.coerce.number(), z.boolean()]), // COERCE numbers
   adminUserId: z.string().min(1, "ID admin requis")
 });
 
