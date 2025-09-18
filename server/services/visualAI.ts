@@ -411,6 +411,7 @@ export class VisualAIService {
   }
 
   private async logAuditEntry(action: string, subjectType: string, subjectId: string, details: any): Promise<void> {
+    // Le hash chain sera géré automatiquement par storage.createAuditLogEntry
     await storage.createAuditLogEntry({
       agentType: 'visualai',
       action: action as any,
@@ -418,6 +419,7 @@ export class VisualAIService {
       subjectId,
       details,
       actor: 'visualai'
+      // currentHash et previousHash seront générés par le storage
     });
   }
 
