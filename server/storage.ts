@@ -40,6 +40,10 @@ import {
   weeklyStreaks,
   // Table transferts Stripe idempotents
   stripeTransfers,
+  // Tables système de renouvellement payant (25€)
+  projectRenewals,
+  projectQueue,
+  projectReplacements,
   type User,
   type UpsertUser,
   type Project,
@@ -111,6 +115,13 @@ import {
   type WeeklyStreaks,
   type StripeTransfer,
   type InsertStripeTransfer,
+  // Types système de renouvellement payant (25€)
+  type ProjectRenewal,
+  type ProjectQueue,
+  type ProjectReplacement,
+  type InsertProjectRenewal,
+  type InsertProjectQueue,
+  type InsertProjectReplacement,
   insertArticleSalesDailySchema,
   insertTop10InfoporteursSchema,
   insertTop10WinnersSchema,
@@ -246,7 +257,30 @@ export interface IStorage {
   createReceipt(receipt: InsertPaymentReceipt): Promise<PaymentReceipt>;
   getReceipt(id: string): Promise<PaymentReceipt | undefined>;
   getUserReceipts(userId: string): Promise<PaymentReceipt[]>;
-  getReceiptsByTransaction(transactionId: string): Promise<PaymentReceipt[]>;
+
+  // ===== SYSTÈME DE RENOUVELLEMENT PAYANT (25€) =====
+  // Project renewals operations
+  createProjectRenewal(renewal: InsertProjectRenewal): Promise<ProjectRenewal>;
+  getProjectRenewal(id: string): Promise<ProjectRenewal | undefined>;
+  getProjectRenewalByPaymentIntent(paymentIntentId: string): Promise<ProjectRenewal | undefined>;
+  getCreatorRenewalHistory(creatorId: string): Promise<ProjectRenewal[]>;
+  getActiveRenewals(categoryId: string): Promise<ProjectRenewal[]>;
+  updateProjectRenewal(id: string, updates: Partial<ProjectRenewal>): Promise<ProjectRenewal>;
+  
+  // Project queue operations
+  addProjectToQueue(queueItem: InsertProjectQueue): Promise<ProjectQueue>;
+  getProjectQueue(categoryId: string): Promise<ProjectQueue[]>;
+  getReadyProjectsInQueue(categoryId: string): Promise<ProjectQueue[]>;
+  markProjectReadyForAssignment(queueId: string): Promise<ProjectQueue>;
+  getProjectQueuePosition(projectId: string, categoryId: string): Promise<ProjectQueue | undefined>;
+  assignProjectFromQueue(categoryId: string, targetRank: number): Promise<ProjectQueue | undefined>;
+  removeProjectFromQueue(id: string): Promise<void>;
+  updateQueuePositions(categoryId: string): Promise<void>;
+
+  // Project replacements operations  
+  createProjectReplacement(replacement: InsertProjectReplacement): Promise<ProjectReplacement>;
+  getCategoryReplacements(categoryId: string): Promise<ProjectReplacement[]>;
+  getCreatorReplacementHistory(creatorId: string): Promise<ProjectReplacement[]>;
   
   // MODULE 5: Règles catégories vidéos
   // Video categories operations
@@ -1845,6 +1879,251 @@ export class DatabaseStorage implements IStorage {
       .where(eq(stripeTransfers.id, id))
       .limit(1);
     return result;
+  }
+
+  // ===== IMPLÉMENTATIONS SYSTÈME DE RENOUVELLEMENT PAYANT (25€) =====
+
+  // Project renewals operations
+  async createProjectRenewal(renewal: InsertProjectRenewal): Promise<ProjectRenewal> {
+    // BUSINESS RULE: Enforce 25€ amount and rank constraints
+    if (renewal.currentRank < 11 || renewal.currentRank > 100) {
+      throw new Error(`Renouvellement limité aux rangs 11-100. Rang: ${renewal.currentRank}`);
+    }
+    
+    // Set 15-minute expiration deadline
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    
+    const renewalWithDefaults = {
+      ...renewal,
+      amountEUR: '25.00', // Force 25€ amount
+      expiresAt: renewal.expiresAt || expiresAt
+    };
+
+    const [newRenewal] = await db.insert(projectRenewals).values(renewalWithDefaults).returning();
+    return newRenewal;
+  }
+
+  async getProjectRenewal(id: string): Promise<ProjectRenewal | undefined> {
+    const [renewal] = await db
+      .select()
+      .from(projectRenewals)
+      .where(eq(projectRenewals.id, id));
+    return renewal;
+  }
+
+  async getProjectRenewalByPaymentIntent(paymentIntentId: string): Promise<ProjectRenewal | undefined> {
+    const [renewal] = await db
+      .select()
+      .from(projectRenewals)
+      .where(eq(projectRenewals.paymentIntentId, paymentIntentId));
+    return renewal;
+  }
+
+  async getCreatorRenewalHistory(creatorId: string): Promise<ProjectRenewal[]> {
+    return await db
+      .select()
+      .from(projectRenewals)
+      .where(eq(projectRenewals.creatorId, creatorId))
+      .orderBy(desc(projectRenewals.createdAt));
+  }
+
+  async getActiveRenewals(categoryId: string): Promise<ProjectRenewal[]> {
+    return await db
+      .select()
+      .from(projectRenewals)
+      .where(
+        and(
+          eq(projectRenewals.categoryId, categoryId),
+          eq(projectRenewals.status, 'active')
+        )
+      )
+      .orderBy(asc(projectRenewals.currentRank));
+  }
+
+  async updateProjectRenewal(id: string, updates: Partial<ProjectRenewal>): Promise<ProjectRenewal> {
+    const [updatedRenewal] = await db
+      .update(projectRenewals)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(projectRenewals.id, id))
+      .returning();
+    return updatedRenewal;
+  }
+
+  // Project queue operations
+  async addProjectToQueue(queueItem: InsertProjectQueue): Promise<ProjectQueue> {
+    const [newQueueItem] = await db.insert(projectQueue).values(queueItem).returning();
+    return newQueueItem;
+  }
+
+  async getProjectQueue(categoryId: string): Promise<ProjectQueue[]> {
+    return await db
+      .select()
+      .from(projectQueue)
+      .where(
+        and(
+          eq(projectQueue.categoryId, categoryId),
+          eq(projectQueue.isActive, true)
+        )
+      )
+      .orderBy(asc(projectQueue.queuePosition), asc(projectQueue.submittedAt));
+  }
+
+  async getReadyProjectsInQueue(categoryId: string): Promise<ProjectQueue[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(projectQueue)
+      .where(
+        and(
+          eq(projectQueue.categoryId, categoryId),
+          eq(projectQueue.isActive, true),
+          eq(projectQueue.status, 'ready'),
+          lte(projectQueue.readyAt, now)
+        )
+      )
+      .orderBy(asc(projectQueue.queuePosition), asc(projectQueue.submittedAt));
+  }
+
+  async markProjectReadyForAssignment(queueId: string): Promise<ProjectQueue> {
+    const readyAt = new Date(); // Ready immediately
+    const [updatedItem] = await db
+      .update(projectQueue)
+      .set({
+        status: 'ready',
+        readyAt,
+        updatedAt: new Date()
+      })
+      .where(eq(projectQueue.id, queueId))
+      .returning();
+    return updatedItem;
+  }
+
+  async getProjectQueuePosition(projectId: string, categoryId: string): Promise<ProjectQueue | undefined> {
+    const [queueItem] = await db
+      .select()
+      .from(projectQueue)
+      .where(
+        and(
+          eq(projectQueue.projectId, projectId),
+          eq(projectQueue.categoryId, categoryId),
+          eq(projectQueue.isActive, true)
+        )
+      );
+    return queueItem;
+  }
+
+  async assignProjectFromQueue(categoryId: string, targetRank: number): Promise<ProjectQueue | undefined> {
+    // BUSINESS RULE: Only allow ranks 11-100 replacement
+    if (targetRank < 11 || targetRank > 100) {
+      throw new Error(`Remplacement automatique limité aux rangs 11-100. Rang demandé: ${targetRank}`);
+    }
+
+    const now = new Date();
+
+    // Get next ready project in queue (after 15min delay)
+    const [nextProject] = await db
+      .select()
+      .from(projectQueue)
+      .where(
+        and(
+          eq(projectQueue.categoryId, categoryId),
+          eq(projectQueue.isActive, true),
+          eq(projectQueue.status, 'ready'),
+          lte(projectQueue.readyAt, now) // Respect 15-minute delay
+        )
+      )
+      .orderBy(asc(projectQueue.queuePosition), asc(projectQueue.submittedAt))
+      .limit(1);
+
+    if (!nextProject) return undefined;
+
+    // ATOMIC TRANSACTION: Mark as assigned with row lock
+    const [assignedProject] = await db
+      .update(projectQueue)
+      .set({
+        status: 'assigned',
+        assignedAt: now,
+        isActive: false,
+        updatedAt: now
+      })
+      .where(
+        and(
+          eq(projectQueue.id, nextProject.id),
+          eq(projectQueue.status, 'ready') // Double check status didn't change
+        )
+      )
+      .returning();
+
+    return assignedProject;
+  }
+
+  async removeProjectFromQueue(id: string): Promise<void> {
+    await db
+      .update(projectQueue)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(projectQueue.id, id));
+  }
+
+  async updateQueuePositions(categoryId: string): Promise<void> {
+    // Recalculate queue positions for active items
+    const activeItems = await db
+      .select()
+      .from(projectQueue)
+      .where(
+        and(
+          eq(projectQueue.categoryId, categoryId),
+          eq(projectQueue.isActive, true)
+        )
+      )
+      .orderBy(asc(projectQueue.submittedAt));
+
+    // Update positions
+    for (let i = 0; i < activeItems.length; i++) {
+      await db
+        .update(projectQueue)
+        .set({ queuePosition: i + 1, updatedAt: new Date() })
+        .where(eq(projectQueue.id, activeItems[i].id));
+    }
+  }
+
+  // Project replacements operations
+  async createProjectReplacement(replacement: InsertProjectReplacement): Promise<ProjectReplacement> {
+    // BUSINESS RULE: Only allow ranks 11-100 replacement
+    if (replacement.replacedRank < 11 || replacement.replacedRank > 100) {
+      throw new Error(`Remplacement limité aux rangs 11-100. Rang: ${replacement.replacedRank}`);
+    }
+
+    // Generate idempotency key if not provided
+    const replacementWithKey = {
+      ...replacement,
+      idempotencyKey: replacement.idempotencyKey || `${replacement.categoryId}-${replacement.replacedRank}-${Date.now()}`
+    };
+
+    try {
+      const [newReplacement] = await db.insert(projectReplacements).values(replacementWithKey).returning();
+      return newReplacement;
+    } catch (error: any) {
+      if (error.code === '23505') { // PostgreSQL unique violation
+        throw new Error('Remplacement déjà effectué pour ce rang/catégorie');
+      }
+      throw error;
+    }
+  }
+
+  async getCategoryReplacements(categoryId: string): Promise<ProjectReplacement[]> {
+    return await db
+      .select()
+      .from(projectReplacements)
+      .where(eq(projectReplacements.categoryId, categoryId))
+      .orderBy(desc(projectReplacements.replacementDate));
+  }
+
+  async getCreatorReplacementHistory(creatorId: string): Promise<ProjectReplacement[]> {
+    return await db
+      .select()
+      .from(projectReplacements)
+      .where(eq(projectReplacements.replacedCreatorId, creatorId))
+      .orderBy(desc(projectReplacements.replacementDate));
   }
 }
 
