@@ -164,6 +164,86 @@ router.post('/orchestrate/points-conversion', isAuthenticated, requireOrchestrat
   }
 });
 
+/**
+ * POST /api/agents/orchestrate/golden-ticket
+ * Traiter remboursement Golden Ticket
+ */
+router.post('/orchestrate/golden-ticket', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+  try {
+    const { userId, categoryId, purchaseAmountCents, finalRank } = req.body;
+    
+    if (!userId || !categoryId || !purchaseAmountCents || finalRank === undefined) {
+      return res.status(400).json({ error: 'Paramètres manquants pour Golden Ticket' });
+    }
+
+    // Calcul du remboursement selon les règles de rang
+    const refundResult = await visualFinanceAI.calculateGoldenTicketRefund({
+      userId,
+      categoryId, 
+      purchaseAmountCents,
+      finalRank
+    });
+
+    // Orchestration : Décision VisualAI puis exécution VisualFinanceAI
+    const orchestrationResult = await agentOrchestrator.executeGoldenTicketWorkflow({
+      userId,
+      categoryId,
+      refundData: refundResult
+    });
+
+    res.json({
+      success: true,
+      refundPercentage: refundResult.refundPercentage,
+      refundAmountCents: refundResult.refundAmountCents,
+      executionId: orchestrationResult.executionId,
+      status: orchestrationResult.status
+    });
+  } catch (error) {
+    console.error('[AgentRoutes] Erreur Golden Ticket:', error);
+    res.status(500).json({ error: 'Erreur lors du remboursement Golden Ticket' });
+  }
+});
+
+/**
+ * POST /api/agents/orchestrate/article-sale
+ * Traiter vente d'article avec partage 30/70
+ */
+router.post('/orchestrate/article-sale', isAuthenticated, requireOrchestrationAccess, async (req, res) => {
+  try {
+    const { articleId, buyerId, priceEUR } = req.body;
+    
+    if (!articleId || !buyerId || !priceEUR) {
+      return res.status(400).json({ error: 'Paramètres manquants pour vente article' });
+    }
+
+    // Calcul de la répartition 30% plateforme / 70% créateur
+    const saleResult = await visualFinanceAI.processArticleSale({
+      articleId,
+      buyerId,
+      priceEUR
+    });
+
+    // Orchestration complète de la vente
+    const orchestrationResult = await agentOrchestrator.executeArticleSaleWorkflow({
+      articleId,
+      buyerId,
+      saleData: saleResult
+    });
+
+    res.json({
+      success: true,
+      platformShare: saleResult.platformShareCents,
+      creatorShare: saleResult.creatorShareCents,
+      totalPriceCents: saleResult.totalPriceCents,
+      executionId: orchestrationResult.executionId,
+      status: orchestrationResult.status
+    });
+  } catch (error) {
+    console.error('[AgentRoutes] Erreur vente article:', error);
+    res.status(500).json({ error: 'Erreur lors de la vente article' });
+  }
+});
+
 // ===== ENDPOINTS ADMIN CONSOLE =====
 
 /**
