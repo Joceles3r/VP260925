@@ -97,6 +97,49 @@ Preferred communication style: Simple, everyday language.
 - **Replit Development Tools**: Integrated development environment features
 - **Runtime Error Handling**: Development overlay for debugging
 
+## AI Agents System (Strategic Autonomous Intelligence)
+
+### VisualAI - Master Orchestrator Agent
+- **Core Mission**: Global supervision and piloting of VISUAL platform
+- **Key Capabilities**:
+  - Engagement coefficient calculation with deterministic tie-breakers
+  - Automated content moderation with escalation thresholds
+  - SEO optimization and internationalization
+  - Real-time notifications and dynamic UX management
+  - Category lifecycle management with 168h extensions
+  - Workflow orchestration for complex business processes
+
+### VisualFinanceAI - Financial Execution Engine  
+- **Core Mission**: Deterministic financial rules and VISUpoints economy
+- **Key Capabilities**:
+  - Category closure payouts (40/30/7/23 distribution model)
+  - VISUpoints conversion system (100 pts = 1€, 2500 pts threshold)
+  - Golden Tickets refund system with rank-based percentages
+  - Infoporteur article sales (30% platform / 70% creator)
+  - 24h pot redistribution with equipartition algorithm
+  - Extension payment processing (25€ for 168h extensions)
+
+### Database Architecture for AI Agents
+- **Tables Added**:
+  - `agent_decisions`: Decision tracking with admin validation workflow
+  - `agent_audit_log`: Immutable audit chain with hash verification
+  - `financial_ledger`: Complete financial transaction tracking
+  - `payout_recipes`: Versioned financial rules management
+  - `agent_parameters`: Runtime configuration with admin controls
+
+### Agent Integration Status
+- **Foundation**: ✅ Complete (database, storage, types, services)
+- **Business Logic**: 🔄 Partial (core algorithms implemented, execution pending)
+- **Audit & Security**: 🔄 Partial (hash chain foundation, validation workflow pending)
+- **Orchestration**: 🔄 Pending (agent-to-agent communication)
+- **Admin Controls**: 🔄 Pending (validation UI and SLO monitoring)
+
+### Financial Rules Implementation
+- **40/30/7/23 Model**: Investors TOP10 (40%), Creators TOP10 (30%), Investors 11-100 (7%), VISUAL Platform (23%)
+- **Euro Floor Rounding**: User payments rounded down to nearest euro, residuals to VISUAL
+- **Idempotency**: All financial operations with duplicate protection
+- **Compliance**: Full audit trail with immutable hash chain
+
 ## Advanced Features System
 
 ### Referral System with VISUpoints Economy
