@@ -50,6 +50,11 @@ import {
   financialLedger,
   payoutRecipes,
   agentParameters,
+  // Tables catégorie LIVRES
+  bookCategories,
+  books,
+  bookPurchases,
+  downloadTokens,
   type User,
   type UpsertUser,
   type Project,
@@ -139,6 +144,15 @@ import {
   type InsertFinancialLedger,
   type InsertPayoutRecipe,
   type InsertAgentParameter,
+  // Types catégorie LIVRES
+  type BookCategory,
+  type Book,
+  type BookPurchase,
+  type DownloadToken,
+  type InsertBookCategory,
+  type InsertBook,
+  type InsertBookPurchase,
+  type InsertDownloadToken,
   insertArticleSalesDailySchema,
   insertTop10InfoporteursSchema,
   insertTop10WinnersSchema,
@@ -449,6 +463,37 @@ export interface IStorage {
   getAgentParameter(key: string): Promise<AgentParameter | undefined>;
   updateAgentParameter(key: string, value: string, modifiedBy: string): Promise<AgentParameter>;
   getParameterValue(key: string, defaultValue?: string): Promise<string | undefined>;
+
+  // LIVRES Category operations
+  createBookCategory(category: InsertBookCategory): Promise<BookCategory>;
+  getBookCategory(id: string): Promise<BookCategory | undefined>;
+  getBookCategoryByName(name: string): Promise<BookCategory | undefined>;
+  getAllBookCategories(): Promise<BookCategory[]>;
+  updateBookCategory(id: string, updates: Partial<BookCategory>): Promise<BookCategory>;
+  
+  // LIVRES Book operations
+  createBook(book: InsertBook): Promise<Book>;
+  getBook(id: string): Promise<Book | undefined>;
+  getBooksByAuthor(authorId: string): Promise<Book[]>;
+  getBooksByCategoryId(categoryId: string): Promise<Book[]>;
+  updateBook(id: string, updates: Partial<Book>): Promise<Book>;
+  getPendingBooks(): Promise<Book[]>;
+  getActiveBooks(categoryId?: string): Promise<Book[]>;
+  
+  // LIVRES Purchase operations (lecteurs)
+  createBookPurchase(purchase: InsertBookPurchase): Promise<BookPurchase>;
+  getBookPurchase(id: string): Promise<BookPurchase | undefined>;
+  getUserBookPurchases(userId: string): Promise<BookPurchase[]>;
+  getBookPurchases(bookId: string): Promise<BookPurchase[]>;
+  getBookPurchaseByUserAndBook(userId: string, bookId: string): Promise<BookPurchase | undefined>;
+  updateBookPurchase(id: string, updates: Partial<BookPurchase>): Promise<BookPurchase>;
+  
+  // LIVRES Download Token operations
+  createDownloadToken(token: InsertDownloadToken): Promise<DownloadToken>;
+  getDownloadToken(token: string): Promise<DownloadToken | undefined>;
+  getDownloadTokensByPurchase(purchaseId: string): Promise<DownloadToken[]>;
+  updateDownloadToken(token: string, updates: Partial<DownloadToken>): Promise<DownloadToken>;
+  revokeDownloadTokens(purchaseId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2493,6 +2538,195 @@ export class DatabaseStorage implements IStorage {
   async getParameterValue(key: string, defaultValue?: string): Promise<string | undefined> {
     const param = await this.getAgentParameter(key);
     return param ? param.parameterValue : defaultValue;
+  }
+
+  // LIVRES Category operations
+  async createBookCategory(category: InsertBookCategory): Promise<BookCategory> {
+    const [newCategory] = await db.insert(bookCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async getBookCategory(id: string): Promise<BookCategory | undefined> {
+    const [category] = await db
+      .select()
+      .from(bookCategories)
+      .where(eq(bookCategories.id, id));
+    return category;
+  }
+
+  async getBookCategoryByName(name: string): Promise<BookCategory | undefined> {
+    const [category] = await db
+      .select()
+      .from(bookCategories)
+      .where(eq(bookCategories.name, name));
+    return category;
+  }
+
+  async getAllBookCategories(): Promise<BookCategory[]> {
+    return await db
+      .select()
+      .from(bookCategories)
+      .orderBy(asc(bookCategories.createdAt));
+  }
+
+  async updateBookCategory(id: string, updates: Partial<BookCategory>): Promise<BookCategory> {
+    const [updated] = await db
+      .update(bookCategories)
+      .set(updates)
+      .where(eq(bookCategories.id, id))
+      .returning();
+    return updated;
+  }
+
+  // LIVRES Book operations
+  async createBook(book: InsertBook): Promise<Book> {
+    const [newBook] = await db.insert(books).values(book).returning();
+    return newBook;
+  }
+
+  async getBook(id: string): Promise<Book | undefined> {
+    const [book] = await db
+      .select()
+      .from(books)
+      .where(eq(books.id, id));
+    return book;
+  }
+
+  async getBooksByAuthor(authorId: string): Promise<Book[]> {
+    return await db
+      .select()
+      .from(books)
+      .where(eq(books.authorId, authorId))
+      .orderBy(desc(books.createdAt));
+  }
+
+  async getBooksByCategoryId(categoryId: string): Promise<Book[]> {
+    return await db
+      .select()
+      .from(books)
+      .where(eq(books.categoryId, categoryId))
+      .orderBy(desc(books.createdAt));
+  }
+
+  async updateBook(id: string, updates: Partial<Book>): Promise<Book> {
+    const [updated] = await db
+      .update(books)
+      .set(updates)
+      .where(eq(books.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getPendingBooks(): Promise<Book[]> {
+    return await db
+      .select()
+      .from(books)
+      .where(eq(books.status, 'pending'))
+      .orderBy(asc(books.createdAt));
+  }
+
+  async getActiveBooks(categoryId?: string): Promise<Book[]> {
+    let query = db
+      .select()
+      .from(books)
+      .where(eq(books.status, 'active'));
+    
+    if (categoryId) {
+      query = query.where(eq(books.categoryId, categoryId));
+    }
+    
+    return await query.orderBy(desc(books.createdAt));
+  }
+
+  // LIVRES Purchase operations (lecteurs)
+  async createBookPurchase(purchase: InsertBookPurchase): Promise<BookPurchase> {
+    const [newPurchase] = await db.insert(bookPurchases).values(purchase).returning();
+    return newPurchase;
+  }
+
+  async getBookPurchase(id: string): Promise<BookPurchase | undefined> {
+    const [purchase] = await db
+      .select()
+      .from(bookPurchases)
+      .where(eq(bookPurchases.id, id));
+    return purchase;
+  }
+
+  async getUserBookPurchases(userId: string): Promise<BookPurchase[]> {
+    return await db
+      .select()
+      .from(bookPurchases)
+      .where(eq(bookPurchases.userId, userId))
+      .orderBy(desc(bookPurchases.createdAt));
+  }
+
+  async getBookPurchases(bookId: string): Promise<BookPurchase[]> {
+    return await db
+      .select()
+      .from(bookPurchases)
+      .where(eq(bookPurchases.bookId, bookId))
+      .orderBy(desc(bookPurchases.createdAt));
+  }
+
+  async getBookPurchaseByUserAndBook(userId: string, bookId: string): Promise<BookPurchase | undefined> {
+    const [purchase] = await db
+      .select()
+      .from(bookPurchases)
+      .where(and(
+        eq(bookPurchases.userId, userId),
+        eq(bookPurchases.bookId, bookId)
+      ));
+    return purchase;
+  }
+
+  async updateBookPurchase(id: string, updates: Partial<BookPurchase>): Promise<BookPurchase> {
+    const [updated] = await db
+      .update(bookPurchases)
+      .set(updates)
+      .where(eq(bookPurchases.id, id))
+      .returning();
+    return updated;
+  }
+
+  // LIVRES Download Token operations
+  async createDownloadToken(token: InsertDownloadToken): Promise<DownloadToken> {
+    const [newToken] = await db.insert(downloadTokens).values(token).returning();
+    return newToken;
+  }
+
+  async getDownloadToken(token: string): Promise<DownloadToken | undefined> {
+    const [downloadToken] = await db
+      .select()
+      .from(downloadTokens)
+      .where(eq(downloadTokens.token, token));
+    return downloadToken;
+  }
+
+  async getDownloadTokensByPurchase(purchaseId: string): Promise<DownloadToken[]> {
+    return await db
+      .select()
+      .from(downloadTokens)
+      .where(eq(downloadTokens.purchaseId, purchaseId))
+      .orderBy(desc(downloadTokens.createdAt));
+  }
+
+  async updateDownloadToken(token: string, updates: Partial<DownloadToken>): Promise<DownloadToken> {
+    const [updated] = await db
+      .update(downloadTokens)
+      .set(updates)
+      .where(eq(downloadTokens.token, token))
+      .returning();
+    return updated;
+  }
+
+  async revokeDownloadTokens(purchaseId: string): Promise<void> {
+    await db
+      .update(downloadTokens)
+      .set({ 
+        isRevoked: true, 
+        revokedAt: new Date() 
+      })
+      .where(eq(downloadTokens.purchaseId, purchaseId));
   }
 }
 

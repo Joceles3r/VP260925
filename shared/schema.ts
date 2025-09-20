@@ -103,6 +103,15 @@ export const activityTypeEnum = pgEnum('activity_type', ['page_view', 'project_v
 // Article type enum for Infoporteurs
 export const articleTypeEnum = pgEnum('article_type', ['news', 'analysis', 'tutorial', 'opinion', 'review']);
 
+// Book category enum for LIVRES category
+export const bookCategoryEnum = pgEnum('book_category', ['fiction', 'non_fiction', 'poetry', 'essay', 'biography', 'other']);
+
+// Book status enum for lifecycle management
+export const bookStatusEnum = pgEnum('book_status', ['pending', 'active', 'top10', 'completed', 'rejected']);
+
+// Download token status enum for security
+export const downloadTokenStatusEnum = pgEnum('download_token_status', ['active', 'used', 'expired', 'revoked']);
+
 // Audit action enum for tracking administrative operations
 export const auditActionEnum = pgEnum('audit_action', [
   'purge_manual', 'purge_scheduled', 'purge_projects', 'purge_live_shows', 'purge_articles', 
@@ -650,6 +659,117 @@ export const articleInvestments = pgTable("article_investments", {
   unique("unique_user_article_investment").on(table.userId, table.articleId),
 ]);
 
+// ===== CATÉGORIE LIVRES - NOUVELLES TABLES =====
+
+// Book categories table - Catégories LIVRES avec cycle 30 jours
+export const bookCategories = pgTable("book_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).unique().notNull(), // "LIVRES_2025_Q1"
+  displayName: varchar("display_name").notNull(), // "Livres T1 2025"
+  description: text("description"),
+  status: categoryStatusEnum("status").default('waiting'), // waiting, active, closed
+  currentAuthorCount: integer("current_author_count").default(0),
+  targetAuthorCount: integer("target_author_count").default(100), // 100 auteurs pour démarrer
+  maxAuthorCount: integer("max_author_count").default(100), // Extensible à 200 (TOP 20)
+  cycleStartedAt: timestamp("cycle_started_at"), // Début cycle 30j
+  cycleEndsAt: timestamp("cycle_ends_at"), // Fin cycle 30j
+  potTotalEUR: decimal("pot_total_eur", { precision: 10, scale: 2 }).default('0.00'), // Pot commun
+  top10Calculated: boolean("top10_calculated").default(false), // TOP 10 déjà calculé?
+  isActive: boolean("is_active").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_book_categories_status").on(table.status),
+  index("idx_book_categories_active").on(table.isActive),
+  index("idx_book_categories_cycle").on(table.cycleStartedAt, table.cycleEndsAt),
+]);
+
+// Books table - Livres numériques des auteurs
+export const books = pgTable("books", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  category: bookCategoryEnum("category").notNull(), // fiction, non_fiction, etc.
+  categoryId: varchar("category_id").notNull().references(() => bookCategories.id), // Catégorie LIVRES active
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  unitPriceEUR: decimal("unit_price_eur", { precision: 5, scale: 2 }).notNull(), // {2, 3, 4, 5, 8}€
+  status: bookStatusEnum("status").default('pending'), // pending, active, top10, completed, rejected
+  fileUrl: varchar("file_url"), // URL stockage auteur (PDF/EPUB)
+  thumbnailUrl: varchar("thumbnail_url"),
+  fileSize: integer("file_size"), // Taille en bytes
+  fileFormat: varchar("file_format", { length: 10 }), // pdf, epub, etc.
+  pageCount: integer("page_count"),
+  totalVotes: integer("total_votes").default(0), // Total votes reçus
+  totalSalesEUR: decimal("total_sales_eur", { precision: 10, scale: 2 }).default('0.00'), // CA total
+  uniqueBuyers: integer("unique_buyers").default(0), // Nb acheteurs uniques
+  finalRank: integer("final_rank"), // Rang final dans TOP 10 (1-10)
+  engagementCoeff: decimal("engagement_coeff", { precision: 10, scale: 2 }), // montantTotal / max(1, uniqueBuyers)
+  autoReportNextCycle: boolean("auto_report_next_cycle").default(false), // TOP 10 auto-inscrit
+  endDate: timestamp("end_date"), // Fin de la catégorie LIVRES
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_books_author").on(table.authorId),
+  index("idx_books_category").on(table.categoryId),
+  index("idx_books_status").on(table.status),
+  index("idx_books_votes").on(table.totalVotes),
+  index("idx_books_sales").on(table.totalSalesEUR),
+  index("idx_books_rank").on(table.finalRank),
+  index("idx_books_engagement").on(table.engagementCoeff),
+]);
+
+// Book purchases table - Achats/investissements dans les livres
+export const bookPurchases = pgTable("book_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id), // Investi-lecteur
+  bookId: varchar("book_id").notNull().references(() => books.id),
+  categoryId: varchar("category_id").notNull().references(() => bookCategories.id),
+  amountEUR: decimal("amount_eur", { precision: 10, scale: 2 }).notNull(), // Montant payé {2→20}€
+  votesGranted: integer("votes_granted").notNull(), // Votes accordés selon barème
+  unitPriceEUR: decimal("unit_price_eur", { precision: 5, scale: 2 }).notNull(), // Prix livre
+  tipEUR: decimal("tip_eur", { precision: 5, scale: 2 }).default('0.00'), // Soutien au-dessus prix
+  paymentMethod: varchar("payment_method", { length: 20 }).default('stripe'), // stripe, visupoints
+  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  downloadTokenUsed: boolean("download_token_used").default(false), // Token déjà utilisé?
+  isWinner: boolean("is_winner").default(false), // Acheté livre du TOP 10?
+  potRedistributionEUR: decimal("pot_redistribution_eur", { precision: 10, scale: 2 }).default('0.00'), // Part du pot
+  potPaid: boolean("pot_paid").default(false), // Redistribution pot payée?
+  potPaidAt: timestamp("pot_paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_book_purchases_user").on(table.userId),
+  index("idx_book_purchases_book").on(table.bookId),
+  index("idx_book_purchases_category").on(table.categoryId),
+  index("idx_book_purchases_amount").on(table.amountEUR),
+  index("idx_book_purchases_winner").on(table.isWinner),
+  index("idx_book_purchases_created").on(table.createdAt),
+  unique("unique_book_purchase").on(table.userId, table.bookId), // 1 achat par livre/user
+]);
+
+// Download tokens table - Tokens de téléchargement sécurisé avec watermark
+export const downloadTokens = pgTable("download_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  purchaseId: varchar("purchase_id").notNull().references(() => bookPurchases.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  bookId: varchar("book_id").notNull().references(() => books.id),
+  token: varchar("token", { length: 128 }).unique().notNull(), // Token sécurisé
+  status: downloadTokenStatusEnum("status").default('active'), // active, used, expired, revoked
+  expiresAt: timestamp("expires_at").notNull(), // TTL 72h par défaut
+  usedAt: timestamp("used_at"),
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  watermarkData: jsonb("watermark_data"), // Info pour filigrane: userId, timestamp, etc.
+  downloadUrl: varchar("download_url"), // URL signée temporaire
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_download_tokens_purchase").on(table.purchaseId),
+  index("idx_download_tokens_user").on(table.userId),
+  index("idx_download_tokens_book").on(table.bookId),
+  index("idx_download_tokens_status").on(table.status),
+  index("idx_download_tokens_expires").on(table.expiresAt),
+]);
+
 // VISUpoints packs table for Investi-lecteurs
 export const visuPointsPacks = pgTable("visu_points_packs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1159,6 +1279,57 @@ export const stripeTransfersRelations = relations(stripeTransfers, ({ one }) => 
   }),
 }));
 
+// ===== RELATIONS POUR CATÉGORIE LIVRES =====
+
+export const bookCategoriesRelations = relations(bookCategories, ({ many }) => ({
+  books: many(books),
+  purchases: many(bookPurchases),
+}));
+
+export const booksRelations = relations(books, ({ one, many }) => ({
+  author: one(users, {
+    fields: [books.authorId],
+    references: [users.id],
+  }),
+  category: one(bookCategories, {
+    fields: [books.categoryId],
+    references: [bookCategories.id],
+  }),
+  purchases: many(bookPurchases),
+  downloadTokens: many(downloadTokens),
+}));
+
+export const bookPurchasesRelations = relations(bookPurchases, ({ one, many }) => ({
+  user: one(users, {
+    fields: [bookPurchases.userId],
+    references: [users.id],
+  }),
+  book: one(books, {
+    fields: [bookPurchases.bookId],
+    references: [books.id],
+  }),
+  category: one(bookCategories, {
+    fields: [bookPurchases.categoryId],
+    references: [bookCategories.id],
+  }),
+  downloadTokens: many(downloadTokens),
+}));
+
+export const downloadTokensRelations = relations(downloadTokens, ({ one }) => ({
+  purchase: one(bookPurchases, {
+    fields: [downloadTokens.purchaseId],
+    references: [bookPurchases.id],
+  }),
+  user: one(users, {
+    fields: [downloadTokens.userId],
+    references: [users.id],
+  }),
+  book: one(books, {
+    fields: [downloadTokens.bookId],
+    references: [books.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -1345,6 +1516,52 @@ export const insertVisuPointsPackSchema = createInsertSchema(visuPointsPacks).om
 });
 
 export const insertVisuPointsPurchaseSchema = createInsertSchema(visuPointsPurchases).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ===== SCHÉMAS D'INSERTION POUR CATÉGORIE LIVRES =====
+
+export const insertBookCategorySchema = createInsertSchema(bookCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBookSchema = createInsertSchema(books).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).refine((data) => {
+  // Validation des prix autorisés pour les auteurs LIVRES
+  const price = parseFloat(data.unitPriceEUR);
+  return [2, 3, 4, 5, 8].includes(price);
+}, {
+  message: "Le prix unitaire du livre doit être 2€, 3€, 4€, 5€ ou 8€",
+  path: ["unitPriceEUR"],
+});
+
+export const insertBookPurchaseSchema = createInsertSchema(bookPurchases).omit({
+  id: true,
+  createdAt: true,
+}).refine((data) => {
+  // Validation des tranches d'engagement pour investi-lecteurs LIVRES
+  const amount = parseFloat(data.amountEUR);
+  return [2, 3, 4, 5, 6, 8, 10, 12, 15, 20].includes(amount);
+}, {
+  message: "Le montant d'engagement doit être entre 2€ et 20€ selon les tranches autorisées",
+  path: ["amountEUR"],
+}).refine((data) => {
+  // Validation cohérence prix unitaire vs montant payé
+  const amount = parseFloat(data.amountEUR);
+  const unitPrice = parseFloat(data.unitPriceEUR);
+  return amount >= unitPrice;
+}, {
+  message: "Le montant payé doit être supérieur ou égal au prix unitaire du livre",
+  path: ["amountEUR"],
+});
+
+export const insertDownloadTokenSchema = createInsertSchema(downloadTokens).omit({
   id: true,
   createdAt: true,
 });
@@ -1573,6 +1790,20 @@ export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type InsertArticleInvestment = z.infer<typeof insertArticleInvestmentSchema>;
 export type InsertVisuPointsPack = z.infer<typeof insertVisuPointsPackSchema>;
 export type InsertVisuPointsPurchase = z.infer<typeof insertVisuPointsPurchaseSchema>;
+
+// ===== TYPES D'INSERTION POUR CATÉGORIE LIVRES =====
+
+export type InsertBookCategory = z.infer<typeof insertBookCategorySchema>;
+export type BookCategory = typeof bookCategories.$inferSelect;
+
+export type InsertBook = z.infer<typeof insertBookSchema>;
+export type Book = typeof books.$inferSelect;
+
+export type InsertBookPurchase = z.infer<typeof insertBookPurchaseSchema>;
+export type BookPurchase = typeof bookPurchases.$inferSelect;
+
+export type InsertDownloadToken = z.infer<typeof insertDownloadTokenSchema>;
+export type DownloadToken = typeof downloadTokens.$inferSelect;
 
 // Nouveaux types d'insertion TOP10 et transferts Stripe
 export type InsertStripeTransfer = z.infer<typeof insertStripeTransferSchema>;

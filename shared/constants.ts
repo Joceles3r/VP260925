@@ -68,6 +68,65 @@ export const INVESTMENT_STATUS = {
   }
 } as const;
 
+// ===== CATÉGORIE LIVRES - CONSTANTES =====
+
+// Prix autorisés pour les auteurs LIVRES (spécification v.16/09/2025)
+export const ALLOWED_BOOK_AUTHOR_PRICES = [2, 3, 4, 5, 8] as const;
+export type AllowedBookAuthorPrice = typeof ALLOWED_BOOK_AUTHOR_PRICES[number];
+
+// Tranches d'engagement pour investi-lecteurs LIVRES
+export const ALLOWED_BOOK_READER_AMOUNTS = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20] as const;
+export type AllowedBookReaderAmount = typeof ALLOWED_BOOK_READER_AMOUNTS[number];
+
+// Mapping votes selon barème VISUAL standard pour LIVRES
+export const BOOK_VOTES_MAPPING: Record<AllowedBookReaderAmount, number> = {
+  2: 1,   // 2€ = 1 vote
+  3: 2,   // 3€ = 2 votes
+  4: 3,   // 4€ = 3 votes
+  5: 4,   // 5€ = 4 votes
+  6: 5,   // 6€ = 5 votes
+  8: 6,   // 8€ = 6 votes
+  10: 7,  // 10€ = 7 votes
+  12: 8,  // 12€ = 8 votes
+  15: 9,  // 15€ = 9 votes
+  20: 10  // 20€ = 10 votes
+} as const;
+
+// Configuration LIVRES par défaut
+export const LIVRES_CONFIG = {
+  CYCLE_DURATION_DAYS: 30,           // Cycle 30 jours
+  TARGET_AUTHORS: 100,               // 100 auteurs pour démarrer
+  MAX_AUTHORS: 100,                  // Extensible à 200 (TOP 20)
+  TOP_N_WINNERS: 10,                 // TOP 10 gagnants par défaut
+  AUTHOR_REVENUE_SHARE: 0.70,        // 70% pour l'auteur
+  PLATFORM_REVENUE_SHARE: 0.30,     // 30% pour VISUAL
+  POT_AUTHORS_SHARE: 0.60,           // 60% du pot pour auteurs TOP10
+  POT_READERS_SHARE: 0.40,           // 40% du pot pour lecteurs gagnants
+  DOWNLOAD_TOKEN_TTL_HOURS: 72,      // Token expiration 72h
+  REPECHAGE_PRICE_EUR: 25,          // Repêchage 25€ (extensible de extension_price_eur)
+  REPECHAGE_WINDOW_HOURS: 24        // Fenêtre repêchage 24h
+} as const;
+
+// Validation functions for LIVRES
+export function isValidBookAuthorPrice(price: number): price is AllowedBookAuthorPrice {
+  return ALLOWED_BOOK_AUTHOR_PRICES.includes(price as AllowedBookAuthorPrice);
+}
+
+export function isValidBookReaderAmount(amount: number): amount is AllowedBookReaderAmount {
+  return ALLOWED_BOOK_READER_AMOUNTS.includes(amount as AllowedBookReaderAmount);
+}
+
+export function getVotesForAmount(amount: number): number {
+  if (isValidBookReaderAmount(amount)) {
+    return BOOK_VOTES_MAPPING[amount];
+  }
+  return 0; // Invalid amount
+}
+
+export function calculateTipAmount(amountPaid: number, unitPrice: number): number {
+  return Math.max(0, amountPaid - unitPrice);
+}
+
 // Default values
 export const DEFAULT_CATEGORY_SCORE = 0.5;
 export const DEFAULT_COLOR_CLASS = 'bg-muted text-muted-foreground';

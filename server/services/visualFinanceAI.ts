@@ -46,6 +46,18 @@ export const VISUAL_FINANCE_CONFIG = {
   // Articles infoporteurs
   infoarticle_platform_fee_pct: 0.30, // 30% VISUAL, 70% infoporteur
   
+  // ===== CATÉGORIE LIVRES =====
+  // Ventes instantanées livres (70/30)
+  books_author_revenue_share: 0.70, // 70% pour l'auteur
+  books_platform_fee_pct: 0.30, // 30% pour VISUAL
+  
+  // Pot commun LIVRES (60/40)
+  books_pot_authors_share: 0.60, // 60% du pot pour auteurs TOP10
+  books_pot_readers_share: 0.40, // 40% du pot pour lecteurs gagnants
+  
+  // Tokens téléchargement
+  books_download_token_ttl_hours: 72, // Expiration 72h
+  
   // Extension 168h
   extension_price_eur: 25,
   
@@ -437,7 +449,7 @@ export class VisualFinanceAIService {
       });
     }
     
-    await this.logAuditEntry('payout_executed', 'golden_ticket', userId, goldenTicket, 'visualfinanceai');
+    await this.logAuditEntry('payout_executed', 'golden_ticket', userId, goldenTicket);
     
     return goldenTicket;
   }
@@ -587,6 +599,200 @@ export class VisualFinanceAIService {
     });
     
     return activated;
+  }
+
+  // ===== RÈGLES FINANCIÈRES : CATÉGORIE LIVRES =====
+
+  /**
+   * Calcul vente instantanée livre (70/30)
+   * @param bookId ID du livre
+   * @param authorId ID de l'auteur
+   * @param grossPriceEur Prix de vente brut en euros
+   * @param buyerId ID de l'acheteur
+   * @param stripePaymentIntentId ID Stripe transaction
+   */
+  async calculateBookSale(
+    bookId: string,
+    authorId: string,
+    grossPriceEur: number,
+    buyerId: string,
+    stripePaymentIntentId: string
+  ): Promise<PayoutCalculation> {
+    
+    const grossCents = this.toCents(grossPriceEur);
+    const platformFeeCents = Math.round(grossCents * this.config.books_platform_fee_pct);
+    const authorRevenueCents = grossCents - platformFeeCents;
+    
+    // Euro floor pour l'auteur (utilisateur)
+    const authorRevenueEurFloor = this.euroFloor(authorRevenueCents);
+    const residualCents = authorRevenueCents - authorRevenueEurFloor;
+    
+    const payouts: PayoutEntry[] = [
+      {
+        type: 'infoporteur', // Réutilisation du type existant pour auteur livre
+        recipient_id: authorId,
+        amount_cents: authorRevenueCents,
+        amount_eur_floor: authorRevenueEurFloor,
+        reference_id: bookId
+      }
+    ];
+    
+    const calculation: PayoutCalculation = {
+      rule_version: 'books_sale_70_30_v1',
+      total_amount_cents: grossCents,
+      payouts,
+      visual_amount_cents: platformFeeCents + residualCents,
+      residual_cents: residualCents
+    };
+
+    // Créer entrée ledger
+    await this.createLedgerEntry({
+      transactionType: 'book_sale',
+      referenceId: bookId,
+      referenceType: 'book_purchase',
+      recipientId: authorId,
+      grossAmountCents: grossCents,
+      netAmountCents: authorRevenueEurFloor,
+      feeCents: platformFeeCents + residualCents,
+      stripePaymentIntentId,
+      idempotencyKey: `book_sale_${bookId}_${buyerId}_${stripePaymentIntentId}`,
+      payoutRule: 'books_70_30_v1'
+    });
+
+    await this.logAuditEntry('payout_executed', 'book_sale', bookId, {
+      author_id: authorId,
+      buyer_id: buyerId,
+      gross_eur: grossPriceEur,
+      author_revenue_eur: this.centsToEur(authorRevenueEurFloor),
+      platform_fee_eur: this.centsToEur(platformFeeCents),
+      residual_eur: this.centsToEur(residualCents),
+      stripe_payment_intent_id: stripePaymentIntentId
+    });
+
+    return calculation;
+  }
+
+  /**
+   * Calcul redistribution pot commun LIVRES (60/40)
+   * @param categoryId ID de la catégorie LIVRES
+   * @param potTotalEur Montant total du pot en euros
+   * @param authorsTop10 IDs des auteurs TOP 10
+   * @param winningReaders IDs des lecteurs gagnants (qui ont acheté livres TOP 10)
+   */
+  async calculateBooksPotRedistribution(
+    categoryId: string,
+    potTotalEur: number,
+    authorsTop10: string[],
+    winningReaders: string[]
+  ): Promise<PayoutCalculation> {
+    
+    const potCents = this.toCents(potTotalEur);
+    const authorsPotCents = Math.floor(potCents * this.config.books_pot_authors_share);
+    const readersPotCents = Math.floor(potCents * this.config.books_pot_readers_share);
+    
+    // Répartition équitable par défaut
+    const authorsShareEach = authorsTop10.length > 0 ? Math.floor(authorsPotCents / authorsTop10.length) : 0;
+    const readersShareEach = winningReaders.length > 0 ? Math.floor(readersPotCents / winningReaders.length) : 0;
+    
+    // Euro floor pour utilisateurs
+    const authorsShareEurFloor = this.euroFloor(authorsShareEach);
+    const readersShareEurFloor = this.euroFloor(readersShareEach);
+    
+    const payouts: PayoutEntry[] = [];
+    
+    // Payouts auteurs TOP 10
+    for (let i = 0; i < authorsTop10.length; i++) {
+      payouts.push({
+        type: 'creator_top10',
+        recipient_id: authorsTop10[i],
+        amount_cents: authorsShareEach,
+        amount_eur_floor: authorsShareEurFloor,
+        rank: i + 1,
+        reference_id: categoryId
+      });
+    }
+    
+    // Payouts lecteurs gagnants
+    for (const readerId of winningReaders) {
+      payouts.push({
+        type: 'pot24h_winner', // Réutilisation type existant
+        recipient_id: readerId,
+        amount_cents: readersShareEach,
+        amount_eur_floor: readersShareEurFloor,
+        reference_id: categoryId
+      });
+    }
+    
+    // Calcul résiduel (restes euro-floor + montant non réparti)
+    const totalPaidAuthors = authorsTop10.length * authorsShareEurFloor;
+    const totalPaidReaders = winningReaders.length * readersShareEurFloor;
+    const totalPaidCents = totalPaidAuthors + totalPaidReaders;
+    const residualCents = potCents - totalPaidCents;
+    
+    const calculation: PayoutCalculation = {
+      rule_version: 'books_pot_60_40_v1',
+      total_amount_cents: potCents,
+      payouts,
+      visual_amount_cents: residualCents,
+      residual_cents: residualCents
+    };
+
+    // Créer entrées ledger pour tous les payouts
+    await this.createLedgerEntries(calculation, 'books_pot_redistribution');
+
+    await this.logAuditEntry('payout_executed', 'books_pot', categoryId, {
+      pot_total_eur: potTotalEur,
+      authors_count: authorsTop10.length,
+      readers_count: winningReaders.length,
+      authors_share_eur: this.centsToEur(authorsPotCents),
+      readers_share_eur: this.centsToEur(readersPotCents),
+      residual_eur: this.centsToEur(residualCents)
+    });
+
+    return calculation;
+  }
+
+  /**
+   * Génération token téléchargement sécurisé avec watermark
+   * @param purchaseId ID de l'achat
+   * @param userId ID de l'utilisateur
+   * @param bookId ID du livre
+   */
+  async generateDownloadToken(
+    purchaseId: string,
+    userId: string,
+    bookId: string
+  ): Promise<{ token: string; expiresAt: Date; downloadUrl: string }> {
+    
+    const token = `bt_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + this.config.books_download_token_ttl_hours);
+    
+    // Données pour watermark
+    const watermarkData = {
+      user_id: userId,
+      purchase_id: purchaseId,
+      book_id: bookId,
+      timestamp: new Date().toISOString(),
+      token: token
+    };
+    
+    // URL temporaire signée (à implémenter selon stockage)
+    const downloadUrl = `/api/books/download/${token}`;
+    
+    await this.logAuditEntry('decision_made', 'download_token', token, {
+      purchase_id: purchaseId,
+      user_id: userId,
+      book_id: bookId,
+      expires_at: expiresAt.toISOString(),
+      watermark_data: watermarkData
+    });
+    
+    return {
+      token,
+      expiresAt,
+      downloadUrl
+    };
   }
 }
 
