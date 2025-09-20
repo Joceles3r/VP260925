@@ -20,7 +20,7 @@ import {
 } from "@shared/schema";
 
 export interface OrchestrationEvent {
-  type: 'category_close' | 'extension_request' | 'article_sale' | 'points_conversion' | 'golden_ticket';
+  type: 'category_close' | 'extension_request' | 'article_sale' | 'points_conversion' | 'golden_ticket' | 'book_cycle_close' | 'book_sale' | 'book_pot_redistribution';
   source: 'visualai' | 'visualfinanceai' | 'system';
   data: any;
   priority: 'low' | 'medium' | 'high' | 'critical';
@@ -254,6 +254,128 @@ export class AgentOrchestratorService {
   }
 
   /**
+   * Workflow : Cycle de vie catégorie LIVRES (30 jours)
+   */
+  async executeBookCategoryLifecycleWorkflow(
+    categoryId: string,
+    books: any[],
+    purchases: any[]
+  ): Promise<WorkflowExecution> {
+    
+    const workflowId = `book_cycle_${categoryId}_${Date.now()}`;
+    
+    const execution: WorkflowExecution = {
+      id: workflowId,
+      workflow_type: 'book_cycle_close',
+      steps: [
+        {
+          id: 'calculate_rankings',
+          name: 'Calcul classements livres et vote mapping',
+          agent: 'visualai',
+          status: 'pending',
+          input: { books, purchases },
+          slo_target_ms: 1000
+        },
+        {
+          id: 'calculate_pot_redistribution',
+          name: 'Redistribution pot commun 60/40 auteurs/lecteurs',
+          agent: 'visualfinanceai',
+          status: 'pending',
+          input: {},
+          slo_target_ms: 2000
+        },
+        {
+          id: 'execute_payouts',
+          name: 'Exécution paiements auteurs et lecteurs',
+          agent: 'visualfinanceai',
+          status: 'pending',
+          input: {},
+          slo_target_ms: 3000
+        }
+      ],
+      status: 'pending',
+      started_at: new Date()
+    };
+
+    try {
+      execution.status = 'running';
+
+      // ÉTAPE 1: VisualAI calcule les classements avec vote mapping
+      const step1 = execution.steps[0];
+      step1.status = 'running';
+      const startTime1 = Date.now();
+      
+      // Calculer classements livres avec vote mapping
+      const rankedBooks = await this.calculateBookRankings(books, purchases);
+      const topAuthors = rankedBooks.slice(0, 10).map(b => b.authorId);
+      const topReaders = await this.extractTopBookReaders(purchases, rankedBooks);
+      
+      step1.duration_ms = Date.now() - startTime1;
+      step1.output = { rankedBooks, topAuthors, topReaders };
+      step1.status = 'completed';
+
+      // ÉTAPE 2: VisualFinanceAI calcule redistribution pot
+      const step2 = execution.steps[1];
+      step2.status = 'running';
+      const startTime2 = Date.now();
+      
+      const totalPot = this.calculateBookCategoryPot(purchases);
+      const redistribution = await visualFinanceAI.calculateBooksPotRedistribution(
+        categoryId,
+        totalPot,
+        topAuthors,
+        topReaders
+      );
+      
+      step2.duration_ms = Date.now() - startTime2;
+      step2.output = redistribution;
+      step2.status = 'completed';
+
+      // ÉTAPE 3: Exécution des paiements
+      const step3 = execution.steps[2];
+      step3.status = 'running';
+      const startTime3 = Date.now();
+      
+      const requiresAdminApproval = await this.checkAdminApprovalRequired(redistribution);
+      
+      if (requiresAdminApproval) {
+        await storage.createAgentDecision({
+          agentType: 'visualfinanceai',
+          decisionType: 'book_pot_redistribution',
+          subjectId: categoryId,
+          subjectType: 'book_category',
+          ruleApplied: redistribution.rule_version,
+          score: totalPot.toString(),
+          justification: `Redistribution pot LIVRES catégorie ${categoryId}: ${totalPot}€`,
+          parameters: { workflow_id: workflowId, redistribution },
+          status: 'pending'
+        });
+        
+        execution.status = 'requires_approval';
+        step3.status = 'pending';
+        step3.output = { requires_admin_approval: true };
+      } else {
+        await this.executeBookPayouts(redistribution);
+        
+        step3.duration_ms = Date.now() - startTime3;
+        step3.status = 'completed';
+        step3.output = { payouts_executed: redistribution.payouts?.length || 0 };
+        execution.status = 'completed';
+      }
+      
+      execution.completed_at = new Date();
+      
+    } catch (error) {
+      execution.status = 'failed';
+      execution.error = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[AgentOrchestrator] Book cycle workflow failed:', error);
+    }
+
+    await this.logWorkflowExecution(execution);
+    return execution;
+  }
+
+  /**
    * Workflow : Conversion VISUpoints
    */
   async executePointsConversionWorkflow(
@@ -298,7 +420,7 @@ export class AgentOrchestratorService {
       if (!user) throw new Error('Utilisateur introuvable');
       
       // Vérifier KYC et seuils
-      const canConvert = availablePoints >= 2500 && user.kycStatus === 'approved';
+      const canConvert = availablePoints >= 2500 && user.kycVerified === true;
       if (!canConvert) {
         throw new Error('Conversion impossible: KYC ou seuil non respecté');
       }
@@ -435,6 +557,65 @@ export class AgentOrchestratorService {
   private async extendCategoryLifetime(projectId: string, durationMs: number): Promise<void> {
     // Simuler extension catégorie - à connecter avec le système de catégories
     console.log(`[AgentOrchestrator] Extension catégorie ${projectId} de ${durationMs}ms`);
+  }
+
+  // ===== UTILITAIRES LIVRES =====
+
+  private async calculateBookRankings(books: any[], purchases: any[]): Promise<any[]> {
+    // Calculer le score total de chaque livre basé sur les achats et vote mapping
+    const bookScores = new Map<string, number>();
+    
+    for (const purchase of purchases) {
+      const currentScore = bookScores.get(purchase.bookId) || 0;
+      const purchaseScore = purchase.votesGranted || 0; // Utilise le vote mapping
+      bookScores.set(purchase.bookId, currentScore + purchaseScore);
+    }
+    
+    // Enrichir les livres avec leurs scores et trier
+    const booksWithScores = books.map(book => ({
+      ...book,
+      totalScore: bookScores.get(book.id) || 0
+    }));
+    
+    return booksWithScores.sort((a, b) => b.totalScore - a.totalScore);
+  }
+
+  private async extractTopBookReaders(purchases: any[], rankedBooks: any[]): Promise<string[]> {
+    // Récupérer les top lecteurs basé sur leurs contributions aux livres TOP10
+    const top10BookIds = new Set(rankedBooks.slice(0, 10).map(b => b.id));
+    const top10Purchases = purchases.filter(p => top10BookIds.has(p.bookId));
+    
+    // Grouper par lecteur et calculer montants totaux
+    const readerTotals = new Map<string, number>();
+    top10Purchases.forEach(purchase => {
+      const current = readerTotals.get(purchase.userId) || 0;
+      readerTotals.set(purchase.userId, current + parseFloat(purchase.amountEUR));
+    });
+    
+    // Trier par montant et retourner top lecteurs
+    return Array.from(readerTotals.entries())
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 10)
+      .map(([userId]) => userId);
+  }
+
+  private calculateBookCategoryPot(purchases: any[]): number {
+    // Calculer le pot total de la catégorie LIVRES
+    return purchases.reduce((total, purchase) => {
+      return total + parseFloat(purchase.amountEUR);
+    }, 0);
+  }
+
+  private async executeBookPayouts(redistribution: any): Promise<void> {
+    // Exécuter les paiements spécifiques LIVRES (auteurs + lecteurs)
+    if (redistribution.payouts) {
+      for (const payout of redistribution.payouts) {
+        if (payout.recipient_id && payout.amount_eur > 0) {
+          console.log(`[AgentOrchestrator] LIVRES payout: ${payout.recipient_id} → ${payout.amount_eur}€ (${payout.type})`);
+          // En production: appel Stripe API via VisualFinanceAI
+        }
+      }
+    }
   }
 
   private async logWorkflowExecution(execution: WorkflowExecution): Promise<void> {
