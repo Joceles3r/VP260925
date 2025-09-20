@@ -23,7 +23,12 @@ import {
   insertArticleSchema,
   insertArticleInvestmentSchema,
   insertVisuPointsPackSchema,
-  insertVisuPointsPurchaseSchema
+  insertVisuPointsPurchaseSchema,
+  // Schémas LIVRES
+  insertBookCategorySchema,
+  insertBookSchema,
+  insertBookPurchaseSchema,
+  insertDownloadTokenSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
 import { 
@@ -38,7 +43,13 @@ import {
   isValidArticlePrice,
   VISU_POINTS_PACKS,
   VISU_POINTS,
-  STRIPE_CONFIG
+  STRIPE_CONFIG,
+  // Constantes LIVRES
+  ALLOWED_BOOK_AUTHOR_PRICES,
+  ALLOWED_BOOK_READER_AMOUNTS,
+  isValidBookAuthorPrice,
+  isValidBookReaderAmount,
+  BOOK_VOTES_MAPPING
 } from "@shared/constants";
 import { z } from "zod";
 import multer from "multer";
@@ -3467,15 +3478,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const limit = parseInt(req.query.limit as string) || 7; // 7 derniers jours par défaut
       // TODO: Implémenter getRankingHistory dans Top10Service
-      const history = []; // Temporaire : simulation historique vide
+      const history: any[] = []; // Temporaire : simulation historique vide
       
       res.json({
-        history: history.slice(0, limit).map((ranking: any) => ({
-          date: ranking.redistribution.redistributionDate,
-          top10Count: ranking.top10Infoporteurs.length,
-          winnersCount: ranking.winners.length,
-          totalPool: ranking.redistribution.totalPoolEUR,
-          poolDistributed: ranking.redistribution.poolDistributed
+        history: history.slice(0, limit).map((ranking) => ({
+          date: ranking?.redistribution?.redistributionDate || '',
+          top10Count: ranking?.top10Infoporteurs?.length || 0,
+          winnersCount: ranking?.winners?.length || 0,
+          totalPool: ranking?.redistribution?.totalPoolEUR || 0,
+          poolDistributed: ranking?.redistribution?.poolDistributed || 0
         }))
       });
     } catch (error) {
@@ -3561,6 +3572,416 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching reward scales:", error);
       res.status(500).json({ message: "Erreur lors de la récupération des barèmes" });
+    }
+  });
+
+  // ===== ROUTES LIVRES CATEGORY =====
+
+  // Get all book categories
+  app.get('/api/books/categories', async (req, res) => {
+    try {
+      const categories = await storage.getAllBookCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching book categories:", error);
+      res.status(500).json({ message: "Failed to fetch book categories" });
+    }
+  });
+
+  // Get book category by ID
+  app.get('/api/books/categories/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const category = await storage.getBookCategory(id);
+      
+      if (!category) {
+        return res.status(404).json({ message: "Book category not found" });
+      }
+      
+      res.json(category);
+    } catch (error) {
+      console.error("Error fetching book category:", error);
+      res.status(500).json({ message: "Failed to fetch book category" });
+    }
+  });
+
+  // Create book category (admin only)
+  app.post('/api/books/categories', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const validation = insertBookCategorySchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid category data",
+          errors: validation.error.issues 
+        });
+      }
+
+      const category = await storage.createBookCategory(validation.data);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Error creating book category:", error);
+      if (error instanceof Error && error.message.includes('unique')) {
+        return res.status(409).json({ message: "Category name already exists" });
+      }
+      res.status(500).json({ message: "Failed to create book category" });
+    }
+  });
+
+  // Update book category (admin only)
+  app.patch('/api/books/categories/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { id } = req.params;
+      
+      // Validate update data using partial schema
+      const updateSchema = insertBookCategorySchema.partial();
+      const validation = updateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid category update data",
+          errors: validation.error.issues 
+        });
+      }
+
+      const category = await storage.updateBookCategory(id, validation.data);
+      res.json(category);
+    } catch (error) {
+      console.error("Error updating book category:", error);
+      res.status(500).json({ message: "Failed to update book category" });
+    }
+  });
+
+  // ===== ROUTES LIVRES BOOKS =====
+
+  // Get books by category
+  app.get('/api/books/categories/:categoryId/books', async (req, res) => {
+    try {
+      const { categoryId } = req.params;
+      const books = await storage.getBooksByCategoryId(categoryId);
+      res.json(books);
+    } catch (error) {
+      console.error("Error fetching books by category:", error);
+      res.status(500).json({ message: "Failed to fetch books" });
+    }
+  });
+
+  // Get books by author
+  app.get('/api/books/author/:authorId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { authorId } = req.params;
+      const userId = req.user.claims.sub;
+      
+      // Only allow authors to see their own books, or admins to see any
+      const user = await storage.getUser(userId);
+      if (authorId !== userId && (!user || user.profileType !== 'admin')) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const books = await storage.getBooksByAuthor(authorId);
+      res.json(books);
+    } catch (error) {
+      console.error("Error fetching author books:", error);
+      res.status(500).json({ message: "Failed to fetch author books" });
+    }
+  });
+
+  // Get active books (public listing)
+  app.get('/api/books', async (req, res) => {
+    try {
+      const { categoryId } = req.query;
+      const books = await storage.getActiveBooks(categoryId as string);
+      res.json(books);
+    } catch (error) {
+      console.error("Error fetching active books:", error);
+      res.status(500).json({ message: "Failed to fetch books" });
+    }
+  });
+
+  // Get book by ID
+  app.get('/api/books/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const book = await storage.getBook(id);
+      
+      if (!book) {
+        return res.status(404).json({ message: "Book not found" });
+      }
+      
+      res.json(book);
+    } catch (error) {
+      console.error("Error fetching book:", error);
+      res.status(500).json({ message: "Failed to fetch book" });
+    }
+  });
+
+  // Create book (authenticated authors only)
+  app.post('/api/books', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const validation = insertBookSchema.safeParse({
+        ...req.body,
+        authorId: userId
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid book data",
+          errors: validation.error.issues 
+        });
+      }
+
+      // Validate author price
+      if (!isValidBookAuthorPrice(parseFloat(validation.data.unitPriceEUR))) {
+        return res.status(400).json({ 
+          message: `Invalid author price. Allowed prices: ${ALLOWED_BOOK_AUTHOR_PRICES.join(', ')}€` 
+        });
+      }
+
+      const book = await storage.createBook(validation.data);
+      res.status(201).json(book);
+    } catch (error) {
+      console.error("Error creating book:", error);
+      res.status(500).json({ message: "Failed to create book" });
+    }
+  });
+
+  // Update book (author or admin only)
+  app.patch('/api/books/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { id } = req.params;
+
+      const book = await storage.getBook(id);
+      if (!book) {
+        return res.status(404).json({ message: "Book not found" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (book.authorId !== userId && (!user || user.profileType !== 'admin')) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Validate update data using partial schema
+      const updateSchema = insertBookSchema.partial();
+      const validation = updateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid book update data",
+          errors: validation.error.issues 
+        });
+      }
+
+      // Additional validation for author price if being updated
+      if (validation.data.unitPriceEUR && !isValidBookAuthorPrice(parseFloat(validation.data.unitPriceEUR))) {
+        return res.status(400).json({ 
+          message: `Invalid author price. Allowed prices: ${ALLOWED_BOOK_AUTHOR_PRICES.join(', ')}€` 
+        });
+      }
+
+      const updatedBook = await storage.updateBook(id, validation.data);
+      res.json(updatedBook);
+    } catch (error) {
+      console.error("Error updating book:", error);
+      res.status(500).json({ message: "Failed to update book" });
+    }
+  });
+
+  // ===== ROUTES LIVRES PURCHASES =====
+
+  // Purchase book (lecteurs)
+  app.post('/api/books/:bookId/purchase', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { bookId } = req.params;
+
+      const validation = insertBookPurchaseSchema.safeParse({
+        ...req.body,
+        userId,
+        bookId
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid purchase data",
+          errors: validation.error.issues 
+        });
+      }
+
+      // Validate reader amount
+      if (!isValidBookReaderAmount(parseFloat(validation.data.amountEUR))) {
+        return res.status(400).json({ 
+          message: `Invalid reader amount. Allowed amounts: ${ALLOWED_BOOK_READER_AMOUNTS.join(', ')}€` 
+        });
+      }
+
+      // Check if user already purchased this book
+      const existingPurchase = await storage.getBookPurchaseByUserAndBook(userId, bookId);
+      if (existingPurchase) {
+        return res.status(409).json({ message: "Book already purchased" });
+      }
+
+      // Calculate votes from amount
+      const amountNumber = parseFloat(validation.data.amountEUR);
+      const votesGranted = BOOK_VOTES_MAPPING[amountNumber as keyof typeof BOOK_VOTES_MAPPING] || 0;
+      
+      const purchase = await storage.createBookPurchase({
+        ...validation.data,
+        votesGranted
+      });
+
+      res.status(201).json(purchase);
+    } catch (error) {
+      console.error("Error creating book purchase:", error);
+      res.status(500).json({ message: "Failed to purchase book" });
+    }
+  });
+
+  // Get user book purchases
+  app.get('/api/books/purchases', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const purchases = await storage.getUserBookPurchases(userId);
+      res.json(purchases);
+    } catch (error) {
+      console.error("Error fetching user book purchases:", error);
+      res.status(500).json({ message: "Failed to fetch purchases" });
+    }
+  });
+
+  // Get book purchases (for book owners)
+  app.get('/api/books/:bookId/purchases', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { bookId } = req.params;
+
+      // Verify book ownership or admin access
+      const book = await storage.getBook(bookId);
+      if (!book) {
+        return res.status(404).json({ message: "Book not found" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (book.authorId !== userId && (!user || user.profileType !== 'admin')) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const purchases = await storage.getBookPurchases(bookId);
+      res.json(purchases);
+    } catch (error) {
+      console.error("Error fetching book purchases:", error);
+      res.status(500).json({ message: "Failed to fetch book purchases" });
+    }
+  });
+
+  // ===== ROUTES LIVRES DOWNLOAD =====
+
+  // Generate download token
+  app.post('/api/books/:bookId/download-token', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { bookId } = req.params;
+
+      // Verify user has purchased the book
+      const purchase = await storage.getBookPurchaseByUserAndBook(userId, bookId);
+      if (!purchase) {
+        return res.status(403).json({ message: "Book not purchased" });
+      }
+
+      // Use VisualFinanceAI to generate secure download token
+      const { visualFinanceAI } = await import('./services/visualFinanceAI');
+      const tokenData = await visualFinanceAI.generateDownloadToken(
+        userId,
+        purchase.id,
+        bookId
+      );
+
+      // Store token in database
+      const downloadToken = await storage.createDownloadToken({
+        token: tokenData.token,
+        purchaseId: purchase.id,
+        userId,
+        bookId,
+        expiresAt: tokenData.expiresAt,
+        downloadUrl: tokenData.downloadUrl,
+        status: 'active'
+      });
+
+      res.json({
+        token: tokenData.token,
+        expiresAt: tokenData.expiresAt,
+        downloadUrl: tokenData.downloadUrl
+      });
+    } catch (error) {
+      console.error("Error generating download token:", error);
+      res.status(500).json({ message: "Failed to generate download token" });
+    }
+  });
+
+  // Download book with token
+  app.get('/api/books/download/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      const downloadToken = await storage.getDownloadToken(token);
+      if (!downloadToken) {
+        return res.status(404).json({ message: "Invalid download token" });
+      }
+
+      if (downloadToken.status === 'revoked') {
+        return res.status(403).json({ message: "Download token revoked" });
+      }
+
+      if (new Date() > new Date(downloadToken.expiresAt)) {
+        return res.status(403).json({ message: "Download token expired" });
+      }
+
+      // TODO: Implement actual file download with watermark
+      // For now, return download information
+      res.json({
+        message: "Download authorized",
+        bookId: downloadToken.bookId,
+        token: downloadToken.token,
+        expiresAt: downloadToken.expiresAt
+      });
+    } catch (error) {
+      console.error("Error downloading book:", error);
+      res.status(500).json({ message: "Failed to download book" });
+    }
+  });
+
+  // Get user download tokens
+  app.get('/api/books/download-tokens', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Get all user purchases then their tokens
+      const purchases = await storage.getUserBookPurchases(userId);
+      const tokens = [];
+      
+      for (const purchase of purchases) {
+        const purchaseTokens = await storage.getDownloadTokensByPurchase(purchase.id);
+        tokens.push(...purchaseTokens);
+      }
+
+      res.json(tokens);
+    } catch (error) {
+      console.error("Error fetching download tokens:", error);
+      res.status(500).json({ message: "Failed to fetch download tokens" });
     }
   });
 
