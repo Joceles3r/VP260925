@@ -55,6 +55,8 @@ import {
   books,
   bookPurchases,
   downloadTokens,
+  // Table feature toggles
+  featureToggles,
   type User,
   type UpsertUser,
   type Project,
@@ -153,6 +155,9 @@ import {
   type InsertBook,
   type InsertBookPurchase,
   type InsertDownloadToken,
+  // Types feature toggles
+  type FeatureToggle,
+  type InsertFeatureToggle,
   insertArticleSalesDailySchema,
   insertTop10InfoporteursSchema,
   insertTop10WinnersSchema,
@@ -494,6 +499,13 @@ export interface IStorage {
   getDownloadTokensByPurchase(purchaseId: string): Promise<DownloadToken[]>;
   updateDownloadToken(token: string, updates: Partial<DownloadToken>): Promise<DownloadToken>;
   revokeDownloadTokens(purchaseId: string): Promise<void>;
+  
+  // Feature toggles operations
+  createFeatureToggle(toggle: InsertFeatureToggle): Promise<FeatureToggle>;
+  getFeatureToggle(key: string): Promise<FeatureToggle | undefined>;
+  getFeatureToggles(): Promise<FeatureToggle[]>;
+  updateFeatureToggle(key: string, updates: Partial<FeatureToggle>): Promise<FeatureToggle>;
+  getPublicToggles(): Promise<{ [key: string]: { visible: boolean; message: string } }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2727,6 +2739,88 @@ export class DatabaseStorage implements IStorage {
         revokedAt: new Date() 
       })
       .where(eq(downloadTokens.purchaseId, purchaseId));
+  }
+
+  // Feature toggles operations
+  async createFeatureToggle(toggle: InsertFeatureToggle): Promise<FeatureToggle> {
+    const [newToggle] = await db.insert(featureToggles).values(toggle).returning();
+    return newToggle;
+  }
+
+  async getFeatureToggle(key: string): Promise<FeatureToggle | undefined> {
+    const [toggle] = await db
+      .select()
+      .from(featureToggles)
+      .where(eq(featureToggles.key, key));
+    return toggle;
+  }
+
+  async getFeatureToggles(): Promise<FeatureToggle[]> {
+    return await db
+      .select()
+      .from(featureToggles)
+      .orderBy(asc(featureToggles.label));
+  }
+
+  async updateFeatureToggle(key: string, updates: Partial<FeatureToggle>): Promise<FeatureToggle> {
+    // Exclure la clé des updates pour éviter modifications accidentelles
+    const { key: _, ...safeUpdates } = updates;
+    
+    const [updatedToggle] = await db
+      .update(featureToggles)
+      .set({ 
+        ...safeUpdates, 
+        version: sql`${featureToggles.version} + 1`,
+        updatedAt: new Date() 
+      })
+      .where(eq(featureToggles.key, key))
+      .returning();
+    
+    if (!updatedToggle) {
+      throw new Error(`Feature toggle with key '${key}' not found`);
+    }
+    
+    return updatedToggle;
+  }
+
+  async getPublicToggles(): Promise<{ [key: string]: { visible: boolean; message: string } }> {
+    const toggles = await db
+      .select({
+        key: featureToggles.key,
+        isVisible: featureToggles.isVisible,
+        hiddenMessageVariant: featureToggles.hiddenMessageVariant,
+        hiddenMessageCustom: featureToggles.hiddenMessageCustom,
+        kind: featureToggles.kind
+      })
+      .from(featureToggles);
+
+    const result: { [key: string]: { visible: boolean; message: string } } = {};
+    
+    for (const toggle of toggles) {
+      let message = "";
+      if (!toggle.isVisible) {
+        switch (toggle.hiddenMessageVariant) {
+          case 'en_cours':
+            message = toggle.kind === 'category' ? 'Catégorie en cours' : 'Rubrique en cours';
+            break;
+          case 'en_travaux':
+            message = toggle.kind === 'category' ? 'Catégorie en travaux' : 'Rubrique en travaux';
+            break;
+          case 'custom':
+            message = toggle.hiddenMessageCustom || 'Section temporairement indisponible';
+            break;
+          default:
+            message = toggle.kind === 'category' ? 'Catégorie en cours' : 'Rubrique en cours';
+        }
+      }
+      
+      result[toggle.key] = {
+        visible: toggle.isVisible,
+        message
+      };
+    }
+    
+    return result;
   }
 }
 
