@@ -707,6 +707,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/projects/random - Récupérer un projet aléatoire de qualité
+  app.get('/api/projects/random', async (req, res) => {
+    try {
+      // Récupérer tous les projets avec un score de qualité décent
+      const projects = await storage.getProjects(100, 0); // Limite élargie pour plus de choix
+      
+      if (!projects || projects.length === 0) {
+        return res.status(404).json({ 
+          message: "No projects available",
+          retryable: false
+        });
+      }
+
+      // Filtrer les projets avec un score décent (> 6.0) et diversifier les catégories
+      const qualityProjects = projects.filter(p => {
+        const score = typeof p.mlScore === 'number' ? p.mlScore : parseFloat(p.mlScore || '0');
+        return score > 6.0 && p.status === 'active';
+      });
+
+      let selectedProject;
+      if (qualityProjects.length > 0) {
+        // Sélection pondérée basée sur le score et la diversité
+        const randomIndex = Math.floor(Math.random() * qualityProjects.length);
+        selectedProject = qualityProjects[randomIndex];
+      } else {
+        // Fallback: prendre un projet aléatoire parmi tous les actifs
+        const activeProjects = projects.filter(p => p.status === 'active');
+        if (activeProjects.length === 0) {
+          return res.status(404).json({ 
+            message: "No active projects available",
+            retryable: false
+          });
+        }
+        const randomIndex = Math.floor(Math.random() * activeProjects.length);
+        selectedProject = activeProjects[randomIndex];
+      }
+
+      res.json({
+        projectId: selectedProject.id,
+        title: selectedProject.title,
+        category: selectedProject.category,
+        mlScore: selectedProject.mlScore
+      });
+    } catch (error) {
+      console.error("Error fetching random project:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch random project",
+        retryable: true
+      });
+    }
+  });
+
   app.get('/api/projects/:id', async (req, res) => {
     try {
       const projectId = req.params.id;
@@ -4209,6 +4261,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching download tokens:", error);
       res.status(500).json({ message: "Failed to fetch download tokens" });
+    }
+  });
+
+  // Curiosity Dock API endpoints
+  // GET /api/curiosity/stats - Statistiques en temps réel pour le dock
+  app.get('/api/curiosity/stats', async (req, res) => {
+    try {
+      // Récupérer les stats des lives actifs
+      const activeLiveShows = await storage.getActiveLiveShows();
+      const liveStats = {
+        activeLives: activeLiveShows?.length || 0,
+        liveViewers: activeLiveShows?.reduce((total, show) => total + (show.viewerCount || 0), 0) || 0
+      };
+
+      // Récupérer le nombre de nouveaux projets (dernières 24h)
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayISO = yesterday.toISOString();
+      const allProjects = await storage.getProjects(100, 0);
+      const recentProjects = allProjects?.filter(project => 
+        project.createdAt && new Date(project.createdAt) > yesterday
+      ) || [];
+      const newProjectsCount = recentProjects.length;
+
+      // Vérifier si le TOP 10 est actif (basé sur les feature toggles)
+      const toggles = await storage.getFeatureToggles();
+      const topCategoryActive = toggles?.some((toggle: any) => 
+        toggle.kind === 'category' && toggle.isVisible
+      ) || true; // Default à true si pas de toggles
+
+      // Vérifier si l'utilisateur a complété sa quête du jour
+      let todayQuestCompleted = false;
+      if (req.user?.id) {
+        const userId = req.user.id;
+        const today = new Date().toISOString().split('T')[0];
+        const todayQuest = await storage.getUserDailyQuest(userId, today);
+        todayQuestCompleted = todayQuest?.isCompleted || false;
+      }
+
+      res.json({
+        liveViewers: liveStats.liveViewers,
+        activeLives: liveStats.activeLives,
+        newProjectsCount,
+        topCategoryActive,
+        todayQuestCompleted
+      });
+    } catch (error) {
+      console.error("Error fetching curiosity stats:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch curiosity stats",
+        retryable: true
+      });
+    }
+  });
+
+  // Daily Quest API endpoints for "Surprise du jour"
+  // GET /api/quest/today - Récupérer la quête du jour
+  app.get('/api/quest/today', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { DailyQuestService } = await import('./services/dailyQuestService');
+      
+      const quest = await DailyQuestService.getTodayQuest(userId);
+      
+      if (!quest) {
+        return res.status(404).json({ 
+          message: "No quest available for today",
+          retryable: false
+        });
+      }
+
+      res.json(quest);
+    } catch (error) {
+      console.error("Error fetching today's quest:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch today's quest",
+        retryable: true
+      });
+    }
+  });
+
+  // POST /api/quest/claim - Réclamer la récompense d'une quête
+  app.post('/api/quest/claim', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { questId } = req.body;
+
+      if (!questId) {
+        return res.status(400).json({ 
+          message: "Quest ID is required",
+          retryable: false
+        });
+      }
+
+      const { DailyQuestService } = await import('./services/dailyQuestService');
+      const result = await DailyQuestService.claimQuestReward(userId, questId);
+
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: result.error,
+          retryable: false
+        });
+      }
+
+      res.json({
+        success: true,
+        visuPointsAwarded: result.visuPointsAwarded,
+        message: `You earned ${result.visuPointsAwarded} VISUpoints!`
+      });
+    } catch (error) {
+      console.error("Error claiming quest reward:", error);
+      res.status(500).json({ 
+        message: "Failed to claim quest reward",
+        retryable: true
+      });
+    }
+  });
+
+  // GET /api/quest/stats - Statistiques des quêtes de l'utilisateur
+  app.get('/api/quest/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { DailyQuestService } = await import('./services/dailyQuestService');
+      
+      const stats = await DailyQuestService.getUserQuestStats(userId);
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching quest stats:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch quest stats",
+        retryable: true
+      });
     }
   });
 

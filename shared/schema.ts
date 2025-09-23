@@ -593,6 +593,28 @@ export const visitorActivities = pgTable("visitor_activities", {
   index("idx_visitor_activities_created").on(table.createdAt),
 ]);
 
+// Daily quest system for "Surprise du jour"
+export const dailyQuests = pgTable("daily_quests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  questDate: varchar("quest_date", { length: 10 }).notNull(), // "2025-09-23" format
+  questType: varchar("quest_type", { length: 50 }).notNull(), // "explore_projects", "make_investment", "social_activity"
+  questTitle: varchar("quest_title", { length: 200 }).notNull(),
+  questDescription: varchar("quest_description", { length: 500 }).notNull(),
+  targetCount: integer("target_count").default(1), // Nombre d'actions à réaliser
+  currentCount: integer("current_count").default(0), // Progression actuelle
+  rewardVP: integer("reward_vp").default(20), // VISUpoints à gagner
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  isRewardClaimed: boolean("is_reward_claimed").default(false),
+  rewardClaimedAt: timestamp("reward_claimed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_daily_quests_user").on(table.userId),
+  index("idx_daily_quests_date").on(table.questDate),
+  unique("unique_user_quest_date").on(table.userId, table.questDate),
+]);
+
 // Visitor of the month tracking
 export const visitorsOfMonth = pgTable("visitors_of_month", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2014,6 +2036,16 @@ export type PayoutRecipe = typeof payoutRecipes.$inferSelect;
 export type InsertAgentParameter = z.infer<typeof insertAgentParameterSchema>;
 export type AgentParameter = typeof agentParameters.$inferSelect;
 
+// Schéma d'insertion pour quêtes quotidiennes
+export const insertDailyQuestSchema = createInsertSchema(dailyQuests).omit({
+  id: true,
+  createdAt: true
+});
+
 // Types d'insertion et de sélection pour feature toggles
 export type InsertFeatureToggle = z.infer<typeof insertFeatureToggleSchema>;
 export type FeatureToggle = typeof featureToggles.$inferSelect;
+
+// Types d'insertion et de sélection pour quêtes quotidiennes
+export type InsertDailyQuest = z.infer<typeof insertDailyQuestSchema>;
+export type DailyQuest = typeof dailyQuests.$inferSelect;

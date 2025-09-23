@@ -57,6 +57,8 @@ import {
   downloadTokens,
   // Table feature toggles
   featureToggles,
+  // Table quêtes quotidiennes
+  dailyQuests,
   type User,
   type UpsertUser,
   type Project,
@@ -158,6 +160,9 @@ import {
   // Types feature toggles
   type FeatureToggle,
   type InsertFeatureToggle,
+  // Types quêtes quotidiennes
+  type DailyQuest,
+  type InsertDailyQuest,
   insertArticleSalesDailySchema,
   insertTop10InfoporteursSchema,
   insertTop10WinnersSchema,
@@ -377,6 +382,17 @@ export interface IStorage {
   createVisitorOfMonth(visitor: InsertVisitorOfMonth): Promise<VisitorOfMonth>;
   updateVisitorOfMonth(userId: string, monthYear: string, updates: Partial<VisitorOfMonth>): Promise<VisitorOfMonth>;
   getMonthlyVisitorRankings(monthYear: string, limit?: number): Promise<VisitorOfMonth[]>;
+
+  // Daily quests operations
+  getUserDailyQuest(userId: string, questDate: string, questType?: string): Promise<DailyQuest | undefined>;
+  createDailyQuest(quest: InsertDailyQuest): Promise<DailyQuest>;
+  updateDailyQuest(questId: string, updates: Partial<DailyQuest>): Promise<DailyQuest>;
+  getDailyQuestById(questId: string): Promise<DailyQuest | undefined>;
+  getUserQuestStatistics(userId: string): Promise<{
+    totalCompleted: number;
+    currentStreak: number;
+    totalVPEarned: number;
+  } | undefined>;
 
   // Articles operations for Infoporteurs
   createArticle(article: InsertArticle): Promise<Article>;
@@ -2821,6 +2837,113 @@ export class DatabaseStorage implements IStorage {
     }
     
     return result;
+  }
+
+  // Daily quests operations
+  async getUserDailyQuest(userId: string, questDate: string, questType?: string): Promise<DailyQuest | undefined> {
+    const conditions = [
+      eq(dailyQuests.userId, userId),
+      eq(dailyQuests.questDate, questDate)
+    ];
+
+    if (questType) {
+      conditions.push(eq(dailyQuests.questType, questType));
+    }
+
+    const results = await db
+      .select()
+      .from(dailyQuests)
+      .where(and(...conditions))
+      .limit(1);
+      
+    return results[0];
+  }
+
+  async createDailyQuest(quest: InsertDailyQuest): Promise<DailyQuest> {
+    const [newQuest] = await db.insert(dailyQuests).values(quest).returning();
+    return newQuest;
+  }
+
+  async updateDailyQuest(questId: string, updates: Partial<DailyQuest>): Promise<DailyQuest> {
+    const [updatedQuest] = await db
+      .update(dailyQuests)
+      .set(updates)
+      .where(eq(dailyQuests.id, questId))
+      .returning();
+    
+    if (!updatedQuest) {
+      throw new Error(`Daily quest with id '${questId}' not found`);
+    }
+    
+    return updatedQuest;
+  }
+
+  async getDailyQuestById(questId: string): Promise<DailyQuest | undefined> {
+    const results = await db
+      .select()
+      .from(dailyQuests)
+      .where(eq(dailyQuests.id, questId))
+      .limit(1);
+    
+    return results[0];
+  }
+
+  async getUserQuestStatistics(userId: string): Promise<{
+    totalCompleted: number;
+    currentStreak: number;
+    totalVPEarned: number;
+  } | undefined> {
+    try {
+      // Récupérer le nombre total de quêtes complétées
+      const completedQuests = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(dailyQuests)
+        .where(and(
+          eq(dailyQuests.userId, userId),
+          eq(dailyQuests.isCompleted, true)
+        ));
+
+      // Récupérer le total des VISUpoints gagnés
+      const totalVP = await db
+        .select({ total: sql<number>`coalesce(sum(${dailyQuests.rewardVP}), 0)::int` })
+        .from(dailyQuests)
+        .where(and(
+          eq(dailyQuests.userId, userId),
+          eq(dailyQuests.isRewardClaimed, true)
+        ));
+
+      // Calculer le streak actuel (jours consécutifs avec quêtes complétées)
+      const today = new Date();
+      let currentStreak = 0;
+      
+      for (let i = 0; i < 30; i++) { // Vérifier les 30 derniers jours max
+        const checkDate = new Date(today);
+        checkDate.setDate(checkDate.getDate() - i);
+        const dateStr = checkDate.toISOString().split('T')[0];
+        
+        const dayQuest = await this.getUserDailyQuest(userId, dateStr);
+        
+        if (dayQuest && dayQuest.isCompleted) {
+          if (i === 0 || currentStreak > 0) {
+            currentStreak++;
+          }
+        } else if (i === 0) {
+          // Si pas de quête complétée aujourd'hui, vérifier hier
+          continue;
+        } else {
+          break; // Streak cassé
+        }
+      }
+
+      return {
+        totalCompleted: completedQuests[0]?.count || 0,
+        currentStreak,
+        totalVPEarned: totalVP[0]?.total || 0
+      };
+    } catch (error) {
+      console.error('Error getting user quest statistics:', error);
+      return undefined;
+    }
   }
 }
 
