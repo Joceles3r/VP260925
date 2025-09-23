@@ -234,6 +234,45 @@ export const STREAK_REWARDS = {
   maxStreakReward: 500, // Récompense maximale pour un streak
 } as const;
 
+// Quêtes quotidiennes - "Surprise du jour"
+export const DAILY_QUESTS = {
+  defaultReward: 20, // VISUpoints par défaut pour une quête complétée
+  questTypes: {
+    explore_projects: {
+      title: "Explorateur curieux",
+      description: "Découvre 3 projets différents",
+      target: 3,
+      reward: 20
+    },
+    make_investment: {
+      title: "Investisseur du jour", 
+      description: "Fais un investissement dans un projet",
+      target: 1,
+      reward: 30
+    },
+    social_activity: {
+      title: "Sociable connecté",
+      description: "Interagis avec la communauté (like, commentaire ou post)",
+      target: 2,
+      reward: 15
+    },
+    video_watch: {
+      title: "Spectateur assidu",
+      description: "Regarde une vidéo complète d'un projet",
+      target: 1,
+      reward: 10
+    },
+    live_participation: {
+      title: "Fan de live",
+      description: "Participe à un live show en cours",
+      target: 1,
+      reward: 25
+    }
+  },
+  maxQuestsPerDay: 1, // Une seule quête active par jour
+  questResetHour: 0, // Réinitialisation à minuit UTC
+} as const;
+
 // Visiteur du mois
 export const VISITOR_OF_MONTH = {
   rewardVP: 2500, // 25€ en VISUpoints pour le gagnant

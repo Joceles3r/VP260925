@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import Navigation from "@/components/Navigation";
+import CuriosityDock from "@/components/CuriosityDock";
 
 // Pages
 import Landing from "@/pages/landing";
@@ -62,6 +63,9 @@ function Router() {
           </>
         )}
       </Switch>
+      
+      {/* Curiosity Dock - visible uniquement pour les utilisateurs connectés */}
+      {isAuthenticated && !isLoading && <CuriosityDock />}
     </div>
   );
 }
