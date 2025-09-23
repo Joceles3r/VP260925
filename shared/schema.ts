@@ -103,6 +103,12 @@ export const activityTypeEnum = pgEnum('activity_type', ['page_view', 'project_v
 // Article type enum for Infoporteurs
 export const articleTypeEnum = pgEnum('article_type', ['news', 'analysis', 'tutorial', 'opinion', 'review']);
 
+// Feature toggle kind enum
+export const toggleKindEnum = pgEnum('toggle_kind', ['category', 'rubrique']);
+
+// Feature toggle message variant enum
+export const messageVariantEnum = pgEnum('message_variant', ['en_cours', 'en_travaux', 'custom']);
+
 // Book category enum for LIVRES category
 export const bookCategoryEnum = pgEnum('book_category', ['fiction', 'non_fiction', 'poetry', 'essay', 'biography', 'other']);
 
@@ -1925,6 +1931,32 @@ export const agentParameters = pgTable("agent_parameters", {
   index("idx_parameters_modifiable").on(table.modifiableByAdmin)
 ]);
 
+// Feature toggles pour visibilité des catégories et rubriques
+export const featureToggles = pgTable("feature_toggles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").unique().notNull(),
+  label: text("label").notNull(),
+  kind: toggleKindEnum("kind").notNull(),
+  isVisible: boolean("is_visible").notNull().default(true),
+  
+  // Message lorsqu'off
+  hiddenMessageVariant: messageVariantEnum("hidden_message_variant").notNull().default('en_cours'),
+  hiddenMessageCustom: text("hidden_message_custom"),
+  
+  // Programmation (optionnelle)  
+  scheduleStart: timestamp("schedule_start", { withTimezone: true }),
+  scheduleEnd: timestamp("schedule_end", { withTimezone: true }),
+  timezone: text("timezone").notNull().default('Europe/Paris'),
+  
+  // Métadonnées
+  version: integer("version").notNull().default(1),
+  updatedBy: varchar("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (table) => [
+  index("idx_toggles_key").on(table.key),
+  index("idx_toggles_visible").on(table.isVisible)
+]);
+
 // Schémas d'insertion pour système d'agents IA
 export const insertAgentDecisionSchema = createInsertSchema(agentDecisions).omit({
   id: true,
@@ -1953,6 +1985,19 @@ export const insertAgentParameterSchema = createInsertSchema(agentParameters).om
   lastModifiedAt: true
 });
 
+// Schéma d'insertion pour feature toggles avec validation des clés
+export const insertFeatureToggleSchema = createInsertSchema(featureToggles).omit({
+  id: true,
+  updatedAt: true
+}).refine((data) => {
+  // Validation des clés autorisées selon spec
+  const allowedKeys = ['films', 'videos', 'documentaires', 'voix_info', 'live_show', 'livres', 'petites_annonces'];
+  return allowedKeys.includes(data.key);
+}, {
+  message: "Clé de toggle non autorisée. Clés valides: films, videos, documentaires, voix_info, live_show, livres, petites_annonces",
+  path: ["key"]
+});
+
 // Types d'insertion et de sélection pour agents IA
 export type InsertAgentDecision = z.infer<typeof insertAgentDecisionSchema>;
 export type AgentDecision = typeof agentDecisions.$inferSelect;
@@ -1968,3 +2013,7 @@ export type PayoutRecipe = typeof payoutRecipes.$inferSelect;
 
 export type InsertAgentParameter = z.infer<typeof insertAgentParameterSchema>;
 export type AgentParameter = typeof agentParameters.$inferSelect;
+
+// Types d'insertion et de sélection pour feature toggles
+export type InsertFeatureToggle = z.infer<typeof insertFeatureToggleSchema>;
+export type FeatureToggle = typeof featureToggles.$inferSelect;
