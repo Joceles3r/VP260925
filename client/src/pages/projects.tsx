@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import ProjectCard from '@/components/ProjectCard';
 import InvestmentModal from '@/components/InvestmentModal';
 import VideoDepositModal from '@/components/VideoDepositModal';
+import { FeatureToggle } from '@/components/FeatureToggle';
 import { useAuth } from '@/hooks/useAuth';
+import { useTogglesByKind, useFeatureToggles } from '@/hooks/useFeatureToggles';
 import type { Project } from '@shared/schema';
 
 export default function Projects() {
@@ -18,6 +20,8 @@ export default function Projects() {
   const [isVideoDepositModalOpen, setIsVideoDepositModalOpen] = useState(false);
   
   const { user } = useAuth();
+  const { toggles: categoryToggles, isLoading: isLoadingToggles } = useTogglesByKind('category');
+  const { error: togglesError } = useFeatureToggles();
 
   const { data: projects, refetch } = useQuery<Project[]>({
     queryKey: ['projects', selectedCategory],
@@ -36,14 +40,37 @@ export default function Projects() {
     refetchOnWindowFocus: false,
   });
 
-  const categories = [
-    { id: '', label: 'Toutes catégories' },
-    { id: 'documentaire', label: 'Documentaire' },
-    { id: 'clip', label: 'Clip Musical' },
-    { id: 'court-métrage', label: 'Court-métrage' },
-    { id: 'animation', label: 'Animation' },
-    { id: 'live', label: 'Live Shows' },
+  // Map feature toggle keys to category info
+  const categoryMappings = [
+    { toggleKey: 'films', categoryId: 'documentaire', label: 'Documentaire' },
+    { toggleKey: 'videos', categoryId: 'clip', label: 'Clip Musical' },
+    { toggleKey: 'documentaires', categoryId: 'court-métrage', label: 'Court-métrage' },
+    { toggleKey: 'voix_info', categoryId: 'animation', label: 'Animation' },
+    { toggleKey: 'live_show', categoryId: 'live', label: 'Live Shows' },
   ];
+
+  // Build dynamic categories list based on enabled feature toggles
+  // Pendant le chargement ou en cas d'erreur, afficher toutes les catégories pour éviter la dégradation UX
+  const availableCategories = (isLoadingToggles || togglesError) ? [
+    { id: '', label: 'Toutes catégories' },
+    ...categoryMappings.map(mapping => ({
+      id: mapping.categoryId,
+      label: mapping.label
+    }))
+  ] : [
+    { id: '', label: 'Toutes catégories' },
+    ...categoryMappings
+      .filter(mapping => {
+        const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+        return toggle?.isVisible ?? false;
+      })
+      .map(mapping => ({
+        id: mapping.categoryId,
+        label: mapping.label
+      }))
+  ];
+
+  const categories = availableCategories;
 
   const sortOptions = [
     { value: 'roi_desc', label: 'ROI décroissant' },
@@ -172,6 +199,42 @@ export default function Projects() {
         ))}
       </div>
 
+      {/* Disabled Categories Info */}
+      {!isLoadingToggles && categoryMappings.some(mapping => {
+        const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+        return !toggle?.isVisible;
+      }) && (
+        <div className="mb-6 p-4 bg-muted/30 rounded-lg border border-border">
+          <h4 className="text-sm font-medium text-foreground mb-2">Sections temporairement indisponibles:</h4>
+          <div className="flex flex-wrap gap-2">
+            {categoryMappings
+              .filter(mapping => {
+                const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+                return !toggle?.isVisible;
+              })
+              .map(mapping => {
+                const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+                const message = toggle?.hiddenMessageVariant === 'custom' 
+                  ? toggle.hiddenMessageCustom 
+                  : toggle?.hiddenMessageVariant === 'en_cours'
+                  ? 'En cours de développement'
+                  : 'En travaux, disponible bientôt';
+                
+                return (
+                  <span
+                    key={mapping.toggleKey}
+                    className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-muted text-muted-foreground"
+                    title={message || 'Temporairement indisponible'}
+                    data-testid={`disabled-category-${mapping.toggleKey}`}
+                  >
+                    {mapping.label}
+                  </span>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Projects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="projects-grid">
         {sortedProjects.map((project) => (
@@ -184,6 +247,20 @@ export default function Projects() {
           />
         ))}
       </div>
+
+      {/* Example usage of FeatureToggle for a specific feature */}
+      <FeatureToggle 
+        feature="live_show" 
+        messageVariant="minimal"
+        showMessage={true}
+      >
+        <div className="mt-6 p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-200 dark:border-purple-800" data-testid="live-shows-promo">
+          <h3 className="text-lg font-semibold text-foreground mb-2">🎉 Nouveau: Live Shows disponibles!</h3>
+          <p className="text-sm text-muted-foreground">
+            Participez aux battles en direct et investissez en temps réel sur vos artistes préférés.
+          </p>
+        </div>
+      </FeatureToggle>
 
       {sortedProjects.length === 0 && (
         <div className="text-center py-12" data-testid="no-projects">
