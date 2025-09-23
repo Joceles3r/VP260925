@@ -9,6 +9,7 @@ import VideoDepositModal from '@/components/VideoDepositModal';
 import { FeatureToggle } from '@/components/FeatureToggle';
 import { useAuth } from '@/hooks/useAuth';
 import { useTogglesByKind, useFeatureToggles } from '@/hooks/useFeatureToggles';
+import { useErrorLogger } from '@/lib/errorLogger';
 import type { Project } from '@shared/schema';
 
 export default function Projects() {
@@ -22,8 +23,15 @@ export default function Projects() {
   const { user } = useAuth();
   const { toggles: categoryToggles, isLoading: isLoadingToggles } = useTogglesByKind('category');
   const { error: togglesError } = useFeatureToggles();
+  const { logError, logInfo, logProjectsFetchError } = useErrorLogger('ProjectsPage');
 
-  const { data: projects, refetch } = useQuery<Project[]>({
+  const { 
+    data: projectsResponse, 
+    isLoading: isLoadingProjects, 
+    error: projectsError,
+    refetch,
+    isRefetching 
+  } = useQuery<{data: Project[], meta: any}>({
     queryKey: ['projects', selectedCategory],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -31,14 +39,75 @@ export default function Projects() {
         params.set('category', selectedCategory);
       }
       const url = `/api/projects${params.toString() ? `?${params.toString()}` : ''}`;
+      
+      logInfo(`Fetching projects from: ${url}`, {
+        category: selectedCategory,
+        hasAuth: !!user
+      }, 'fetch_projects');
+      
       const response = await fetch(url, { credentials: 'include' });
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `Erreur HTTP ${response.status}`;
+        let errorDetails = 'Une erreur inattendue est survenue';
+        let retryable = true;
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+          errorDetails = errorData.details || errorDetails;
+          retryable = errorData.retryable !== false;
+        } catch (jsonError) {
+          logError('Failed to parse API error response', jsonError, 'parse_error_response');
+        }
+        
+        const customError = new Error(errorMessage);
+        (customError as any).details = errorDetails;
+        (customError as any).status = response.status;
+        (customError as any).retryable = retryable;
+        
+        // Logger l'erreur API avec plus de contexte
+        logProjectsFetchError(customError, {
+          category: selectedCategory,
+          search: '',  // On pourrait passer searchQuery si nécessaire
+          sort: ''     // On pourrait passer sortBy si nécessaire
+        });
+        
+        throw customError;
       }
-      return response.json();
+      
+      const data = await response.json();
+      const projectCount = data.data?.length || data.length;
+      
+      logInfo(`Successfully fetched projects`, {
+        projectCount,
+        category: selectedCategory,
+        responseFormat: data.meta ? 'with_metadata' : 'legacy'
+      }, 'fetch_projects_success');
+      
+      // Support pour le nouveau format avec meta ou l'ancien format direct
+      if (data.data && data.meta) {
+        return data;
+      } else {
+        return { data: data, meta: { count: data.length } };
+      }
     },
+    retry: (failureCount, error: any) => {
+      // Ne pas retry pour les erreurs 4xx (erreurs client)
+      if (error?.status >= 400 && error?.status < 500) {
+        return false;
+      }
+      // Retry max 3 fois pour les erreurs 5xx et network
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Backoff exponentiel
     refetchOnWindowFocus: false,
+    staleTime: 30000, // Cache pendant 30 secondes
+    gcTime: 300000, // Garde en cache pendant 5 minutes
   });
+
+  // Extraire les projets du nouveau format de réponse
+  const projects = projectsResponse?.data || [];
 
   // Map feature toggle keys to category info
   const categoryMappings = [
@@ -235,18 +304,113 @@ export default function Projects() {
         </div>
       )}
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="projects-grid">
-        {sortedProjects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            onInvest={handleInvest}
-            onVideoDeposit={user?.id === project.creatorId ? handleVideoDeposit : undefined}
-            isCreator={user?.id === project.creatorId}
-          />
-        ))}
-      </div>
+      {/* États de chargement et d'erreur */}
+      {isLoadingProjects || isRefetching ? (
+        <div className="space-y-6" data-testid="projects-loading">
+          {/* Skeleton loading state */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="bg-card rounded-xl border border-border/50 overflow-hidden animate-pulse">
+                <div className="w-full h-48 bg-muted"></div>
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="h-6 bg-muted rounded w-20"></div>
+                    <div className="h-4 bg-muted rounded w-16"></div>
+                  </div>
+                  <div className="h-6 bg-muted rounded w-3/4"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-muted rounded"></div>
+                    <div className="h-4 bg-muted rounded w-5/6"></div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 bg-muted rounded w-24"></div>
+                    <div className="h-4 bg-muted rounded w-16"></div>
+                  </div>
+                  <div className="h-10 bg-muted rounded"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {isRefetching && (
+            <div className="flex items-center justify-center py-4">
+              <div className="flex items-center space-x-2 text-muted-foreground">
+                <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                <span className="text-sm">Actualisation des projets...</span>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : projectsError ? (
+        <div className="flex flex-col items-center justify-center py-12" data-testid="projects-error">
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 bg-destructive/20 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-destructive">Erreur de chargement</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(projectsError as any)?.message || 'Impossible de charger les projets'}
+                </p>
+              </div>
+            </div>
+            
+            {(projectsError as any)?.details && (
+              <div className="mb-4 p-3 bg-muted/50 rounded text-xs text-muted-foreground">
+                {(projectsError as any).details}
+              </div>
+            )}
+            
+            <div className="flex items-center space-x-2">
+              <Button 
+                onClick={() => refetch()} 
+                size="sm" 
+                variant="outline"
+                className="flex-1"
+                data-testid="retry-button"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Réessayer
+              </Button>
+              
+              {(projectsError as any)?.status >= 500 && (
+                <Button 
+                  onClick={() => window.location.reload()} 
+                  size="sm" 
+                  variant="secondary"
+                  data-testid="refresh-page-button"
+                >
+                  Actualiser la page
+                </Button>
+              )}
+            </div>
+            
+            <div className="mt-3 text-xs text-muted-foreground text-center">
+              Code d'erreur: {(projectsError as any)?.status || 'UNKNOWN'}
+              {(projectsError as any)?.retryable !== false && 
+                <span> • Tentative automatique en cours...</span>
+              }
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Projects Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="projects-grid">
+          {sortedProjects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onInvest={handleInvest}
+              onVideoDeposit={user?.id === project.creatorId ? handleVideoDeposit : undefined}
+              isCreator={user?.id === project.creatorId}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Example usage of FeatureToggle for a specific feature */}
       <FeatureToggle 

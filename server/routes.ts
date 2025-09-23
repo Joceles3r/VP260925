@@ -635,28 +635,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/projects', async (req, res) => {
     try {
       const { limit = 50, offset = 0, category } = req.query;
+      
+      // Validation des paramètres d'entrée
+      const parsedLimit = parseInt(limit as string);
+      const parsedOffset = parseInt(offset as string);
+      
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+        return res.status(400).json({ 
+          message: "Invalid limit parameter",
+          details: "Limit must be between 1 and 100",
+          retryable: false
+        });
+      }
+      
+      if (isNaN(parsedOffset) || parsedOffset < 0) {
+        return res.status(400).json({ 
+          message: "Invalid offset parameter",
+          details: "Offset must be a non-negative number",
+          retryable: false
+        });
+      }
+      
       const projects = await storage.getProjects(
-        parseInt(limit as string),
-        parseInt(offset as string),
+        parsedLimit,
+        parsedOffset,
         category as string
       );
-      res.json(projects);
-    } catch (error) {
-      console.error("Error fetching projects:", error);
-      res.status(500).json({ message: "Failed to fetch projects" });
+      
+      // Log des métriques de succès
+      console.log(`[API] Successfully fetched ${projects.length} projects (limit: ${parsedLimit}, offset: ${parsedOffset}, category: ${category || 'all'})`);
+      
+      res.json({
+        data: projects,
+        meta: {
+          count: projects.length,
+          limit: parsedLimit,
+          offset: parsedOffset,
+          category: category as string || null
+        }
+      });
+    } catch (error: any) {
+      console.error("[ERROR] Failed to fetch projects:", {
+        error: error?.message || String(error),
+        stack: error?.stack,
+        query: req.query,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Catégorisation des erreurs
+      if (error?.code === 'ECONNREFUSED') {
+        return res.status(503).json({ 
+          message: "Database connection failed",
+          details: "The database is temporarily unavailable. Please try again later.",
+          retryable: true
+        });
+      }
+      
+      if (error?.code === 'ETIMEDOUT') {
+        return res.status(504).json({ 
+          message: "Request timeout",
+          details: "The request took too long to process. Please try again.",
+          retryable: true
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Internal server error",
+        details: "An unexpected error occurred while fetching projects",
+        retryable: true
+      });
     }
   });
 
   app.get('/api/projects/:id', async (req, res) => {
     try {
-      const project = await storage.getProject(req.params.id);
-      if (!project) {
-        return res.status(404).json({ message: "Project not found" });
+      const projectId = req.params.id;
+      
+      // Validation de l'ID du projet
+      if (!projectId || projectId.trim() === '') {
+        return res.status(400).json({ 
+          message: "Invalid project ID",
+          details: "Project ID is required and cannot be empty",
+          retryable: false
+        });
       }
-      res.json(project);
-    } catch (error) {
-      console.error("Error fetching project:", error);
-      res.status(500).json({ message: "Failed to fetch project" });
+      
+      // Validation du format UUID si nécessaire
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (projectId.length > 20 && !uuidRegex.test(projectId)) {
+        return res.status(400).json({ 
+          message: "Invalid project ID format",
+          details: "Project ID must be a valid UUID or numeric ID",
+          retryable: false
+        });
+      }
+      
+      const project = await storage.getProject(projectId);
+      
+      if (!project) {
+        console.log(`[API] Project not found: ${projectId}`);
+        return res.status(404).json({ 
+          message: "Project not found",
+          details: `No project exists with ID: ${projectId}`,
+          retryable: false
+        });
+      }
+      
+      console.log(`[API] Successfully fetched project: ${projectId} (${project.title})`);
+      res.json({
+        data: project,
+        meta: {
+          projectId: projectId,
+          fetchedAt: new Date().toISOString()
+        }
+      });
+      
+    } catch (error: any) {
+      console.error("[ERROR] Failed to fetch project:", {
+        error: error?.message || String(error),
+        stack: error?.stack,
+        projectId: req.params.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Catégorisation des erreurs
+      if (error?.code === 'ECONNREFUSED') {
+        return res.status(503).json({ 
+          message: "Database connection failed",
+          details: "The database is temporarily unavailable. Please try again later.",
+          retryable: true
+        });
+      }
+      
+      if (error?.code === 'ETIMEDOUT') {
+        return res.status(504).json({ 
+          message: "Request timeout",
+          details: "The request took too long to process. Please try again.",
+          retryable: true
+        });
+      }
+      
+      if (error?.message?.includes('invalid input syntax')) {
+        return res.status(400).json({ 
+          message: "Invalid project ID format",
+          details: "The provided project ID has an invalid format",
+          retryable: false
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Internal server error",
+        details: "An unexpected error occurred while fetching the project",
+        retryable: true
+      });
     }
   });
 
