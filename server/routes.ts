@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { db } from "./db";
 import { setupAuth, isAuthenticated, getSession } from "./replitAuth";
@@ -28,7 +29,9 @@ import {
   insertBookCategorySchema,
   insertBookSchema,
   insertBookPurchaseSchema,
-  insertDownloadTokenSchema
+  insertDownloadTokenSchema,
+  // Schéma feature toggles
+  insertFeatureToggleSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
 import { 
@@ -2995,6 +2998,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting report:", error);
       res.status(500).json({ message: "Erreur lors du rejet du signalement" });
+    }
+  });
+
+  // ===== ROUTES FEATURE TOGGLES =====
+
+  // Get all feature toggles (admin only)
+  app.get('/api/admin/toggles', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const toggles = await storage.getFeatureToggles();
+      res.json(toggles);
+    } catch (error) {
+      console.error("Error fetching feature toggles:", error);
+      res.status(500).json({ message: "Failed to fetch feature toggles" });
+    }
+  });
+
+  // Update feature toggle (admin only)
+  app.patch('/api/admin/toggles/:key', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { key } = req.params;
+      
+      // Validate update data using safe update schema (exclude immutable fields)
+      const updateSchema = z.object({
+        label: z.string().optional(),
+        kind: z.enum(['category', 'rubrique']).optional(),
+        isVisible: z.boolean().optional(),
+        hiddenMessageVariant: z.enum(['en_cours', 'en_travaux', 'custom']).optional(),
+        hiddenMessageCustom: z.string().optional(),
+        scheduleStart: z.date().optional(),
+        scheduleEnd: z.date().optional(),
+        timezone: z.string().optional()
+      }).strict();
+        
+      const validation = updateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid toggle update data",
+          errors: validation.error.issues 
+        });
+      }
+
+      // Add the user who made the update
+      const updateData = {
+        ...validation.data,
+        updatedBy: req.user.claims.sub
+      };
+
+      const updatedToggle = await storage.updateFeatureToggle(key, updateData);
+      res.json(updatedToggle);
+    } catch (error) {
+      console.error("Error updating feature toggle:", error);
+      if (error instanceof Error && error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update feature toggle" });
+    }
+  });
+
+  // Get public toggles (no authentication required)
+  app.get('/api/public/toggles', async (req, res) => {
+    try {
+      const publicToggles = await storage.getPublicToggles();
+      
+      // Generate deterministic ETag based on content
+      const contentHash = crypto.createHash('md5').update(JSON.stringify(publicToggles)).digest('hex');
+      const etag = `"${contentHash}"`;
+      
+      // Check if client has cached version
+      const clientETag = req.get('If-None-Match');
+      if (clientETag === etag) {
+        return res.status(304).end();
+      }
+      
+      // Cache headers for 5 seconds as specified in documentation
+      res.set({
+        'Cache-Control': 'public, max-age=5',
+        'ETag': etag
+      });
+      
+      res.json(publicToggles);
+    } catch (error) {
+      console.error("Error fetching public toggles:", error);
+      res.status(500).json({ message: "Failed to fetch toggles" });
     }
   });
 
