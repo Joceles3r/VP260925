@@ -3,8 +3,8 @@
 
 // Stripe API configuration
 export const STRIPE_CONFIG = {
-  // Version par défaut stable, peut être surchargée via STRIPE_API_VERSION env var
-  API_VERSION: process.env.STRIPE_API_VERSION || "2024-06-20"
+  // Version par défaut stable - utilise la version stable pour éviter les problèmes de compatibilité
+  API_VERSION: "2024-06-20"
 } as const;
 
 // Project categories and their properties

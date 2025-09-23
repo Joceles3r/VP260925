@@ -1,19 +1,54 @@
 import { useQuery } from "@tanstack/react-query";
 import type { FeatureToggle } from "@shared/schema";
 
+// Structure de réponse de l'API publique
+type PublicTogglesResponse = Record<string, { visible: boolean; message: string }>;
+
+// Métadonnées statiques pour chaque toggle (pour reconstituer les objets FeatureToggle)
+const TOGGLE_METADATA = {
+  films: { label: 'Films et cinéma', kind: 'category' as const },
+  videos: { label: 'Vidéos créatives', kind: 'category' as const },
+  documentaires: { label: 'Documentaires', kind: 'category' as const },
+  voix_info: { label: 'Voix et information', kind: 'category' as const },
+  live_show: { label: 'Live Shows', kind: 'category' as const },
+  livres: { label: 'Livres et écriture', kind: 'category' as const },
+  petites_annonces: { label: 'Petites annonces', kind: 'rubrique' as const },
+} as const;
+
 /**
  * Hook pour récupérer tous les feature toggles publics
  * Utilise l'endpoint public avec mise en cache
  */
 export function useFeatureToggles() {
-  const { data: toggles, isLoading, error } = useQuery<FeatureToggle[]>({
+  const { data: publicToggles, isLoading, error } = useQuery<PublicTogglesResponse>({
     queryKey: ["/api/public/toggles"],
     staleTime: 5000, // Cache pendant 5 secondes (en accord avec l'API)
     gcTime: 60000, // Garde en cache pendant 1 minute
   });
 
+  // Transformer la réponse publique en array de FeatureToggle partiels
+  const toggles: FeatureToggle[] = publicToggles ? 
+    Object.entries(publicToggles).map(([key, data]) => {
+      const metadata = TOGGLE_METADATA[key as keyof typeof TOGGLE_METADATA];
+      return {
+        id: `toggle-${key}`,
+        key,
+        label: metadata?.label || key,
+        kind: metadata?.kind || 'category',
+        isVisible: data.visible,
+        hiddenMessageVariant: 'en_cours' as const,
+        hiddenMessageCustom: data.message || null,
+        scheduleStart: null,
+        scheduleEnd: null,
+        timezone: 'Europe/Paris',
+        version: 1,
+        updatedBy: null,
+        updatedAt: new Date(),
+      } as FeatureToggle;
+    }) : [];
+
   return {
-    toggles: toggles || [],
+    toggles,
     isLoading,
     error,
   };
