@@ -2531,6 +2531,47 @@ export type FeatureToggle = typeof featureToggles.$inferSelect;
 export type InsertDailyQuest = z.infer<typeof insertDailyQuestSchema>;
 export type DailyQuest = typeof dailyQuests.$inferSelect;
 
+// ===== TABLE PHOTOS POUR PETITES ANNONCES =====
+
+// Enum pour statut de modération des photos
+export const photoModerationStatusEnum = pgEnum('photo_moderation_status', ['pending', 'approved', 'rejected']);
+
+// Table des photos d'annonces (jusqu'à 10 par annonce)
+export const adPhotos = pgTable("ad_photos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adId: varchar("ad_id").notNull().references(() => petitesAnnonces.id, { onDelete: 'cascade' }),
+  
+  // Ordre et affichage (0-9, photo de couverture obligatoire)
+  idx: integer("idx").notNull(), // Position 0-9 pour ordre drag-and-drop
+  isCover: boolean("is_cover").notNull().default(false),
+  alt: text("alt"), // Texte alternatif pour l'accessibilité
+  
+  // Stockage et métadonnées techniques
+  storageKey: text("storage_key").notNull(), // Chemin dans le stockage objet
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  bytes: integer("bytes").notNull(),
+  contentType: varchar("content_type").notNull(), // image/jpeg|png|webp
+  sha256: varchar("sha256").notNull(), // Hash pour déduplication
+  
+  // Modération IA + humaine
+  moderationStatus: photoModerationStatusEnum("moderation_status").default('pending'),
+  moderationReason: text("moderation_reason"), // Raison du refus si rejected
+  moderatedBy: varchar("moderated_by").references(() => users.id),
+  moderatedAt: timestamp("moderated_at"),
+  aiConfidenceScore: decimal("ai_confidence_score", { precision: 5, scale: 4 }), // Score IA NSFW/fraude
+  
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  // Index uniques et contraintes
+  unique("unique_ad_idx").on(table.adId, table.idx), // Pas de doublons d'index par annonce
+  index("idx_ad_photos_ad_id").on(table.adId),
+  index("idx_ad_photos_status").on(table.moderationStatus),
+  // Contraintes métier
+  check("idx_range", sql`${table.idx} >= 0 AND ${table.idx} <= 9`),
+  check("bytes_limit", sql`${table.bytes} > 0 AND ${table.bytes} <= 10485760`), // 10MB max
+]);
+
 // ===== SCHÉMAS D'INSERTION POUR PETITES ANNONCES =====
 
 // Schéma d'insertion pour petites annonces avec validation du périmètre
@@ -2578,6 +2619,28 @@ export const insertAnnoncesSanctionsSchema = createInsertSchema(annoncesSanction
   liftedAt: true,
 });
 
+// ===== SCHÉMA D'INSERTION POUR PHOTOS =====
+
+// Schéma d'insertion pour photos d'annonces avec validation
+export const insertAdPhotosSchema = createInsertSchema(adPhotos).omit({
+  id: true,
+  createdAt: true,
+  moderatedBy: true,
+  moderatedAt: true,
+  aiConfidenceScore: true,
+  moderationReason: true
+}).extend({
+  // Validation du format de fichier
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  // Validation de la taille (10MB max)
+  bytes: z.number().min(1).max(10485760),
+  // Validation de l'index (0-9)
+  idx: z.number().min(0).max(9),
+  // Validation des dimensions minimales
+  width: z.number().min(320),
+  height: z.number().min(240),
+});
+
 // ===== TYPES POUR PETITES ANNONCES =====
 
 // Types d'insertion
@@ -2586,6 +2649,7 @@ export type InsertAnnoncesModeration = z.infer<typeof insertAnnoncesModerationSc
 export type InsertAnnoncesReports = z.infer<typeof insertAnnoncesReportsSchema>;
 export type InsertEscrowTransactions = z.infer<typeof insertEscrowTransactionsSchema>;
 export type InsertAnnoncesSanctions = z.infer<typeof insertAnnoncesSanctionsSchema>;
+export type InsertAdPhotos = z.infer<typeof insertAdPhotosSchema>;
 
 // Types de sélection
 export type PetitesAnnonces = typeof petitesAnnonces.$inferSelect;
@@ -2593,3 +2657,4 @@ export type AnnoncesModeration = typeof annoncesModeration.$inferSelect;
 export type AnnoncesReports = typeof annoncesReports.$inferSelect;
 export type EscrowTransactions = typeof escrowTransactions.$inferSelect;
 export type AnnoncesSanctions = typeof annoncesSanctions.$inferSelect;
+export type AdPhotos = typeof adPhotos.$inferSelect;
