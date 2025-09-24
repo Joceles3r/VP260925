@@ -141,6 +141,80 @@ export const SANCTION_TYPES = {
   }
 } as const;
 
+// ===== PHOTOS PETITES ANNONCES - CONSTANTES =====
+
+// Configuration des photos par annonce (spec 24/09/2025)
+export const AD_PHOTOS_CONFIG = {
+  // Limites par annonce
+  MAX_PHOTOS_PER_AD: 10,
+  MIN_PHOTOS_PER_AD: 1,
+  
+  // Taille des fichiers
+  MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024, // 10 MB par photo
+  RECOMMENDED_MAX_SIZE_BYTES: 4 * 1024 * 1024, // 4 MB recommandé
+  
+  // Dimensions
+  RECOMMENDED_MAX_LONG_EDGE: 2560,
+  RECOMMENDED_MIN_LONG_EDGE: 1024,
+  MIN_WIDTH: 320,
+  MIN_HEIGHT: 240,
+  
+  // Processing settings
+  WEBP_QUALITY: 80,
+  THUMBNAIL_SIZES: {
+    SMALL: 320,    // Liste
+    MEDIUM: 640,   // Mobile/Retina
+    LARGE: 1280    // Desktop
+  },
+  
+  // Cache et CDN
+  CACHE_TTL_DAYS: 7,
+  LAZY_LOADING: true,
+  BLUR_UP: true,
+} as const;
+
+// Formats de fichiers acceptés
+export const ACCEPTED_PHOTO_FORMATS = {
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/webp': ['.webp']
+} as const;
+
+// Messages d'erreur pour les photos
+export const PHOTO_ERROR_MESSAGES = {
+  MAX_COUNT_EXCEEDED: "Maximum 10 photos par annonce autorisées",
+  INVALID_FORMAT: "Format non autorisé. Utilisez JPEG, PNG ou WebP uniquement",
+  FILE_TOO_LARGE: "Fichier trop volumineux. Maximum 10 Mo par photo",
+  DIMENSIONS_TOO_SMALL: "Image trop petite. Minimum 320x240 pixels",
+  COVER_REQUIRED: "Une photo de couverture est obligatoire",
+  UPLOAD_FAILED: "Échec du téléchargement. Réessayez",
+  PROCESSING_FAILED: "Erreur lors du traitement de l'image",
+  MODERATION_FAILED: "Photo refusée par la modération"
+} as const;
+
+// Paramètres de modération IA pour les photos
+export const PHOTO_MODERATION_CONFIG = {
+  // Seuils de confiance IA (0-1)
+  NSFW_THRESHOLD: 0.7,
+  FRAUD_THRESHOLD: 0.8,
+  LOGO_THRESHOLD: 0.6,
+  
+  // Actions automatiques
+  AUTO_REJECT_NSFW: true,
+  AUTO_REJECT_FRAUD: true,
+  REQUIRE_HUMAN_REVIEW_THRESHOLD: 0.5,
+  
+  // Règles de contenu
+  MAX_WATERMARK_COVERAGE_PERCENT: 8, // 8% max de la surface
+  FORBIDDEN_ELEMENTS: [
+    'qr_codes',
+    'external_payment_links',
+    'competing_platforms',
+    'explicit_content',
+    'misleading_brands'
+  ]
+} as const;
+
 // ===== CATÉGORIE LIVRES - CONSTANTES =====
 
 // Prix autorisés pour les auteurs LIVRES (spécification v.16/09/2025)
