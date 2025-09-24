@@ -271,6 +271,46 @@ class NotificationWebSocketService {
     return this.connectedUsers.has(userId);
   }
 
+  // Send any event to specific user (for live social features)
+  public sendToUser(userId: string, event: string, data: any) {
+    this.io.to(`user:${userId}`).emit(event, data);
+    console.log(`[WebSocket] Event '${event}' sent to user ${userId}`);
+  }
+
+  // Broadcast event to all users in a room (for live social features)
+  public broadcastToRoom(room: string, event: string, data: any) {
+    this.io.to(room).emit(event, data);
+    console.log(`[WebSocket] Event '${event}' broadcasted to room '${room}'`);
+  }
+
+  // Join user to a room (like live show room)
+  public joinRoom(userId: string, room: string) {
+    const userSockets = this.connectedUsers.get(userId);
+    if (userSockets && userSockets.size > 0) {
+      userSockets.forEach(socketId => {
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket) {
+          socket.join(room);
+        }
+      });
+      console.log(`[WebSocket] User ${userId} joined room '${room}'`);
+    }
+  }
+
+  // Leave user from a room
+  public leaveRoom(userId: string, room: string) {
+    const userSockets = this.connectedUsers.get(userId);
+    if (userSockets && userSockets.size > 0) {
+      userSockets.forEach(socketId => {
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket) {
+          socket.leave(room);
+        }
+      });
+      console.log(`[WebSocket] User ${userId} left room '${room}'`);
+    }
+  }
+
   // Get WebSocket server instance
   public getIO(): SocketIOServer {
     return this.io;

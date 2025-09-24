@@ -59,6 +59,15 @@ import {
   featureToggles,
   // Table quêtes quotidiennes
   dailyQuests,
+  // Tables fonctionnalités sociales interactives
+  liveChatMessages,
+  messageReactions,
+  livePolls,
+  pollVotes,
+  engagementPoints,
+  userBadges,
+  livePredictions,
+  predictionBets,
   type User,
   type UpsertUser,
   type Project,
@@ -169,9 +178,19 @@ import {
   insertTop10RedistributionsSchema,
   insertWeeklyStreaksSchema,
   insertStripeTransferSchema,
+  // Types fonctionnalités sociales interactives
+  type LiveChatMessage,
+  type MessageReaction,
+  type LivePoll,
+  type PollVote,
+  type EngagementPoint,
+  type UserBadge,
+  type LivePrediction,
+  type PredictionBet
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql, or, isNotNull } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -201,6 +220,61 @@ export interface IStorage {
   getActiveLiveShows(): Promise<LiveShow[]>;
   createLiveShow(data: { title: string; description?: string; artistA?: string; artistB?: string; viewerCount?: number }): Promise<LiveShow>;
   updateLiveShowInvestments(id: string, investmentA: string, investmentB: string): Promise<LiveShow>;
+  
+  // Live chat messages operations
+  createLiveChatMessage(data: { liveShowId: string; userId: string; content: string; messageType?: string; isModerated?: boolean; moderationReason?: string | null }): Promise<LiveChatMessage>;
+  getLiveChatMessage(id: string): Promise<LiveChatMessage | undefined>;
+  updateLiveChatMessage(id: string, updates: Partial<LiveChatMessage>): Promise<LiveChatMessage>;
+  getLiveShowMessages(liveShowId: string, limit?: number, offset?: number): Promise<LiveChatMessage[]>;
+  getUserLiveShowMessageCount(userId: string, liveShowId: string): Promise<number>;
+  getLiveShowMessageCount(liveShowId: string): Promise<number>;
+  
+  // Message reactions operations
+  createMessageReaction(data: { messageId: string; userId: string; reaction: string }): Promise<MessageReaction>;
+  updateMessageReaction(id: string, updates: Partial<MessageReaction>): Promise<MessageReaction>;
+  removeMessageReaction(messageId: string, userId: string, reaction: string): Promise<void>;
+  getMessageReactions(messageId: string): Promise<MessageReaction[]>;
+  getUserMessageReaction(messageId: string, userId: string): Promise<MessageReaction | undefined>;
+  getUserLiveShowReactionCount(userId: string, liveShowId: string): Promise<number>;
+  
+  // Live polls operations
+  createLivePoll(data: { liveShowId: string; createdBy: string; question: string; options: string; endsAt?: Date }): Promise<LivePoll>;
+  getLivePoll(id: string): Promise<LivePoll | undefined>;
+  updateLivePoll(id: string, updates: Partial<LivePoll>): Promise<LivePoll>;
+  deactivateExpiredPolls(): Promise<void>;
+  
+  // Poll votes operations
+  createPollVote(data: { pollId: string; userId: string; optionIndex: number }): Promise<PollVote>;
+  updatePollVote(id: string, updates: Partial<PollVote>): Promise<PollVote>;
+  getPollVotes(pollId: string): Promise<PollVote[]>;
+  getUserPollVote(pollId: string, userId: string): Promise<PollVote | undefined>;
+  
+  // Engagement points operations
+  createEngagementPoint(data: { userId: string; liveShowId?: string; pointType: string; points: number; description?: string }): Promise<EngagementPoint>;
+  getUserTotalEngagementPoints(userId: string): Promise<number>;
+  getUserDailyEngagementPoints(userId: string): Promise<number>;
+  getUserEngagementRank(userId: string): Promise<number>;
+  getTopEngagementUsers(liveShowId?: string, period?: string, limit?: number): Promise<Array<{ userId: string; totalPoints: number }>>;
+  
+  // User badges operations
+  createUserBadge(data: { userId: string; liveShowId?: string; badgeType: string; badgeName: string; badgeDescription?: string }): Promise<UserBadge>;
+  getUserBadge(userId: string, badgeType: string, liveShowId?: string): Promise<UserBadge | undefined>;
+  getUserBadges(userId: string): Promise<UserBadge[]>;
+  
+  // Live predictions operations
+  createLivePrediction(data: { liveShowId: string; createdBy: string; question: string; outcomes: string; endsAt?: Date }): Promise<LivePrediction>;
+  getLivePrediction(id: string): Promise<LivePrediction | undefined>;
+  updateLivePrediction(id: string, updates: Partial<LivePrediction>): Promise<LivePrediction>;
+  deactivateExpiredPredictions(): Promise<void>;
+  
+  // Prediction bets operations
+  createPredictionBet(data: { predictionId: string; userId: string; outcomeIndex: number; amount: string; potentialWin: string }): Promise<PredictionBet>;
+  updatePredictionBet(id: string, updates: Partial<PredictionBet>): Promise<PredictionBet>;
+  getPredictionBets(predictionId: string): Promise<PredictionBet[]>;
+  getUserPredictionBet(predictionId: string, userId: string): Promise<PredictionBet | undefined>;
+  
+  // Analytics operations for social features
+  isUserTopInvestorForLiveShow(userId: string, liveShowId: string): Promise<boolean>;
   
   // Admin operations
   getAllUsers(limit?: number, offset?: number): Promise<User[]>;
@@ -2962,6 +3036,508 @@ export class DatabaseStorage implements IStorage {
       console.error('Error getting user quest statistics:', error);
       return undefined;
     }
+  }
+
+  // ===== LIVE SOCIAL FEATURES IMPLEMENTATION =====
+  
+  // Live chat messages operations
+  async createLiveChatMessage(data: { liveShowId: string; userId: string; content: string; messageType?: string; isModerated?: boolean; moderationReason?: string | null }): Promise<LiveChatMessage> {
+    const messageData = {
+      id: nanoid(),
+      liveShowId: data.liveShowId,
+      userId: data.userId,
+      content: data.content,
+      messageType: data.messageType || 'chat',
+      isModerated: data.isModerated || false,
+      moderationReason: data.moderationReason,
+      reactionCount: 0,
+      createdAt: new Date()
+    };
+
+    const [newMessage] = await db.insert(liveChatMessages).values(messageData).returning();
+    return newMessage;
+  }
+
+  async getLiveChatMessage(id: string): Promise<LiveChatMessage | undefined> {
+    const [message] = await db.select().from(liveChatMessages).where(eq(liveChatMessages.id, id));
+    return message;
+  }
+
+  async updateLiveChatMessage(id: string, updates: Partial<LiveChatMessage>): Promise<LiveChatMessage> {
+    const [updatedMessage] = await db
+      .update(liveChatMessages)
+      .set(updates)
+      .where(eq(liveChatMessages.id, id))
+      .returning();
+    
+    if (!updatedMessage) {
+      throw new Error(`Live chat message with id '${id}' not found`);
+    }
+    
+    return updatedMessage;
+  }
+
+  async getLiveShowMessages(liveShowId: string, limit: number = 50, offset: number = 0): Promise<LiveChatMessage[]> {
+    return await db
+      .select()
+      .from(liveChatMessages)
+      .where(eq(liveChatMessages.liveShowId, liveShowId))
+      .orderBy(desc(liveChatMessages.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getUserLiveShowMessageCount(userId: string, liveShowId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(liveChatMessages)
+      .where(and(
+        eq(liveChatMessages.userId, userId),
+        eq(liveChatMessages.liveShowId, liveShowId)
+      ));
+    
+    return result?.count || 0;
+  }
+
+  async getLiveShowMessageCount(liveShowId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(liveChatMessages)
+      .where(eq(liveChatMessages.liveShowId, liveShowId));
+    
+    return result?.count || 0;
+  }
+
+  // Message reactions operations
+  async createMessageReaction(data: { messageId: string; userId: string; reaction: string }): Promise<MessageReaction> {
+    const reactionData = {
+      id: nanoid(),
+      messageId: data.messageId,
+      userId: data.userId,
+      reaction: data.reaction,
+      createdAt: new Date()
+    };
+
+    const [newReaction] = await db.insert(messageReactions).values(reactionData).returning();
+    return newReaction;
+  }
+
+  async updateMessageReaction(id: string, updates: Partial<MessageReaction>): Promise<MessageReaction> {
+    const [updatedReaction] = await db
+      .update(messageReactions)
+      .set(updates)
+      .where(eq(messageReactions.id, id))
+      .returning();
+    
+    if (!updatedReaction) {
+      throw new Error(`Message reaction with id '${id}' not found`);
+    }
+    
+    return updatedReaction;
+  }
+
+  async removeMessageReaction(messageId: string, userId: string, reaction: string): Promise<void> {
+    await db
+      .delete(messageReactions)
+      .where(and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId),
+        eq(messageReactions.reaction, reaction)
+      ));
+  }
+
+  async getMessageReactions(messageId: string): Promise<MessageReaction[]> {
+    return await db
+      .select()
+      .from(messageReactions)
+      .where(eq(messageReactions.messageId, messageId))
+      .orderBy(desc(messageReactions.createdAt));
+  }
+
+  async getUserMessageReaction(messageId: string, userId: string): Promise<MessageReaction | undefined> {
+    const [reaction] = await db
+      .select()
+      .from(messageReactions)
+      .where(and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId)
+      ))
+      .limit(1);
+    
+    return reaction;
+  }
+
+  async getUserLiveShowReactionCount(userId: string, liveShowId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messageReactions)
+      .innerJoin(liveChatMessages, eq(messageReactions.messageId, liveChatMessages.id))
+      .where(and(
+        eq(messageReactions.userId, userId),
+        eq(liveChatMessages.liveShowId, liveShowId)
+      ));
+    
+    return result?.count || 0;
+  }
+
+  // Live polls operations
+  async createLivePoll(data: { liveShowId: string; createdBy: string; question: string; options: string; endsAt?: Date }): Promise<LivePoll> {
+    const pollData = {
+      id: nanoid(),
+      liveShowId: data.liveShowId,
+      createdBy: data.createdBy,
+      question: data.question,
+      options: data.options,
+      isActive: true,
+      totalVotes: 0,
+      endsAt: data.endsAt,
+      createdAt: new Date()
+    };
+
+    const [newPoll] = await db.insert(livePolls).values(pollData).returning();
+    return newPoll;
+  }
+
+  async getLivePoll(id: string): Promise<LivePoll | undefined> {
+    const [poll] = await db.select().from(livePolls).where(eq(livePolls.id, id));
+    return poll;
+  }
+
+  async updateLivePoll(id: string, updates: Partial<LivePoll>): Promise<LivePoll> {
+    const [updatedPoll] = await db
+      .update(livePolls)
+      .set(updates)
+      .where(eq(livePolls.id, id))
+      .returning();
+    
+    if (!updatedPoll) {
+      throw new Error(`Live poll with id '${id}' not found`);
+    }
+    
+    return updatedPoll;
+  }
+
+  async deactivateExpiredPolls(): Promise<void> {
+    await db
+      .update(livePolls)
+      .set({ isActive: false })
+      .where(and(
+        eq(livePolls.isActive, true),
+        sql`${livePolls.endsAt} < now()`
+      ));
+  }
+
+  // Poll votes operations
+  async createPollVote(data: { pollId: string; userId: string; optionIndex: number }): Promise<PollVote> {
+    const voteData = {
+      id: nanoid(),
+      pollId: data.pollId,
+      userId: data.userId,
+      optionIndex: data.optionIndex,
+      createdAt: new Date()
+    };
+
+    const [newVote] = await db.insert(pollVotes).values(voteData).returning();
+    return newVote;
+  }
+
+  async updatePollVote(id: string, updates: Partial<PollVote>): Promise<PollVote> {
+    const [updatedVote] = await db
+      .update(pollVotes)
+      .set(updates)
+      .where(eq(pollVotes.id, id))
+      .returning();
+    
+    if (!updatedVote) {
+      throw new Error(`Poll vote with id '${id}' not found`);
+    }
+    
+    return updatedVote;
+  }
+
+  async getPollVotes(pollId: string): Promise<PollVote[]> {
+    return await db
+      .select()
+      .from(pollVotes)
+      .where(eq(pollVotes.pollId, pollId))
+      .orderBy(desc(pollVotes.createdAt));
+  }
+
+  async getUserPollVote(pollId: string, userId: string): Promise<PollVote | undefined> {
+    const [vote] = await db
+      .select()
+      .from(pollVotes)
+      .where(and(
+        eq(pollVotes.pollId, pollId),
+        eq(pollVotes.userId, userId)
+      ))
+      .limit(1);
+    
+    return vote;
+  }
+
+  // Engagement points operations
+  async createEngagementPoint(data: { userId: string; liveShowId?: string; pointType: string; points: number; description?: string }): Promise<EngagementPoint> {
+    const pointData = {
+      id: nanoid(),
+      userId: data.userId,
+      liveShowId: data.liveShowId,
+      pointType: data.pointType,
+      points: data.points,
+      description: data.description,
+      createdAt: new Date()
+    };
+
+    const [newPoint] = await db.insert(engagementPoints).values(pointData).returning();
+    return newPoint;
+  }
+
+  async getUserTotalEngagementPoints(userId: string): Promise<number> {
+    const [result] = await db
+      .select({ total: sql<number>`coalesce(sum(${engagementPoints.points}), 0)::int` })
+      .from(engagementPoints)
+      .where(eq(engagementPoints.userId, userId));
+    
+    return result?.total || 0;
+  }
+
+  async getUserDailyEngagementPoints(userId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const [result] = await db
+      .select({ total: sql<number>`coalesce(sum(${engagementPoints.points}), 0)::int` })
+      .from(engagementPoints)
+      .where(and(
+        eq(engagementPoints.userId, userId),
+        sql`${engagementPoints.createdAt} >= ${today}`
+      ));
+    
+    return result?.total || 0;
+  }
+
+  async getUserEngagementRank(userId: string): Promise<number> {
+    const userTotal = await this.getUserTotalEngagementPoints(userId);
+    
+    const [result] = await db
+      .select({ rank: sql<number>`count(distinct ${engagementPoints.userId})::int + 1` })
+      .from(engagementPoints)
+      .where(sql`(
+        select coalesce(sum(points), 0) 
+        from ${engagementPoints} ep2 
+        where ep2.user_id = ${engagementPoints.userId}
+      ) > ${userTotal}`);
+    
+    return result?.rank || 1;
+  }
+
+  async getTopEngagementUsers(liveShowId?: string, period: string = 'today', limit: number = 10): Promise<Array<{ userId: string; totalPoints: number }>> {
+    let timeCondition = sql`true`;
+    
+    if (period === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      timeCondition = sql`${engagementPoints.createdAt} >= ${today}`;
+    } else if (period === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      timeCondition = sql`${engagementPoints.createdAt} >= ${weekAgo}`;
+    }
+
+    const conditions = [timeCondition];
+    if (liveShowId) {
+      conditions.push(eq(engagementPoints.liveShowId, liveShowId));
+    }
+
+    return await db
+      .select({
+        userId: engagementPoints.userId,
+        totalPoints: sql<number>`sum(${engagementPoints.points})::int`
+      })
+      .from(engagementPoints)
+      .where(and(...conditions))
+      .groupBy(engagementPoints.userId)
+      .orderBy(desc(sql`sum(${engagementPoints.points})`))
+      .limit(limit);
+  }
+
+  // User badges operations
+  async createUserBadge(data: { userId: string; liveShowId?: string; badgeType: string; badgeName: string; badgeDescription?: string }): Promise<UserBadge> {
+    const badgeData = {
+      id: nanoid(),
+      userId: data.userId,
+      liveShowId: data.liveShowId,
+      badgeType: data.badgeType,
+      badgeName: data.badgeName,
+      badgeDescription: data.badgeDescription,
+      createdAt: new Date()
+    };
+
+    const [newBadge] = await db.insert(userBadges).values(badgeData).returning();
+    return newBadge;
+  }
+
+  async getUserBadge(userId: string, badgeType: string, liveShowId?: string): Promise<UserBadge | undefined> {
+    const conditions = [
+      eq(userBadges.userId, userId),
+      eq(userBadges.badgeType, badgeType)
+    ];
+
+    if (liveShowId) {
+      conditions.push(eq(userBadges.liveShowId, liveShowId));
+    }
+
+    const [badge] = await db
+      .select()
+      .from(userBadges)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return badge;
+  }
+
+  async getUserBadges(userId: string): Promise<UserBadge[]> {
+    return await db
+      .select()
+      .from(userBadges)
+      .where(eq(userBadges.userId, userId))
+      .orderBy(desc(userBadges.createdAt));
+  }
+
+  // Live predictions operations
+  async createLivePrediction(data: { liveShowId: string; createdBy: string; question: string; outcomes: string; endsAt?: Date }): Promise<LivePrediction> {
+    const predictionData = {
+      id: nanoid(),
+      liveShowId: data.liveShowId,
+      createdBy: data.createdBy,
+      question: data.question,
+      outcomes: data.outcomes,
+      isActive: true,
+      totalBets: 0,
+      totalAmount: '0',
+      endsAt: data.endsAt,
+      winningOutcome: null,
+      createdAt: new Date()
+    };
+
+    const [newPrediction] = await db.insert(livePredictions).values(predictionData).returning();
+    return newPrediction;
+  }
+
+  async getLivePrediction(id: string): Promise<LivePrediction | undefined> {
+    const [prediction] = await db.select().from(livePredictions).where(eq(livePredictions.id, id));
+    return prediction;
+  }
+
+  async updateLivePrediction(id: string, updates: Partial<LivePrediction>): Promise<LivePrediction> {
+    const [updatedPrediction] = await db
+      .update(livePredictions)
+      .set(updates)
+      .where(eq(livePredictions.id, id))
+      .returning();
+    
+    if (!updatedPrediction) {
+      throw new Error(`Live prediction with id '${id}' not found`);
+    }
+    
+    return updatedPrediction;
+  }
+
+  async deactivateExpiredPredictions(): Promise<void> {
+    await db
+      .update(livePredictions)
+      .set({ isActive: false })
+      .where(and(
+        eq(livePredictions.isActive, true),
+        sql`${livePredictions.endsAt} < now()`
+      ));
+  }
+
+  // Prediction bets operations
+  async createPredictionBet(data: { predictionId: string; userId: string; outcomeIndex: number; amount: string; potentialWin: string }): Promise<PredictionBet> {
+    const betData = {
+      id: nanoid(),
+      predictionId: data.predictionId,
+      userId: data.userId,
+      outcomeIndex: data.outcomeIndex,
+      amount: data.amount,
+      potentialWin: data.potentialWin,
+      isWinner: null,
+      createdAt: new Date()
+    };
+
+    const [newBet] = await db.insert(predictionBets).values(betData).returning();
+    return newBet;
+  }
+
+  async updatePredictionBet(id: string, updates: Partial<PredictionBet>): Promise<PredictionBet> {
+    const [updatedBet] = await db
+      .update(predictionBets)
+      .set(updates)
+      .where(eq(predictionBets.id, id))
+      .returning();
+    
+    if (!updatedBet) {
+      throw new Error(`Prediction bet with id '${id}' not found`);
+    }
+    
+    return updatedBet;
+  }
+
+  async getPredictionBets(predictionId: string): Promise<PredictionBet[]> {
+    return await db
+      .select()
+      .from(predictionBets)
+      .where(eq(predictionBets.predictionId, predictionId))
+      .orderBy(desc(predictionBets.createdAt));
+  }
+
+  async getUserPredictionBet(predictionId: string, userId: string): Promise<PredictionBet | undefined> {
+    const [bet] = await db
+      .select()
+      .from(predictionBets)
+      .where(and(
+        eq(predictionBets.predictionId, predictionId),
+        eq(predictionBets.userId, userId)
+      ))
+      .limit(1);
+    
+    return bet;
+  }
+
+  // Analytics operations for social features
+  async isUserTopInvestorForLiveShow(userId: string, liveShowId: string): Promise<boolean> {
+    // Récupérer le total des investissements de l'utilisateur pour ce Live Show
+    const [userInvestment] = await db
+      .select({ total: sql<number>`coalesce(sum(cast(${investments.amount} as decimal)), 0)` })
+      .from(investments)
+      .innerJoin(projects, eq(investments.projectId, projects.id))
+      .where(and(
+        eq(investments.userId, userId),
+        eq(projects.liveShowId, liveShowId)
+      ));
+
+    if (!userInvestment?.total || userInvestment.total === 0) {
+      return false;
+    }
+
+    // Récupérer le plus gros investissement pour ce Live Show
+    const [topInvestment] = await db
+      .select({ maxTotal: sql<number>`max(user_totals.total)` })
+      .from(
+        db
+          .select({
+            userId: investments.userId,
+            total: sql<number>`sum(cast(${investments.amount} as decimal))`
+          })
+          .from(investments)
+          .innerJoin(projects, eq(investments.projectId, projects.id))
+          .where(eq(projects.liveShowId, liveShowId))
+          .groupBy(investments.userId)
+          .as('user_totals')
+      );
+
+    return userInvestment.total >= (topInvestment?.maxTotal || 0);
   }
 }
 
