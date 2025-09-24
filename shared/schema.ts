@@ -118,6 +118,18 @@ export const bookStatusEnum = pgEnum('book_status', ['pending', 'active', 'top10
 // Download token status enum for security
 export const downloadTokenStatusEnum = pgEnum('download_token_status', ['active', 'used', 'expired', 'revoked']);
 
+// Mini social panel position enum for responsive layout
+export const socialPanelPositionEnum = pgEnum('social_panel_position', ['sidebar', 'drawer']);
+
+// Mini social panel state enum for default display
+export const socialPanelStateEnum = pgEnum('social_panel_state', ['expanded', 'collapsed']);
+
+// High traffic fallback mode enum for mini social panel
+export const socialPanelFallbackEnum = pgEnum('social_panel_fallback', ['highlights', 'disabled']);
+
+// Content filter level enum for moderation
+export const contentFilterEnum = pgEnum('content_filter_level', ['strict', 'moderate', 'lenient']);
+
 // Audit action enum for tracking administrative operations
 export const auditActionEnum = pgEnum('audit_action', [
   'purge_manual', 'purge_scheduled', 'purge_projects', 'purge_live_shows', 'purge_articles', 
@@ -127,7 +139,8 @@ export const auditActionEnum = pgEnum('audit_action', [
   'category_created', 'category_updated', 'cycle_started', 'cycle_extended', 'category_closed', 'threshold_check',
   'threshold_check_skipped', 'threshold_check_error', 'unauthorized_admin_access_attempt', 
   'withdrawal_request_created', 'withdrawal_processed',
-  'content_reported', 'report_validated', 'report_rejected', 'visupoints_awarded'
+  'content_reported', 'report_validated', 'report_rejected', 'visupoints_awarded',
+  'mini_social_autoshow_toggled', 'mini_social_position_changed', 'mini_social_settings_updated'
 ]);
 
 // Stripe transfer status enum for idempotent financial operations

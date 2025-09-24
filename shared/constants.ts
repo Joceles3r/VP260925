@@ -419,3 +419,109 @@ export const ENHANCED_FIDELITY = {
   // Gestion des streaks
   STREAK_RESET_HOURS: 30, // Reset si pas de connexion pendant 30h
 } as const;
+
+// ===== MINI RÉSEAU SOCIAL AUTOMATIQUE - LIVE SHOWS =====
+// Système de mini réseau social qui s'affiche automatiquement pendant les Live Shows
+export const MINI_SOCIAL_CONFIG = {
+  // Paramètres par défaut selon spécifications utilisateur
+  autoshow: true, // Affichage automatique par défaut (ON)
+  position: 'sidebar' as const, // Position par défaut : sidebar desktop / drawer mobile
+  defaultState: 'expanded' as const, // État d'ouverture par défaut
+  highlightsFallback: 'highlights' as const, // Mode dégradé pour trafic élevé
+  slowMode: true, // Anti-spam activé par défaut
+  
+  // Seuils et limites de fonctionnement
+  highTrafficThreshold: 1000, // Seuil de spectateurs pour mode highlights
+  maxMessagesPerMinute: 5, // Limite anti-spam en slow mode
+  messageMaxLength: 200, // Longueur maximum des messages
+  moderationDelay: 500, // Délai filtrage IA en ms
+  
+  // Configuration modération automatique
+  moderation: {
+    aiFilterEnabled: true, // Filtrage IA activé
+    requireAccountAge: 7, // Compte minimum 7 jours pour poster
+    require2FA: false, // 2FA requis pour médias/liens (sera true en production)
+    slowModeInterval: 10, // Intervalle slow mode en secondes
+    maxLinksPerMessage: 1, // Maximum 1 lien par message
+    maxEmojiPerMessage: 5, // Maximum 5 emojis par message
+  },
+  
+  // États de session persistants
+  sessionPersistence: {
+    rememberCollapsedState: true, // Se souvenir si l'utilisateur ferme
+    resetOnNewShow: false, // Ne pas rouvrir automatiquement sur nouveau show
+    cookieExpiry: 24 * 60 * 60 * 1000, // Cookie 24h pour état fermé
+  },
+  
+  // Messages par défaut
+  defaultMessages: {
+    welcome: "Bienvenue sur le live ! 🎬",
+    slowModeActive: "Mode lent activé - 1 message toutes les 10s",
+    highTrafficMode: "Trafic élevé - Mode lecture seule activé",
+    moderationPending: "Message en cours de modération...",
+    requireAge: "Compte trop récent pour poster",
+    require2FA: "Vérification 2FA requise pour ce type de contenu",
+  },
+  
+  // Paramètres techniques
+  technical: {
+    refreshInterval: 2000, // Actualisation messages en ms
+    connectionTimeout: 30000, // Timeout WebSocket en ms
+    maxRetries: 3, // Tentatives de reconnexion
+    bufferSize: 100, // Messages en mémoire
+    highlightsUpdateInterval: 30000, // Mise à jour highlights en mode dégradé
+  }
+} as const;
+
+// Paramètres runtime spécifiques par plateforme
+export const MINI_SOCIAL_RUNTIME_PARAMS = {
+  'live_show.social.autoshow': {
+    key: 'live_show.social.autoshow',
+    value: 'true',
+    type: 'boolean',
+    description: 'Affichage automatique du mini réseau social pendant les Live Shows',
+    modifiableByAdmin: true
+  },
+  'live_show.social.position': {
+    key: 'live_show.social.position',
+    value: 'sidebar',
+    type: 'string',
+    description: 'Position du panel: sidebar (desktop) ou drawer (mobile)',
+    modifiableByAdmin: true
+  },
+  'live_show.social.default_state': {
+    key: 'live_show.social.default_state', 
+    value: 'expanded',
+    type: 'string',
+    description: 'État par défaut: expanded ou collapsed',
+    modifiableByAdmin: true
+  },
+  'live_show.social.highload_fallback': {
+    key: 'live_show.social.highload_fallback',
+    value: 'highlights',
+    type: 'string', 
+    description: 'Mode dégradé pour trafic élevé: highlights ou disabled',
+    modifiableByAdmin: true
+  },
+  'live_show.social.slow_mode': {
+    key: 'live_show.social.slow_mode',
+    value: 'true',
+    type: 'boolean',
+    description: 'Mode lent anti-spam activé',
+    modifiableByAdmin: true
+  },
+  'live_show.social.high_traffic_threshold': {
+    key: 'live_show.social.high_traffic_threshold',
+    value: '1000',
+    type: 'number',
+    description: 'Seuil de spectateurs pour basculer en mode highlights',
+    modifiableByAdmin: true
+  },
+  'live_show.social.ai_moderation': {
+    key: 'live_show.social.ai_moderation',
+    value: 'true',
+    type: 'boolean',
+    description: 'Filtrage IA automatique des messages',
+    modifiableByAdmin: true
+  }
+} as const;
