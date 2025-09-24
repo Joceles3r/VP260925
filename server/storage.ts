@@ -61,6 +61,7 @@ import {
   dailyQuests,
   // Tables petites annonces
   petitesAnnonces,
+  adPhotos,
   annoncesModeration,
   annoncesReports,
   escrowTransactions,
@@ -180,11 +181,13 @@ import {
   type InsertDailyQuest,
   // Types petites annonces
   type PetitesAnnonces,
+  type AdPhotos,
   type AnnoncesModeration,
   type AnnoncesReports,
   type EscrowTransactions,
   type AnnoncesSanctions,
   type InsertPetitesAnnonces,
+  type InsertAdPhotos,
   type InsertAnnoncesModeration,
   type InsertAnnoncesReports,
   type InsertEscrowTransactions,
@@ -678,6 +681,18 @@ export interface IStorage {
   updateEscrowStatus(id: string, status: string, updates?: Partial<EscrowTransactions>): Promise<EscrowTransactions>;
   releaseEscrow(id: string, releasedBy: string): Promise<EscrowTransactions>;
   refundEscrow(id: string, reason: string): Promise<EscrowTransactions>;
+
+  // Photo operations for petites annonces
+  createAdPhoto(photo: Omit<InsertAdPhotos, 'idx'>): Promise<AdPhotos>;
+  getAdPhoto(id: string): Promise<AdPhotos | undefined>;
+  getAdPhotos(adId: string): Promise<AdPhotos[]>;
+  updateAdPhoto(id: string, updates: Pick<Partial<AdPhotos>, 'alt' | 'storageKey' | 'width' | 'height' | 'bytes' | 'contentType' | 'sha256'>): Promise<AdPhotos>;
+  deleteAdPhoto(id: string): Promise<void>;
+  reorderAdPhotos(adId: string, photoUpdates: Array<{ id: string; idx: number }>): Promise<void>;
+  setCoverPhoto(adId: string, photoId: string): Promise<void>;
+  getAdCoverPhoto(adId: string): Promise<AdPhotos | undefined>;
+  moderateAdPhoto(photoId: string, decision: 'pending' | 'approved' | 'rejected', moderatorId: string, reason?: string): Promise<AdPhotos>;
+  getPendingPhotoModeration(): Promise<AdPhotos[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4105,6 +4120,168 @@ export class DatabaseStorage implements IStorage {
       refundReason: reason,
       refundedAt: new Date()
     });
+  }
+
+  // ===== PHOTO OPERATIONS FOR PETITES ANNONCES =====
+  
+  async createAdPhoto(photo: Omit<InsertAdPhotos, 'idx'>): Promise<AdPhotos> {
+    // Use transaction to atomically find next available index and insert
+    const newPhoto = await db.transaction(async (tx) => {
+      // Find the next available index (0-9) by looking for gaps
+      const existingIndices = await tx
+        .select({ idx: adPhotos.idx })
+        .from(adPhotos)
+        .where(eq(adPhotos.adId, photo.adId))
+        .orderBy(adPhotos.idx);
+      
+      const usedIndices = new Set(existingIndices.map(row => row.idx));
+      
+      // Find first available index from 0-9
+      let nextIdx = -1;
+      for (let i = 0; i <= 9; i++) {
+        if (!usedIndices.has(i)) {
+          nextIdx = i;
+          break;
+        }
+      }
+      
+      if (nextIdx === -1) {
+        throw new Error("Maximum 10 photos per ad allowed");
+      }
+      
+      // Insert with the determined index
+      const [inserted] = await tx.insert(adPhotos).values({
+        ...photo,
+        idx: nextIdx,
+        id: nanoid(),
+        moderationStatus: 'pending',
+        createdAt: new Date()
+      }).returning();
+      
+      return inserted;
+    });
+    
+    return newPhoto;
+  }
+
+  async getAdPhoto(id: string): Promise<AdPhotos | undefined> {
+    const [photo] = await db
+      .select()
+      .from(adPhotos)
+      .where(eq(adPhotos.id, id));
+    return photo;
+  }
+
+  async getAdPhotos(adId: string): Promise<AdPhotos[]> {
+    return await db
+      .select()
+      .from(adPhotos)
+      .where(eq(adPhotos.adId, adId))
+      .orderBy(adPhotos.idx);
+  }
+
+  async updateAdPhoto(id: string, updates: Pick<Partial<AdPhotos>, 'alt' | 'storageKey' | 'width' | 'height' | 'bytes' | 'contentType' | 'sha256'>): Promise<AdPhotos> {
+    // Only allow updating safe metadata fields - not adId, idx, isCover, or moderation fields
+    const [updatedPhoto] = await db
+      .update(adPhotos)
+      .set(updates)
+      .where(eq(adPhotos.id, id))
+      .returning();
+    
+    if (!updatedPhoto) {
+      throw new Error(`Photo not found: ${id}`);
+    }
+    
+    return updatedPhoto;
+  }
+
+  async deleteAdPhoto(id: string): Promise<void> {
+    await db
+      .delete(adPhotos)
+      .where(eq(adPhotos.id, id));
+  }
+
+  async reorderAdPhotos(adId: string, photoUpdates: Array<{ id: string; idx: number }>): Promise<void> {
+    // Use two-phase transaction to avoid unique constraint violations during swaps
+    await db.transaction(async (tx) => {
+      // Phase 1: Move all photos to temporary indices (1000+ offset to avoid conflicts)
+      for (const update of photoUpdates) {
+        await tx
+          .update(adPhotos)
+          .set({ idx: update.idx + 1000 })
+          .where(and(eq(adPhotos.id, update.id), eq(adPhotos.adId, adId)));
+      }
+      
+      // Phase 2: Set final indices (now safe since all are at 1000+ offset)
+      for (const update of photoUpdates) {
+        await tx
+          .update(adPhotos)
+          .set({ idx: update.idx })
+          .where(and(eq(adPhotos.id, update.id), eq(adPhotos.adId, adId)));
+      }
+    });
+  }
+
+  async setCoverPhoto(adId: string, photoId: string): Promise<void> {
+    // Use transaction to ensure only one cover photo
+    await db.transaction(async (tx) => {
+      // Verify photo belongs to the ad
+      const [photo] = await tx
+        .select({ id: adPhotos.id })
+        .from(adPhotos)
+        .where(and(eq(adPhotos.id, photoId), eq(adPhotos.adId, adId)));
+      
+      if (!photo) {
+        throw new Error(`Photo ${photoId} not found in ad ${adId}`);
+      }
+      
+      // Clear existing cover photo (unique constraint will enforce only one)
+      await tx
+        .update(adPhotos)
+        .set({ isCover: false })
+        .where(eq(adPhotos.adId, adId));
+      
+      // Set new cover photo - unique constraint ensures atomicity
+      await tx
+        .update(adPhotos)
+        .set({ isCover: true })
+        .where(eq(adPhotos.id, photoId));
+    });
+  }
+
+  async getAdCoverPhoto(adId: string): Promise<AdPhotos | undefined> {
+    const [coverPhoto] = await db
+      .select()
+      .from(adPhotos)
+      .where(and(eq(adPhotos.adId, adId), eq(adPhotos.isCover, true)));
+    return coverPhoto;
+  }
+
+  async moderateAdPhoto(photoId: string, decision: 'pending' | 'approved' | 'rejected', moderatorId: string, reason?: string): Promise<AdPhotos> {
+    const [updatedPhoto] = await db
+      .update(adPhotos)
+      .set({
+        moderationStatus: decision,
+        moderatedBy: moderatorId,
+        moderatedAt: new Date(),
+        moderationReason: reason
+      })
+      .where(eq(adPhotos.id, photoId))
+      .returning();
+    
+    if (!updatedPhoto) {
+      throw new Error(`Photo not found: ${photoId}`);
+    }
+    
+    return updatedPhoto;
+  }
+
+  async getPendingPhotoModeration(): Promise<AdPhotos[]> {
+    return await db
+      .select()
+      .from(adPhotos)
+      .where(eq(adPhotos.moderationStatus, 'pending'))
+      .orderBy(adPhotos.createdAt);
   }
 }
 

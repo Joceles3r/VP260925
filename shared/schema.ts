@@ -2567,9 +2567,10 @@ export const adPhotos = pgTable("ad_photos", {
   unique("unique_ad_idx").on(table.adId, table.idx), // Pas de doublons d'index par annonce
   index("idx_ad_photos_ad_id").on(table.adId),
   index("idx_ad_photos_status").on(table.moderationStatus),
-  // Contraintes métier
-  check("idx_range", sql`${table.idx} >= 0 AND ${table.idx} <= 9`),
+  // Contraintes métier critiques pour l'intégrité des données
+  check("idx_range", sql`${table.idx} >= 0 AND ${table.idx} <= 9`), // Limite index 0-9 (max 10 photos)
   check("bytes_limit", sql`${table.bytes} > 0 AND ${table.bytes} <= 10485760`), // 10MB max
+  // Note: unique cover constraint enforced by application logic with transactions
 ]);
 
 // ===== SCHÉMAS D'INSERTION POUR PETITES ANNONCES =====
