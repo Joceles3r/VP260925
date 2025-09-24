@@ -233,6 +233,110 @@ export const liveShows = pgTable("live_shows", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Live chat messages table
+export const liveChatMessages = pgTable("live_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  messageType: varchar("message_type", { length: 50 }).default('chat'), // 'chat', 'system', 'highlight'
+  isModerated: boolean("is_moderated").default(false),
+  moderationReason: varchar("moderation_reason", { length: 255 }),
+  reactionCount: integer("reaction_count").default(0),
+  highlightScore: integer("highlight_score").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Message reactions table
+export const messageReactions = pgTable("message_reactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => liveChatMessages.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  reaction: varchar("reaction", { length: 50 }).notNull(), // 'like', 'love', 'laugh', 'wow', 'sad', 'angry'
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueUserMessageReaction: unique().on(table.userId, table.messageId, table.reaction),
+}));
+
+// Live polls table
+export const livePolls = pgTable("live_polls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  question: varchar("question", { length: 500 }).notNull(),
+  options: jsonb("options").notNull(), // Array of poll options
+  isActive: boolean("is_active").default(true),
+  totalVotes: integer("total_votes").default(0),
+  endsAt: timestamp("ends_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Poll votes table
+export const pollVotes = pgTable("poll_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollId: varchar("poll_id").notNull().references(() => livePolls.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  optionIndex: integer("option_index").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueUserPoll: unique().on(table.userId, table.pollId),
+}));
+
+// User engagement points table
+export const engagementPoints = pgTable("engagement_points", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  liveShowId: varchar("live_show_id").references(() => liveShows.id, { onDelete: 'set null' }),
+  pointType: varchar("point_type", { length: 50 }).notNull(), // 'message', 'reaction', 'poll_vote', 'prediction', 'investment'
+  points: integer("points").notNull(),
+  description: varchar("description", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// User badges table
+export const userBadges = pgTable("user_badges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  badgeType: varchar("badge_type", { length: 50 }).notNull(), // 'early_bird', 'top_investor', 'chat_master', 'predictor'
+  badgeName: varchar("badge_name", { length: 100 }).notNull(),
+  badgeDescription: varchar("badge_description", { length: 255 }),
+  earnedAt: timestamp("earned_at").defaultNow(),
+  liveShowId: varchar("live_show_id").references(() => liveShows.id, { onDelete: 'set null' }),
+}, (table) => ({
+  uniqueUserBadge: unique().on(table.userId, table.badgeType, table.liveShowId),
+}));
+
+// Live predictions/bets table
+export const livePredictions = pgTable("live_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  question: varchar("question", { length: 500 }).notNull(),
+  outcomes: jsonb("outcomes").notNull(), // Array of possible outcomes
+  isActive: boolean("is_active").default(true),
+  resolvedOutcome: integer("resolved_outcome"), // Index of winning outcome
+  totalBets: integer("total_bets").default(0),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).default('0.00'),
+  endsAt: timestamp("ends_at"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Prediction bets table
+export const predictionBets = pgTable("prediction_bets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  predictionId: varchar("prediction_id").notNull().references(() => livePredictions.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  outcomeIndex: integer("outcome_index").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  potentialWin: decimal("potential_win", { precision: 10, scale: 2 }).notNull(),
+  isWinner: boolean("is_winner"),
+  paidOut: boolean("paid_out").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueUserPrediction: unique().on(table.userId, table.predictionId),
+}));
+
 // Compliance reports table
 export const complianceReports = pgTable("compliance_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1406,6 +1510,46 @@ export const insertLiveShowSchema = createInsertSchema(liveShows).omit({
   createdAt: true,
 });
 
+export const insertLiveChatMessageSchema = createInsertSchema(liveChatMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMessageReactionSchema = createInsertSchema(messageReactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLivePollSchema = createInsertSchema(livePolls).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPollVoteSchema = createInsertSchema(pollVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEngagementPointSchema = createInsertSchema(engagementPoints).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserBadgeSchema = createInsertSchema(userBadges).omit({
+  id: true,
+  earnedAt: true,
+});
+
+export const insertLivePredictionSchema = createInsertSchema(livePredictions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPredictionBetSchema = createInsertSchema(predictionBets).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
   createdAt: true,
@@ -1756,6 +1900,14 @@ export type Project = typeof projects.$inferSelect;
 export type Investment = typeof investments.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type LiveShow = typeof liveShows.$inferSelect;
+export type LiveChatMessage = typeof liveChatMessages.$inferSelect;
+export type MessageReaction = typeof messageReactions.$inferSelect;
+export type LivePoll = typeof livePolls.$inferSelect;
+export type PollVote = typeof pollVotes.$inferSelect;
+export type EngagementPoint = typeof engagementPoints.$inferSelect;
+export type UserBadge = typeof userBadges.$inferSelect;
+export type LivePrediction = typeof livePredictions.$inferSelect;
+export type PredictionBet = typeof predictionBets.$inferSelect;
 export type ComplianceReport = typeof complianceReports.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;

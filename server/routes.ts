@@ -72,6 +72,7 @@ import { VISUPointsService } from "./services/visuPointsService.js";
 import { Top10Service } from "./services/top10Service.js";
 import { FidelityService } from "./services/fidelityService.js";
 import { miniSocialConfigService } from "./services/miniSocialConfigService";
+import { liveSocialService } from "./services/liveSocialService";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -4954,6 +4955,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Erreur lors de la récupération des highlights:", error);
       res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // ===== LIVE SOCIAL FEATURES ROUTES =====
+
+  // Route pour envoyer un message de chat dans un Live Show
+  app.post('/api/live-social/chat', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const { liveShowId, content } = req.body;
+      
+      if (!liveShowId || !content) {
+        return res.status(400).json({ message: "Live Show ID et contenu requis" });
+      }
+
+      const message = await liveSocialService.sendChatMessage(liveShowId, userId, content);
+      
+      res.json({
+        success: true,
+        message,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de l'envoi du message de chat:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour ajouter une réaction à un message
+  app.post('/api/live-social/reaction', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const { messageId, reaction } = req.body;
+      
+      if (!messageId || !reaction) {
+        return res.status(400).json({ message: "Message ID et réaction requis" });
+      }
+
+      const reactionStats = await liveSocialService.addMessageReaction(messageId, userId, reaction);
+      
+      res.json({
+        success: true,
+        reactionStats,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de l'ajout de réaction:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour récupérer les messages d'un Live Show avec réactions
+  app.get('/api/live-social/messages/:liveShowId', async (req, res) => {
+    try {
+      const liveShowId = req.params.liveShowId;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const messagesWithReactions = await liveSocialService.getLiveShowMessages(liveShowId, limit, offset);
+      
+      res.json({
+        success: true,
+        messages: messagesWithReactions,
+        liveShowId,
+        limit,
+        offset,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de la récupération des messages:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour créer un sondage en direct
+  app.post('/api/live-social/poll', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const { liveShowId, question, options, durationMinutes } = req.body;
+      
+      if (!liveShowId || !question || !options || !Array.isArray(options)) {
+        return res.status(400).json({ message: "Live Show ID, question et options (array) requis" });
+      }
+
+      const poll = await liveSocialService.createLivePoll(
+        liveShowId, 
+        userId, 
+        question, 
+        options, 
+        durationMinutes || 5
+      );
+      
+      res.json({
+        success: true,
+        poll,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de la création du sondage:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour voter sur un sondage
+  app.post('/api/live-social/poll/:pollId/vote', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const pollId = req.params.pollId;
+      const { optionIndex } = req.body;
+      
+      if (optionIndex === undefined || optionIndex === null) {
+        return res.status(400).json({ message: "Index d'option requis" });
+      }
+
+      const results = await liveSocialService.voteOnPoll(pollId, userId, optionIndex);
+      
+      res.json({
+        success: true,
+        results,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors du vote:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour récupérer les résultats d'un sondage
+  app.get('/api/live-social/poll/:pollId/results', async (req: any, res) => {
+    try {
+      const pollId = req.params.pollId;
+      const userId = req.user?.claims?.sub;
+
+      const results = await liveSocialService.getPollResults(pollId, userId);
+      
+      res.json({
+        success: true,
+        results,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de la récupération des résultats du sondage:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour récupérer les statistiques d'engagement d'un utilisateur
+  app.get('/api/live-social/engagement/:userId', async (req, res) => {
+    try {
+      const userId = req.params.userId;
+
+      const stats = await liveSocialService.getUserEngagementStats(userId);
+      
+      res.json({
+        success: true,
+        stats,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de la récupération des stats d'engagement:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // Route pour récupérer le leaderboard d'engagement
+  app.get('/api/live-social/leaderboard', async (req, res) => {
+    try {
+      const liveShowId = req.query.liveShowId as string;
+      const period = req.query.period as 'today' | 'week' | 'all' || 'today';
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      const leaderboard = await liveSocialService.getEngagementLeaderboard(liveShowId, period, limit);
+      
+      res.json({
+        success: true,
+        leaderboard,
+        period,
+        limit,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Erreur lors de la récupération du leaderboard:", error);
+      res.status(500).json({ 
+        message: error.message || "Erreur serveur" 
+      });
     }
   });
 
