@@ -51,9 +51,11 @@ export const VISUAL_FINANCE_CONFIG = {
   books_author_revenue_share: 0.70, // 70% pour l'auteur
   books_platform_fee_pct: 0.30, // 30% pour VISUAL
   
-  // Pot commun LIVRES (60/40)
+  // Pot mensuel LIVRES (60/40 avec euro-floor et résidus VISUAL)
   books_pot_authors_share: 0.60, // 60% du pot pour auteurs TOP10
   books_pot_readers_share: 0.40, // 40% du pot pour lecteurs gagnants
+  books_euro_floor_enabled: true, // Arrondi euro-floor pour utilisateurs
+  books_residuals_to_visual: true, // Résidus → VISUAL
   
   // Tokens téléchargement
   books_download_token_ttl_hours: 72, // Expiration 72h
@@ -514,8 +516,9 @@ export class VisualFinanceAIService {
       subjectType,
       subjectId,
       details,
-      actor: 'visualfinanceai'
-      // currentHash et previousHash seront générés par le storage
+      actor: 'visualfinanceai',
+      currentHash: '', // Sera remplacé par storage.createAuditLogEntry
+      previousHash: null // Sera calculé par storage.createAuditLogEntry
     });
   }
   
@@ -673,80 +676,105 @@ export class VisualFinanceAIService {
   }
 
   /**
-   * Calcul redistribution pot commun LIVRES (60/40)
+   * Calcul redistribution pot mensuel LIVRES (60/40) avec euro-floor et résidus VISUAL
+   * Implémentation exacte selon correctif mensualisation v.24/09/2025
    * @param categoryId ID de la catégorie LIVRES
    * @param potTotalEur Montant total du pot en euros
-   * @param authorsTop10 IDs des auteurs TOP 10
-   * @param winningReaders IDs des lecteurs gagnants (qui ont acheté livres TOP 10)
+   * @param authorsTopN IDs des auteurs TOP N (10 par défaut, 20 si extension)
+   * @param winningReaders IDs des lecteurs gagnants (qui ont acheté livres TOP N)
    */
   async calculateBooksPotRedistribution(
     categoryId: string,
     potTotalEur: number,
-    authorsTop10: string[],
+    authorsTopN: string[],
     winningReaders: string[]
   ): Promise<PayoutCalculation> {
     
-    const potCents = this.toCents(potTotalEur);
-    const authorsPotCents = Math.floor(potCents * this.config.books_pot_authors_share);
-    const readersPotCents = Math.floor(potCents * this.config.books_pot_readers_share);
-    
-    // Répartition équitable par défaut
-    const authorsShareEach = authorsTop10.length > 0 ? Math.floor(authorsPotCents / authorsTop10.length) : 0;
-    const readersShareEach = winningReaders.length > 0 ? Math.floor(readersPotCents / winningReaders.length) : 0;
-    
-    // Euro floor pour utilisateurs
-    const authorsShareEurFloor = this.euroFloor(authorsShareEach);
-    const readersShareEurFloor = this.euroFloor(readersShareEach);
-    
+    // Implémentation exacte du pseudocode du correctif
+    const ALPHA = 0.60; // auteurs
+    const BETA  = 0.40; // lecteurs
+
+    const S_c = Math.round(potTotalEur * 100);
+    const A_c = Math.floor(ALPHA * S_c);
+    const R_c = Math.floor(BETA  * S_c);
+
+    const N = authorsTopN.length; // 10 (ou 20)
+    const M = winningReaders.length;
+
     const payouts: PayoutEntry[] = [];
-    
-    // Payouts auteurs TOP 10
-    for (let i = 0; i < authorsTop10.length; i++) {
-      payouts.push({
-        type: 'creator_top10',
-        recipient_id: authorsTop10[i],
-        amount_cents: authorsShareEach,
-        amount_eur_floor: authorsShareEurFloor,
-        rank: i + 1,
-        reference_id: categoryId
-      });
+    let paid_c = 0;
+
+    // Payouts auteurs TOP N
+    let totalUserEuroFloors = 0;
+    if (N > 0) {
+      const a_each_c = Math.floor(A_c / N);
+      const a_each_e = Math.floor(a_each_c / 100) * 100; // euro floor
+      for (let i = 0; i < authorsTopN.length; i++) {
+        payouts.push({ 
+          type: "creator_top10", 
+          recipient_id: authorsTopN[i], 
+          amount_cents: a_each_c,        // Valeur avant euro-floor
+          amount_eur_floor: a_each_e,    // Valeur après euro-floor (payée à l'utilisateur)
+          rank: i + 1,
+          reference_id: categoryId
+        });
+        totalUserEuroFloors += a_each_e;
+      }
     }
-    
+
     // Payouts lecteurs gagnants
-    for (const readerId of winningReaders) {
-      payouts.push({
-        type: 'pot24h_winner', // Réutilisation type existant
-        recipient_id: readerId,
-        amount_cents: readersShareEach,
-        amount_eur_floor: readersShareEurFloor,
+    if (M > 0) {
+      const r_each_c = Math.floor(R_c / M);
+      const r_each_e = Math.floor(r_each_c / 100) * 100; // euro floor
+      for (const readerId of winningReaders) {
+        payouts.push({ 
+          type: "pot24h_winner", 
+          recipient_id: readerId, 
+          amount_cents: r_each_c,        // Valeur avant euro-floor
+          amount_eur_floor: r_each_e,    // Valeur après euro-floor (payée à l'utilisateur)
+          reference_id: categoryId
+        });
+        totalUserEuroFloors += r_each_e;
+      }
+    }
+
+    // Calcul résiduel total = pot total - tous les paiements utilisateurs euro-floor + pot lecteurs si M=0
+    const readersPotToVisual = M === 0 ? R_c : 0;
+    const residual_c = Math.max(0, S_c - totalUserEuroFloors);
+    const totalVisualAmount = residual_c + readersPotToVisual;
+    
+    // Un seul payout VISUAL pour tous les résidus
+    if (totalVisualAmount > 0) {
+      payouts.push({ 
+        type: "visual_platform", 
+        recipient_id: undefined, 
+        amount_cents: totalVisualAmount,
+        amount_eur_floor: 0, // VISUAL ne reçoit pas d'euro-floor
         reference_id: categoryId
       });
     }
-    
-    // Calcul résiduel (restes euro-floor + montant non réparti)
-    const totalPaidAuthors = authorsTop10.length * authorsShareEurFloor;
-    const totalPaidReaders = winningReaders.length * readersShareEurFloor;
-    const totalPaidCents = totalPaidAuthors + totalPaidReaders;
-    const residualCents = potCents - totalPaidCents;
-    
+
     const calculation: PayoutCalculation = {
-      rule_version: 'books_pot_60_40_v1',
-      total_amount_cents: potCents,
+      rule_version: 'books_pot_monthly_60_40_v1',
+      total_amount_cents: S_c,
       payouts,
-      visual_amount_cents: residualCents,
-      residual_cents: residualCents
+      visual_amount_cents: totalVisualAmount,
+      residual_cents: residual_c
     };
 
     // Créer entrées ledger pour tous les payouts
-    await this.createLedgerEntries(calculation, 'books_pot_redistribution');
+    await this.createLedgerEntries(calculation, 'books_monthly_pot');
 
-    await this.logAuditEntry('payout_executed', 'books_pot', categoryId, {
+    await this.logAuditEntry('payout_executed', 'books_monthly_pot', categoryId, {
       pot_total_eur: potTotalEur,
-      authors_count: authorsTop10.length,
-      readers_count: winningReaders.length,
-      authors_share_eur: this.centsToEur(authorsPotCents),
-      readers_share_eur: this.centsToEur(readersPotCents),
-      residual_eur: this.centsToEur(residualCents)
+      authors_count: N,
+      readers_count: M,
+      authors_share_total_cents: A_c,
+      readers_share_total_cents: R_c,
+      total_user_euro_floors: totalUserEuroFloors,
+      visual_total_amount: totalVisualAmount,
+      residual_cents: residual_c,
+      readers_empty_fallback: readersPotToVisual
     });
 
     return calculation;
