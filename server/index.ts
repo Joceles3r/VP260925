@@ -66,7 +66,50 @@ app.use((req, res, next) => {
     port,
     host: "0.0.0.0",
     reusePort: true,
-  }, () => {
+  }, async () => {
     log(`serving on port ${port}`);
+    
+    // Initialiser les paramètres par défaut du mini réseau social
+    try {
+      const { miniSocialConfigService } = await import('./services/miniSocialConfigService');
+      await miniSocialConfigService.initializeDefaultParams();
+      log('[MiniSocial] Paramètres par défaut initialisés');
+    } catch (error) {
+      console.error('[MiniSocial] Erreur lors de l\'initialisation des paramètres:', error);
+    }
+
+    // Démarrer le service VisualAI pour la surveillance automatique des Live Shows
+    try {
+      const { visualAIService } = await import('./services/visualAIService');
+      await visualAIService.startMonitoring();
+      log('[VisualAI] Service de surveillance automatique démarré');
+    } catch (error) {
+      console.error('[VisualAI] Erreur lors du démarrage du service:', error);
+    }
+
+    // Démarrer le service de modération automatique avec cleanup périodique
+    try {
+      const { moderationService } = await import('./services/moderationService');
+      
+      // Configurer le cleanup périodique (toutes les heures)
+      setInterval(() => {
+        moderationService.cleanup();
+      }, 60 * 60 * 1000);
+      
+      log('[Moderation] Service de modération automatique initialisé');
+    } catch (error) {
+      console.error('[Moderation] Erreur lors de l\'initialisation du service:', error);
+    }
+
+    // Initialiser les services de gestion du trafic et highlights
+    try {
+      const { highlightsService } = await import('./services/highlightsService');
+      const { trafficModeService } = await import('./services/trafficModeService');
+      
+      // Les services sont maintenant disponibles pour utilisation
+      log('[TrafficMode] Services de gestion du trafic et highlights initialisés');
+    } catch (error) {
+      console.error('[TrafficMode] Erreur lors de l\'initialisation des services:', error);
+    }
   });
 })();

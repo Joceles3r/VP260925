@@ -98,6 +98,116 @@ class NotificationWebSocketService {
         console.log(`Marking notification ${data.notificationId} as read for user ${socket.userId}`);
       });
 
+      // ===== MINI SOCIAL NETWORK HANDLERS =====
+      
+      // Join a live show mini social room
+      socket.on('mini-social-join', (data: { liveShowId: string }) => {
+        if (socket.userId && data.liveShowId) {
+          socket.join(`mini-social:${data.liveShowId}`);
+          console.log(`[WebSocket] User ${socket.userId} joined mini social for live show ${data.liveShowId}`);
+          
+          // Notify others in the room about new participant
+          socket.to(`mini-social:${data.liveShowId}`).emit('mini-social-user-joined', {
+            userId: socket.userId,
+            liveShowId: data.liveShowId,
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+
+      // Leave a live show mini social room
+      socket.on('mini-social-leave', (data: { liveShowId: string }) => {
+        if (data.liveShowId) {
+          socket.leave(`mini-social:${data.liveShowId}`);
+          console.log(`[WebSocket] User ${socket.userId} left mini social for live show ${data.liveShowId}`);
+          
+          // Notify others in the room about user leaving
+          socket.to(`mini-social:${data.liveShowId}`).emit('mini-social-user-left', {
+            userId: socket.userId,
+            liveShowId: data.liveShowId,
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+
+      // Handle mini social message with automatic moderation
+      socket.on('mini-social-message', async (data: { liveShowId: string, content: string, messageId?: string }) => {
+        try {
+          if (!socket.userId || !data.liveShowId || !data.content) {
+            socket.emit('mini-social-error', {
+              error: 'Données invalides',
+              messageId: data.messageId
+            });
+            return;
+          }
+
+          // Import the moderation service dynamically to avoid circular dependencies
+          const { moderationService } = await import('./services/moderationService');
+          
+          // Validate message through moderation service
+          const moderationResult = await moderationService.canUserPostMessage(socket.userId, data.content);
+          
+          if (!moderationResult.allowed) {
+            // Message rejected by moderation
+            socket.emit('mini-social-message-rejected', {
+              reason: moderationResult.reason,
+              action: moderationResult.action,
+              timeToWait: moderationResult.timeToWait,
+              messageId: data.messageId,
+              liveShowId: data.liveShowId
+            });
+            
+            console.log(`[WebSocket] Message rejected for user ${socket.userId}: ${moderationResult.reason}`);
+            return;
+          }
+
+          // Message approved - broadcast to all users in the live show room
+          const messageData = {
+            messageId: data.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            userId: socket.userId,
+            content: data.content,
+            liveShowId: data.liveShowId,
+            timestamp: new Date().toISOString()
+          };
+
+          // Send to all users in the mini social room
+          this.io.to(`mini-social:${data.liveShowId}`).emit('mini-social-message', messageData);
+          
+          // Also send back confirmation to sender
+          socket.emit('mini-social-message-sent', {
+            messageId: messageData.messageId,
+            timestamp: messageData.timestamp
+          });
+
+          console.log(`[WebSocket] Mini social message broadcasted for live show ${data.liveShowId} from user ${socket.userId}`);
+
+        } catch (error) {
+          console.error(`[WebSocket] Error processing mini social message:`, error);
+          socket.emit('mini-social-error', {
+            error: 'Erreur lors du traitement du message',
+            messageId: data.messageId
+          });
+        }
+      });
+
+      // Handle mini social reactions (likes, emojis, etc.)
+      socket.on('mini-social-reaction', (data: { liveShowId: string, messageId: string, reaction: string }) => {
+        if (socket.userId && data.liveShowId && data.messageId && data.reaction) {
+          const reactionData = {
+            messageId: data.messageId,
+            userId: socket.userId,
+            reaction: data.reaction,
+            liveShowId: data.liveShowId,
+            timestamp: new Date().toISOString()
+          };
+
+          // Broadcast reaction to all users in the room
+          this.io.to(`mini-social:${data.liveShowId}`).emit('mini-social-reaction', reactionData);
+          
+          console.log(`[WebSocket] Reaction ${data.reaction} sent for message ${data.messageId} in live show ${data.liveShowId}`);
+        }
+      });
+
       // Handle disconnection
       socket.on('disconnect', () => {
         console.log(`[WebSocket] Socket disconnected: ${socket.id}`);

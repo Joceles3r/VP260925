@@ -199,6 +199,7 @@ export interface IStorage {
   
   // Live shows operations
   getActiveLiveShows(): Promise<LiveShow[]>;
+  createLiveShow(data: { title: string; description?: string; artistA?: string; artistB?: string; viewerCount?: number }): Promise<LiveShow>;
   updateLiveShowInvestments(id: string, investmentA: string, investmentB: string): Promise<LiveShow>;
   
   // Admin operations
@@ -688,6 +689,23 @@ export class DatabaseStorage implements IStorage {
       .from(liveShows)
       .where(eq(liveShows.isActive, true))
       .orderBy(desc(liveShows.createdAt));
+  }
+
+  async createLiveShow(data: { title: string; description?: string; artistA?: string; artistB?: string; viewerCount?: number }): Promise<LiveShow> {
+    const [newShow] = await db
+      .insert(liveShows)
+      .values({
+        title: data.title,
+        description: data.description,
+        artistA: data.artistA,
+        artistB: data.artistB,
+        viewerCount: data.viewerCount || 0,
+        isActive: true, // Nouveau live show actif par défaut
+        investmentA: '0.00',
+        investmentB: '0.00'
+      })
+      .returning();
+    return newShow;
   }
 
   async updateLiveShowInvestments(id: string, investmentA: string, investmentB: string): Promise<LiveShow> {
