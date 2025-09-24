@@ -68,6 +68,79 @@ export const INVESTMENT_STATUS = {
   }
 } as const;
 
+// ===== PETITES ANNONCES - CONSTANTES =====
+
+// Taux de commission pour le système d'escrow (5%)
+export const ESCROW_FEE_RATE = 0.05;
+
+// Montant minimum pour les frais d'escrow (1€)
+export const ESCROW_MINIMUM_FEE = 1;
+
+// Durée de validité des annonces (30 jours par défaut)
+export const ANNONCE_DEFAULT_DURATION_DAYS = 30;
+
+// Limites de contenu pour les annonces
+export const ANNONCE_LIMITS = {
+  TITLE_MAX_LENGTH: 100,
+  DESCRIPTION_MAX_LENGTH: 1000,
+  PRICE_MIN: 0,
+  PRICE_MAX: 999999,
+  IMAGES_MAX_COUNT: 5
+} as const;
+
+// Catégories autorisées (strictement audiovisuel/spectacle)
+export const ANNONCE_CATEGORIES = {
+  emploi: {
+    label: 'Emploi',
+    description: 'Offres et demandes d\'emploi dans l\'audiovisuel',
+    colorClass: 'bg-blue-100 text-blue-800'
+  },
+  service: {
+    label: 'Service',
+    description: 'Services professionnels audiovisuels',
+    colorClass: 'bg-green-100 text-green-800'
+  },
+  lieu: {
+    label: 'Lieu',
+    description: 'Locations de lieux de tournage',
+    colorClass: 'bg-purple-100 text-purple-800'
+  },
+  matériel: {
+    label: 'Matériel',
+    description: 'Vente et location de matériel audiovisuel',
+    colorClass: 'bg-orange-100 text-orange-800'
+  }
+} as const;
+
+// Statuts des sanctions (graduées)
+export const SANCTION_TYPES = {
+  warning: {
+    label: 'Avertissement',
+    duration: 0, // Pas d'expiration
+    severity: 1
+  },
+  suspension_24h: {
+    label: 'Suspension 24h',
+    duration: 24 * 60 * 60 * 1000, // 24h en ms
+    severity: 2
+  },
+  suspension_7d: {
+    label: 'Suspension 7 jours',
+    duration: 7 * 24 * 60 * 60 * 1000, // 7 jours en ms
+    severity: 3
+  },
+  suspension_30d: {
+    label: 'Suspension 30 jours',
+    duration: 30 * 24 * 60 * 60 * 1000, // 30 jours en ms
+    severity: 4
+  },
+  permanent_ban: {
+    label: 'Bannissement permanent',
+    duration: null, // Permanent
+    severity: 5
+  }
+} as const;
+
 // ===== CATÉGORIE LIVRES - CONSTANTES =====
 
 // Prix autorisés pour les auteurs LIVRES (spécification v.16/09/2025)
@@ -551,4 +624,145 @@ export const MINI_SOCIAL_RUNTIME_PARAMS = {
     description: 'Heures DND (Do Not Disturb) au format JSON [0,1,2...23]',
     modifiableByAdmin: true
   }
+} as const;
+
+// ===== PETITES ANNONCES - CONSTANTES =====
+
+// Configuration générale des petites annonces selon additif v.24/09/2025
+export const PETITES_ANNONCES_CONFIG = {
+  // Périmètre thématique obligatoire (audiovisuel/spectacle uniquement)
+  PERIMETER_THEME: 'audiovisuel_spectacle',
+  ENFORCE_THEME_VALIDATION: true,
+  
+  // Catégories autorisées et leurs sous-catégories
+  ALLOWED_CATEGORIES: {
+    talents_jobs: {
+      label: 'Talents & Jobs',
+      subcategories: [
+        'casting', 'comediens', 'figurants', 'realisateurs', 'cadreurs', 'monteurs',
+        'etalonneurs', 'preneurs_son', 'mixeurs', 'scriptes', 'regisseurs',
+        'machinerie', 'electriciens', 'decoration', 'costumes', 'maquillage',
+        'vfx', 'motion', 'assistants_prod', 'community_manager', 'attache_presse'
+      ]
+    },
+    services: {
+      label: 'Services',
+      subcategories: [
+        'compositeur_musique', 'voix_off', 'sound_design', 'etalonnage',
+        'montage', 'coaching_comedien', 'direction_acteurs', 'photo_plateau',
+        'making_of', 'sous_titrage', 'traduction_diffusion'
+      ]
+    },
+    lieux_tournage: {
+      label: 'Lieux de tournage',
+      subcategories: [
+        'maisons', 'appartements', 'ateliers', 'bureaux', 'entrepots',
+        'exterieurs_prives', 'studios', 'plateaux', 'salles_theatre'
+      ]
+    },
+    materiel: {
+      label: 'Matériel & Accessoires',
+      subcategories: [
+        'cameras', 'optiques', 'lumieres', 'son', 'machinerie_travelling',
+        'grip', 'decoration', 'vehicules_epoque', 'vehicules_tournage',
+        'accessoires_scene', 'costumes_location'
+      ]
+    }
+  },
+  
+  // Configuration escrow (paiements protégés)
+  ESCROW_ENABLED: true,
+  ESCROW_SERVICE_FEE_RATE: 0.05,        // 5% de frais service
+  ESCROW_MINIMUM_FEE_EUR: 1.00,         // 1€ minimum
+  ESCROW_DEFAULT_DELIVERY_DAYS: 7,      // 7 jours par défaut
+  ESCROW_DISPUTE_TIMEOUT_DAYS: 14,      // 14 jours pour régler un litige
+  
+  // Modération et sécurité
+  MODERATION_MODE: 'ai_human_hybrid',   // IA + humaine
+  AUTO_APPROVAL_THRESHOLD: 85,          // Score IA > 85% = auto-approuvé
+  MANUAL_REVIEW_THRESHOLD: 60,          // Score 60-85% = révision manuelle
+  AUTO_REJECT_THRESHOLD: 60,            // Score < 60% = rejet automatique
+  
+  // KYC/2FA requis
+  REQUIRE_KYC_FOR_ESCROW: true,
+  REQUIRE_KYC_FOR_PROFESSIONAL: true,
+  REQUIRE_2FA_FOR_ESCROW: true,
+  
+  // Gestion des expiration et limites
+  DEFAULT_EXPIRY_DAYS: 30,              // 30 jours par défaut
+  MAX_ACTIVE_ANNONCES_PER_USER: 10,     // 10 annonces actives max par utilisateur
+  MAX_IMAGES_PER_ANNONCE: 5,            // 5 images max par annonce
+  VIDEO_UPLOAD_COST_TO_USER: true,      // Coût vidéo Bunny à l'annonceur
+  
+  // Messages de refus types
+  REJECTION_MESSAGES: {
+    OUT_OF_SCOPE: "Votre annonce a été refusée car elle ne correspond pas au périmètre « spectacle/audiovisuel » de VISUAL (exemples acceptés : locations de lieux pour tournage, véhicules d'époque, castings, services techniques, matériel image/son). Vous pouvez la reformuler et la republier en respectant l'Additif 'Petites Annonces'.",
+    INAPPROPRIATE_CONTENT: "Contenu inapproprié détecté. Veuillez respecter les conditions d'utilisation.",
+    SUSPECTED_FRAUD: "Annonce signalée pour suspicion de fraude. Contactez le support pour plus d'informations.",
+    DUPLICATE_DETECTED: "Annonce identique ou similaire déjà publiée. Évitez les doublons.",
+    MISSING_AUTHORIZATION: "Justificatif d'autorisation manquant pour ce type d'annonce (lieu, matériel soumis à autorisation)."
+  }
+} as const;
+
+// Sanctions graduées selon l'additif
+export const PETITES_ANNONCES_SANCTIONS = {
+  WARNING: {
+    type: 'warning',
+    label: 'Avertissement',
+    duration: null,
+    description: 'Première infraction mineure'
+  },
+  TEMPORARY_BAN_24H: {
+    type: 'temporary_ban',
+    label: 'Suspension 24h',
+    duration: 24,
+    description: 'Récidive ou infraction modérée'
+  },
+  TEMPORARY_BAN_7D: {
+    type: 'temporary_ban', 
+    label: 'Suspension 7 jours',
+    duration: 168, // 7 * 24
+    description: 'Infractions répétées'
+  },
+  PERMANENT_BAN: {
+    type: 'permanent_ban',
+    label: 'Bannissement définitif',
+    duration: null,
+    description: 'Fraude grave ou abus répétés'
+  }
+} as const;
+
+// Drapeaux IA pour détection automatique
+export const PETITES_ANNONCES_AI_FLAGS = {
+  // Périmètre thématique
+  OUT_OF_AUDIOVISUAL_SCOPE: 'hors_theme_audiovisuel',
+  REAL_ESTATE_DETECTED: 'immobilier_detecte',
+  GENERAL_GOODS_DETECTED: 'biens_generaux_detectes',
+  
+  // Contenu suspect
+  INAPPROPRIATE_CONTENT: 'contenu_inapproprie',
+  EXTERNAL_PAYMENT_LINKS: 'liens_paiement_externes',
+  CONTACT_INFO_IN_DESCRIPTION: 'coordonnees_dans_description',
+  SUSPICIOUS_PRICING: 'prix_suspects',
+  
+  // Fraude potentielle
+  DUPLICATE_CONTENT: 'contenu_duplique',
+  FAKE_LOCATION: 'localisation_suspecte',
+  MISSING_AUTHORIZATION: 'autorisation_manquante',
+  UNREALISTIC_OFFERS: 'offres_irrealistes'
+} as const;
+
+// Configuration validation côté client
+export const PETITES_ANNONCES_VALIDATION = {
+  TITLE_MIN_LENGTH: 10,
+  TITLE_MAX_LENGTH: 255,
+  DESCRIPTION_MIN_LENGTH: 50,
+  DESCRIPTION_MAX_LENGTH: 2000,
+  LOCATION_MIN_LENGTH: 5,
+  LOCATION_MAX_LENGTH: 255,
+  PRICE_MAX_LENGTH: 100,
+  
+  // Confirmation obligatoire du périmètre
+  REQUIRE_SCOPE_CONFIRMATION: true,
+  SCOPE_CONFIRMATION_TEXT: "Je confirme que mon annonce respecte le périmètre audiovisuel/spectacle"
 } as const;

@@ -59,6 +59,12 @@ import {
   featureToggles,
   // Table quêtes quotidiennes
   dailyQuests,
+  // Tables petites annonces
+  petitesAnnonces,
+  annoncesModeration,
+  annoncesReports,
+  escrowTransactions,
+  annoncesSanctions,
   // Tables fonctionnalités sociales interactives
   liveChatMessages,
   messageReactions,
@@ -172,6 +178,17 @@ import {
   // Types quêtes quotidiennes
   type DailyQuest,
   type InsertDailyQuest,
+  // Types petites annonces
+  type PetitesAnnonces,
+  type AnnoncesModeration,
+  type AnnoncesReports,
+  type EscrowTransactions,
+  type AnnoncesSanctions,
+  type InsertPetitesAnnonces,
+  type InsertAnnoncesModeration,
+  type InsertAnnoncesReports,
+  type InsertEscrowTransactions,
+  type InsertAnnoncesSanctions,
   insertArticleSalesDailySchema,
   insertTop10InfoporteursSchema,
   insertTop10WinnersSchema,
@@ -188,6 +205,11 @@ import {
   type LivePrediction,
   type PredictionBet
 } from "@shared/schema";
+import { 
+  ESCROW_FEE_RATE, 
+  ESCROW_MINIMUM_FEE,
+  ANNONCE_DEFAULT_DURATION_DAYS 
+} from "@shared/constants";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, sql, or, isNotNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -597,6 +619,65 @@ export interface IStorage {
   getFeatureToggles(): Promise<FeatureToggle[]>;
   updateFeatureToggle(key: string, updates: Partial<FeatureToggle>): Promise<FeatureToggle>;
   getPublicToggles(): Promise<{ [key: string]: { visible: boolean; message: string } }>;
+
+  // ===== PETITES ANNONCES OPERATIONS =====
+  
+  // Petites annonces CRUD operations
+  createPetiteAnnonce(annonce: InsertPetitesAnnonces): Promise<PetitesAnnonces>;
+  getPetiteAnnonce(id: string): Promise<PetitesAnnonces | undefined>;
+  getPetitesAnnonces(params?: {
+    category?: string;
+    location?: string;
+    authorId?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<PetitesAnnonces[]>;
+  updatePetiteAnnonce(id: string, updates: Partial<PetitesAnnonces>): Promise<PetitesAnnonces>;
+  deletePetiteAnnonce(id: string): Promise<void>;
+  incrementAnnonceViewCount(id: string): Promise<void>;
+  incrementAnnonceContactCount(id: string): Promise<void>;
+  
+  // Search and filter operations
+  searchPetitesAnnonces(query: string, filters?: {
+    category?: string;
+    location?: string;
+    priceRange?: { min?: number; max?: number };
+  }): Promise<PetitesAnnonces[]>;
+  
+  // User's annonces management
+  getUserActiveAnnonces(userId: string): Promise<PetitesAnnonces[]>;
+  getUserAnnonceCount(userId: string, status?: string): Promise<number>;
+  getExpiredAnnonces(): Promise<PetitesAnnonces[]>;
+  archiveExpiredAnnonces(): Promise<void>;
+  
+  // Moderation operations
+  createAnnonceModeration(moderation: InsertAnnoncesModeration): Promise<AnnoncesModeration>;
+  getAnnonceModeration(annonceId: string): Promise<AnnoncesModeration[]>;
+  getPendingModerationAnnonces(): Promise<PetitesAnnonces[]>;
+  approveAnnonce(annonceId: string, moderatorId: string, aiScore?: number): Promise<void>;
+  rejectAnnonce(annonceId: string, moderatorId: string, reason: string, sanction?: string): Promise<void>;
+  
+  // Reporting operations
+  createAnnonceReport(report: InsertAnnoncesReports): Promise<AnnoncesReports>;
+  getAnnonceReports(annonceId: string): Promise<AnnoncesReports[]>;
+  getPendingReports(): Promise<AnnoncesReports[]>;
+  resolveReport(reportId: string, reviewerId: string, resolution: string): Promise<AnnoncesReports>;
+  
+  // Sanctions operations
+  createAnnonceSanction(sanction: InsertAnnoncesSanctions): Promise<AnnoncesSanctions>;
+  getUserActiveSanctions(userId: string): Promise<AnnoncesSanctions[]>;
+  isUserSanctioned(userId: string): Promise<boolean>;
+  liftSanction(sanctionId: string, liftedBy: string): Promise<AnnoncesSanctions>;
+  
+  // Escrow operations
+  createEscrowTransaction(escrow: InsertEscrowTransactions): Promise<EscrowTransactions>;
+  getEscrowTransaction(id: string): Promise<EscrowTransactions | undefined>;
+  getAnnonceEscrowTransactions(annonceId: string): Promise<EscrowTransactions[]>;
+  getUserEscrowTransactions(userId: string, role?: 'buyer' | 'seller'): Promise<EscrowTransactions[]>;
+  updateEscrowStatus(id: string, status: string, updates?: Partial<EscrowTransactions>): Promise<EscrowTransactions>;
+  releaseEscrow(id: string, releasedBy: string): Promise<EscrowTransactions>;
+  refundEscrow(id: string, reason: string): Promise<EscrowTransactions>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3538,6 +3619,492 @@ export class DatabaseStorage implements IStorage {
       );
 
     return userInvestment.total >= (topInvestment?.maxTotal || 0);
+  }
+
+  // ===== PETITES ANNONCES IMPLEMENTATION =====
+  
+  // Petites annonces CRUD operations
+  async createPetiteAnnonce(annonce: InsertPetitesAnnonces): Promise<PetitesAnnonces> {
+    const [newAnnonce] = await db.insert(petitesAnnonces).values({
+      ...annonce,
+      id: nanoid(),
+      viewCount: 0,
+      contactCount: 0,
+      status: 'pending',
+      isPromoted: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return newAnnonce;
+  }
+
+  async getPetiteAnnonce(id: string): Promise<PetitesAnnonces | undefined> {
+    const [annonce] = await db
+      .select()
+      .from(petitesAnnonces)
+      .where(eq(petitesAnnonces.id, id));
+    return annonce;
+  }
+
+  async getPetitesAnnonces(params: {
+    category?: string;
+    location?: string;
+    authorId?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<PetitesAnnonces[]> {
+    const { category, location, authorId, status, limit = 20, offset = 0 } = params;
+    
+    let query = db.select().from(petitesAnnonces);
+    const conditions = [];
+    
+    if (category) {
+      conditions.push(eq(petitesAnnonces.category, category));
+    }
+    if (location) {
+      conditions.push(eq(petitesAnnonces.location, location));
+    }
+    if (authorId) {
+      conditions.push(eq(petitesAnnonces.authorId, authorId));
+    }
+    if (status) {
+      conditions.push(eq(petitesAnnonces.status, status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query
+      .orderBy(desc(petitesAnnonces.isPromoted), desc(petitesAnnonces.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async updatePetiteAnnonce(id: string, updates: Partial<PetitesAnnonces>): Promise<PetitesAnnonces> {
+    const [updatedAnnonce] = await db
+      .update(petitesAnnonces)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(petitesAnnonces.id, id))
+      .returning();
+    return updatedAnnonce;
+  }
+
+  async deletePetiteAnnonce(id: string): Promise<void> {
+    await db.delete(petitesAnnonces).where(eq(petitesAnnonces.id, id));
+  }
+
+  async incrementAnnonceViewCount(id: string): Promise<void> {
+    await db
+      .update(petitesAnnonces)
+      .set({ 
+        viewCount: sql`${petitesAnnonces.viewCount} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(petitesAnnonces.id, id));
+  }
+
+  async incrementAnnonceContactCount(id: string): Promise<void> {
+    await db
+      .update(petitesAnnonces)
+      .set({ 
+        contactCount: sql`${petitesAnnonces.contactCount} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(petitesAnnonces.id, id));
+  }
+
+  // Search and filter operations
+  async searchPetitesAnnonces(query: string, filters: {
+    category?: string;
+    location?: string;
+    priceRange?: { min?: number; max?: number };
+  } = {}): Promise<PetitesAnnonces[]> {
+    const { category, location, priceRange } = filters;
+    
+    let dbQuery = db
+      .select()
+      .from(petitesAnnonces)
+      .where(
+        and(
+          eq(petitesAnnonces.status, 'approved'),
+          or(
+            sql`${petitesAnnonces.title} ILIKE ${'%' + query + '%'}`,
+            sql`${petitesAnnonces.description} ILIKE ${'%' + query + '%'}`
+          )
+        )
+      );
+    
+    const conditions = [eq(petitesAnnonces.status, 'approved')];
+    
+    if (category) {
+      conditions.push(eq(petitesAnnonces.category, category));
+    }
+    if (location) {
+      conditions.push(eq(petitesAnnonces.location, location));
+    }
+    if (priceRange?.min) {
+      conditions.push(gte(petitesAnnonces.price, priceRange.min.toString()));
+    }
+    if (priceRange?.max) {
+      conditions.push(lte(petitesAnnonces.price, priceRange.max.toString()));
+    }
+    
+    return await dbQuery
+      .where(and(...conditions))
+      .orderBy(desc(petitesAnnonces.isPromoted), desc(petitesAnnonces.createdAt))
+      .limit(50);
+  }
+
+  // User's annonces management
+  async getUserActiveAnnonces(userId: string): Promise<PetitesAnnonces[]> {
+    return await db
+      .select()
+      .from(petitesAnnonces)
+      .where(
+        and(
+          eq(petitesAnnonces.authorId, userId),
+          or(
+            eq(petitesAnnonces.status, 'approved'),
+            eq(petitesAnnonces.status, 'pending')
+          )
+        )
+      )
+      .orderBy(desc(petitesAnnonces.createdAt));
+  }
+
+  async getUserAnnonceCount(userId: string, status?: string): Promise<number> {
+    const conditions = [eq(petitesAnnonces.authorId, userId)];
+    
+    if (status) {
+      conditions.push(eq(petitesAnnonces.status, status));
+    }
+    
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(petitesAnnonces)
+      .where(and(...conditions));
+    
+    return result[0]?.count || 0;
+  }
+
+  async getExpiredAnnonces(): Promise<PetitesAnnonces[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(petitesAnnonces)
+      .where(
+        and(
+          lte(petitesAnnonces.expiresAt, now),
+          eq(petitesAnnonces.status, 'approved')
+        )
+      );
+  }
+
+  async archiveExpiredAnnonces(): Promise<void> {
+    const now = new Date();
+    await db
+      .update(petitesAnnonces)
+      .set({ 
+        status: 'expired',
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          lte(petitesAnnonces.expiresAt, now),
+          eq(petitesAnnonces.status, 'approved')
+        )
+      );
+  }
+
+  // Moderation operations
+  async createAnnonceModeration(moderation: InsertAnnoncesModeration): Promise<AnnoncesModeration> {
+    const [newModeration] = await db.insert(annoncesModeration).values({
+      ...moderation,
+      id: nanoid(),
+      createdAt: new Date()
+    }).returning();
+    return newModeration;
+  }
+
+  async getAnnonceModeration(annonceId: string): Promise<AnnoncesModeration[]> {
+    return await db
+      .select()
+      .from(annoncesModeration)
+      .where(eq(annoncesModeration.annonceId, annonceId))
+      .orderBy(desc(annoncesModeration.createdAt));
+  }
+
+  async getPendingModerationAnnonces(): Promise<PetitesAnnonces[]> {
+    return await db
+      .select()
+      .from(petitesAnnonces)
+      .where(eq(petitesAnnonces.status, 'pending'))
+      .orderBy(asc(petitesAnnonces.createdAt));
+  }
+
+  async approveAnnonce(annonceId: string, moderatorId: string, aiScore?: number): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Update annonce status
+      await tx
+        .update(petitesAnnonces)
+        .set({ 
+          status: 'approved',
+          updatedAt: new Date()
+        })
+        .where(eq(petitesAnnonces.id, annonceId));
+      
+      // Create moderation record
+      await tx.insert(annoncesModeration).values({
+        id: nanoid(),
+        annonceId,
+        moderatorId,
+        action: 'approved',
+        aiScore,
+        reviewedAt: new Date(),
+        createdAt: new Date()
+      });
+    });
+  }
+
+  async rejectAnnonce(annonceId: string, moderatorId: string, reason: string, sanction?: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Get annonce for sanction processing
+      const [annonce] = await tx
+        .select()
+        .from(petitesAnnonces)
+        .where(eq(petitesAnnonces.id, annonceId));
+      
+      if (!annonce) {
+        throw new Error(`Annonce not found: ${annonceId}`);
+      }
+
+      // Update annonce status
+      await tx
+        .update(petitesAnnonces)
+        .set({ 
+          status: 'rejected',
+          updatedAt: new Date()
+        })
+        .where(eq(petitesAnnonces.id, annonceId));
+      
+      // Create moderation record
+      await tx.insert(annoncesModeration).values({
+        id: nanoid(),
+        annonceId,
+        moderatorId,
+        action: 'rejected',
+        reason,
+        reviewedAt: new Date(),
+        createdAt: new Date()
+      });
+
+      // Create sanction if specified
+      if (sanction) {
+        await tx.insert(annoncesSanctions).values({
+          id: nanoid(),
+          userId: annonce.authorId,
+          type: sanction,
+          reason,
+          issuedBy: moderatorId,
+          issuedAt: new Date(),
+          isActive: true,
+          createdAt: new Date()
+        });
+      }
+    });
+  }
+
+  // Reporting operations
+  async createAnnonceReport(report: InsertAnnoncesReports): Promise<AnnoncesReports> {
+    const [newReport] = await db.insert(annoncesReports).values({
+      ...report,
+      id: nanoid(),
+      status: 'pending',
+      createdAt: new Date()
+    }).returning();
+    return newReport;
+  }
+
+  async getAnnonceReports(annonceId: string): Promise<AnnoncesReports[]> {
+    return await db
+      .select()
+      .from(annoncesReports)
+      .where(eq(annoncesReports.annonceId, annonceId))
+      .orderBy(desc(annoncesReports.createdAt));
+  }
+
+  async getPendingReports(): Promise<AnnoncesReports[]> {
+    return await db
+      .select()
+      .from(annoncesReports)
+      .where(eq(annoncesReports.status, 'pending'))
+      .orderBy(asc(annoncesReports.createdAt));
+  }
+
+  async resolveReport(reportId: string, reviewerId: string, resolution: string): Promise<AnnoncesReports> {
+    const [updatedReport] = await db
+      .update(annoncesReports)
+      .set({
+        status: 'resolved',
+        resolution,
+        reviewerId,
+        reviewedAt: new Date()
+      })
+      .where(eq(annoncesReports.id, reportId))
+      .returning();
+    return updatedReport;
+  }
+
+  // Sanctions operations
+  async createAnnonceSanction(sanction: InsertAnnoncesSanctions): Promise<AnnoncesSanctions> {
+    const [newSanction] = await db.insert(annoncesSanctions).values({
+      ...sanction,
+      id: nanoid(),
+      createdAt: new Date()
+    }).returning();
+    return newSanction;
+  }
+
+  async getUserActiveSanctions(userId: string): Promise<AnnoncesSanctions[]> {
+    return await db
+      .select()
+      .from(annoncesSanctions)
+      .where(
+        and(
+          eq(annoncesSanctions.userId, userId),
+          eq(annoncesSanctions.isActive, true),
+          or(
+            isNotNull(annoncesSanctions.expiresAt),
+            gte(annoncesSanctions.expiresAt, new Date())
+          )
+        )
+      )
+      .orderBy(desc(annoncesSanctions.createdAt));
+  }
+
+  async isUserSanctioned(userId: string): Promise<boolean> {
+    const activeSanctions = await this.getUserActiveSanctions(userId);
+    return activeSanctions.length > 0;
+  }
+
+  async liftSanction(sanctionId: string, liftedBy: string): Promise<AnnoncesSanctions> {
+    const [updatedSanction] = await db
+      .update(annoncesSanctions)
+      .set({
+        isActive: false,
+        liftedBy,
+        liftedAt: new Date()
+      })
+      .where(eq(annoncesSanctions.id, sanctionId))
+      .returning();
+    return updatedSanction;
+  }
+
+  // Escrow operations
+  async createEscrowTransaction(escrow: InsertEscrowTransactions): Promise<EscrowTransactions> {
+    // Calculate escrow fees (5% with €1 minimum)
+    const amount = parseFloat(escrow.amount);
+    const feeAmount = Math.max(amount * ESCROW_FEE_RATE, ESCROW_MINIMUM_FEE);
+    const netAmount = amount - feeAmount;
+    
+    const [newEscrow] = await db.insert(escrowTransactions).values({
+      ...escrow,
+      id: nanoid(),
+      feeAmount: feeAmount.toString(),
+      netAmount: netAmount.toString(),
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return newEscrow;
+  }
+
+  async getEscrowTransaction(id: string): Promise<EscrowTransactions | undefined> {
+    const [escrow] = await db
+      .select()
+      .from(escrowTransactions)
+      .where(eq(escrowTransactions.id, id));
+    return escrow;
+  }
+
+  async getAnnonceEscrowTransactions(annonceId: string): Promise<EscrowTransactions[]> {
+    return await db
+      .select()
+      .from(escrowTransactions)
+      .where(eq(escrowTransactions.annonceId, annonceId))
+      .orderBy(desc(escrowTransactions.createdAt));
+  }
+
+  async getUserEscrowTransactions(userId: string, role?: 'buyer' | 'seller'): Promise<EscrowTransactions[]> {
+    const conditions = [];
+    
+    if (role === 'buyer') {
+      conditions.push(eq(escrowTransactions.buyerId, userId));
+    } else if (role === 'seller') {
+      conditions.push(eq(escrowTransactions.sellerId, userId));
+    } else {
+      conditions.push(
+        or(
+          eq(escrowTransactions.buyerId, userId),
+          eq(escrowTransactions.sellerId, userId)
+        )
+      );
+    }
+    
+    return await db
+      .select()
+      .from(escrowTransactions)
+      .where(and(...conditions))
+      .orderBy(desc(escrowTransactions.createdAt));
+  }
+
+  async updateEscrowStatus(id: string, status: string, updates: Partial<EscrowTransactions> = {}): Promise<EscrowTransactions> {
+    // Conditional update to prevent invalid state transitions
+    const allowedTransitions = {
+      'pending': ['confirmed', 'cancelled'],
+      'confirmed': ['released', 'disputed'],
+      'disputed': ['released', 'refunded'],
+      'released': [], // Final state
+      'refunded': [], // Final state
+      'cancelled': [] // Final state
+    };
+
+    const [updatedEscrow] = await db
+      .update(escrowTransactions)
+      .set({
+        status,
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(escrowTransactions.id, id),
+          sql`status != 'released' AND status != 'refunded'` // Prevent double release/refund
+        )
+      )
+      .returning();
+
+    if (!updatedEscrow) {
+      throw new Error(`Escrow transaction not found or already finalized: ${id}`);
+    }
+
+    return updatedEscrow;
+  }
+
+  async releaseEscrow(id: string, releasedBy: string): Promise<EscrowTransactions> {
+    return await this.updateEscrowStatus(id, 'released', {
+      releasedBy,
+      releasedAt: new Date()
+    });
+  }
+
+  async refundEscrow(id: string, reason: string): Promise<EscrowTransactions> {
+    return await this.updateEscrowStatus(id, 'refunded', {
+      refundReason: reason,
+      refundedAt: new Date()
+    });
   }
 }
 
