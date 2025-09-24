@@ -71,6 +71,7 @@ import agentRoutes from "./routes/agentRoutes";
 import { VISUPointsService } from "./services/visuPointsService.js";
 import { Top10Service } from "./services/top10Service.js";
 import { FidelityService } from "./services/fidelityService.js";
+import { miniSocialConfigService } from "./services/miniSocialConfigService";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -1023,6 +1024,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching live shows:", error);
       res.status(500).json({ message: "Failed to fetch live shows" });
+    }
+  });
+
+  app.post('/api/live-shows', isAuthenticated, async (req: any, res) => {
+    try {
+      const { title, description, artistA, artistB, viewerCount } = req.body;
+
+      if (!title || typeof title !== 'string') {
+        return res.status(400).json({ message: "Title is required" });
+      }
+
+      const liveShowData = {
+        title: title.trim(),
+        description: description?.trim(),
+        artistA: artistA?.trim(),
+        artistB: artistB?.trim(),
+        viewerCount: parseInt(viewerCount) || 0
+      };
+
+      const newLiveShow = await storage.createLiveShow(liveShowData);
+      
+      console.log(`[LiveShows] New live show created: ${newLiveShow.id} - ${newLiveShow.title}`);
+      
+      res.status(201).json({
+        success: true,
+        liveShow: newLiveShow,
+        message: "Live show created successfully"
+      });
+    } catch (error) {
+      console.error("Error creating live show:", error);
+      res.status(500).json({ 
+        message: "Failed to create live show",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
@@ -3731,20 +3766,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // TODO: Implémenter getCurrentRanking dans Top10Service 
       const ranking = null; // Temporaire : simulation ranking vide
       
-      if (!ranking) {
-        return res.json({
-          ranking: null,
-          message: "Aucun classement disponible pour aujourd'hui"
-        });
-      }
-      
       res.json({
-        ranking: {
-          top10Infoporteurs: ranking.top10Infoporteurs,
-          winnersCount: ranking.winners.length,
-          totalPool: ranking.redistribution.totalPoolEUR,
-          poolDistributed: ranking.redistribution.poolDistributed
-        }
+        ranking: ranking,
+        message: ranking ? "Classement du jour" : "Aucun classement disponible pour aujourd'hui"
       });
     } catch (error) {
       console.error("Error fetching current TOP10 ranking:", error);
@@ -4055,8 +4079,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Validate update data using partial schema
-      const updateSchema = insertBookSchema.partial();
+      // Validate update data using omit schema (workaround for ZodEffects)
+      const updateSchema = insertBookSchema.omit({ 
+        id: true,
+        createdAt: true,
+        updatedAt: true
+      }).partial();
       const validation = updateSchema.safeParse(req.body);
       if (!validation.success) {
         return res.status(400).json({ 
@@ -4293,8 +4321,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Vérifier si l'utilisateur a complété sa quête du jour
       let todayQuestCompleted = false;
-      if (req.user?.id) {
-        const userId = req.user.id;
+      if (req.user?.claims?.sub) {
+        const userId = req.user.claims.sub;
         const today = new Date().toISOString().split('T')[0];
         const todayQuest = await storage.getUserDailyQuest(userId, today);
         todayQuestCompleted = todayQuest?.isCompleted || false;
@@ -4320,7 +4348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/quest/today - Récupérer la quête du jour
   app.get('/api/quest/today', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user.claims.sub;
       const { DailyQuestService } = await import('./services/dailyQuestService');
       
       const quest = await DailyQuestService.getTodayQuest(userId);
@@ -4345,7 +4373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/quest/claim - Réclamer la récompense d'une quête
   app.post('/api/quest/claim', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user.claims.sub;
       const { questId } = req.body;
 
       if (!questId) {
@@ -4382,7 +4410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/quest/stats - Statistiques des quêtes de l'utilisateur
   app.get('/api/quest/stats', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user.claims.sub;
       const { DailyQuestService } = await import('./services/dailyQuestService');
       
       const stats = await DailyQuestService.getUserQuestStats(userId);
@@ -4394,6 +4422,538 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Failed to fetch quest stats",
         retryable: true
       });
+    }
+  });
+
+  // ===== ROUTES MINI RÉSEAU SOCIAL AUTOMATIQUE =====
+
+  // Import des services
+  const { visualAIService } = await import('./services/visualAIService');
+  const { moderationService } = await import('./services/moderationService');
+  const { trafficModeService } = await import('./services/trafficModeService');
+  const { highlightsService } = await import('./services/highlightsService');
+  
+  // Récupérer la configuration complète du mini réseau social (admin seulement)
+  app.get('/api/admin/mini-social/config', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const config = await miniSocialConfigService.getConfig();
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching mini social config:", error);
+      res.status(500).json({ message: "Failed to fetch mini social config" });
+    }
+  });
+
+  // Mettre à jour un paramètre spécifique (admin seulement)
+  app.patch('/api/admin/mini-social/params/:key', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { key } = req.params;
+      const { value } = req.body;
+
+      if (!value || typeof value !== 'string') {
+        return res.status(400).json({ message: "Valeur requise (string)" });
+      }
+
+      const updatedParam = await miniSocialConfigService.updateParam(
+        key, 
+        value, 
+`admin:${req.user.claims.sub}`
+      );
+      
+      res.json(updatedParam);
+    } catch (error) {
+      console.error("Error updating mini social param:", error);
+      if (error instanceof Error && error.message.includes('non autorisée')) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update parameter" });
+    }
+  });
+
+  // Toggle autoshow (admin seulement)
+  app.patch('/api/admin/mini-social/autoshow', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { enabled } = req.body;
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ message: "enabled requis (boolean)" });
+      }
+
+      await miniSocialConfigService.toggleAutoshow(enabled, `admin:${req.user.claims.sub}`);
+      
+      res.json({ 
+        success: true, 
+        autoshow: enabled,
+        message: enabled ? "Autoshow activé" : "Autoshow désactivé"
+      });
+    } catch (error) {
+      console.error("Error toggling autoshow:", error);
+      res.status(500).json({ message: "Failed to toggle autoshow" });
+    }
+  });
+
+  // Changer la position (admin seulement)
+  app.patch('/api/admin/mini-social/position', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { position } = req.body;
+      if (!['sidebar', 'drawer'].includes(position)) {
+        return res.status(400).json({ message: "Position doit être 'sidebar' ou 'drawer'" });
+      }
+
+      await miniSocialConfigService.setPosition(position, `admin:${req.user.claims.sub}`);
+      
+      res.json({ 
+        success: true, 
+        position,
+        message: `Position changée vers ${position}`
+      });
+    } catch (error) {
+      console.error("Error changing position:", error);
+      res.status(500).json({ message: "Failed to change position" });
+    }
+  });
+
+  // Toggle slow mode (admin seulement)
+  app.patch('/api/admin/mini-social/slow-mode', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { enabled } = req.body;
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ message: "enabled requis (boolean)" });
+      }
+
+      await miniSocialConfigService.toggleSlowMode(enabled, `admin:${req.user.claims.sub}`);
+      
+      res.json({ 
+        success: true, 
+        slowMode: enabled,
+        message: enabled ? "Slow mode activé" : "Slow mode désactivé"
+      });
+    } catch (error) {
+      console.error("Error toggling slow mode:", error);
+      res.status(500).json({ message: "Failed to toggle slow mode" });
+    }
+  });
+
+  // Configurer le seuil de trafic élevé (admin seulement)
+  app.patch('/api/admin/mini-social/threshold', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { threshold } = req.body;
+      if (!Number.isInteger(threshold) || threshold < 1 || threshold > 10000) {
+        return res.status(400).json({ 
+          message: "Seuil doit être un entier entre 1 et 10000" 
+        });
+      }
+
+      await miniSocialConfigService.setHighTrafficThreshold(threshold, `admin:${req.user.claims.sub}`);
+      
+      res.json({ 
+        success: true, 
+        threshold,
+        message: `Seuil de trafic élevé configuré à ${threshold} spectateurs`
+      });
+    } catch (error) {
+      console.error("Error setting threshold:", error);
+      res.status(500).json({ message: "Failed to set threshold" });
+    }
+  });
+
+  // Récupérer la configuration publique (pour le composant frontend)
+  app.get('/api/mini-social/config', async (req, res) => {
+    try {
+      const config = await miniSocialConfigService.getConfig();
+      
+      // Cache headers pour optimiser les performances
+      res.set({
+        'Cache-Control': 'public, max-age=5',
+        'Content-Type': 'application/json'
+      });
+      
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching public mini social config:", error);
+      res.status(500).json({ message: "Failed to fetch config" });
+    }
+  });
+
+  // ===== ROUTES VISUAL AI SERVICE =====
+  
+  // Statistiques de surveillance des Live Shows (admin seulement)
+  app.get('/api/admin/visual-ai/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const stats = visualAIService.getMonitoringStats();
+      res.json({
+        stats,
+        message: "Statistiques VisualAI récupérées"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la récupération des stats VisualAI:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Déclenchement manuel du mini réseau social pour un Live Show (admin seulement)
+  app.post('/api/admin/visual-ai/trigger/:liveShowId', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const liveShowId = req.params.liveShowId;
+      const adminUserId = req.user.claims.sub;
+
+      const success = await visualAIService.manualTrigger(liveShowId, adminUserId);
+      
+      if (success) {
+        res.json({
+          success: true,
+          message: `Mini réseau social déclenché manuellement pour le Live Show ${liveShowId}`
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: "Échec du déclenchement manuel"
+        });
+      }
+    } catch (error) {
+      console.error("Erreur lors du déclenchement manuel:", error);
+      res.status(500).json({ 
+        success: false,
+        message: error instanceof Error ? error.message : "Erreur serveur" 
+      });
+    }
+  });
+
+  // Arrêter la surveillance VisualAI (admin seulement)
+  app.post('/api/admin/visual-ai/stop', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      visualAIService.stopMonitoring();
+      
+      res.json({
+        success: true,
+        message: "Surveillance VisualAI arrêtée"
+      });
+    } catch (error) {
+      console.error("Erreur lors de l'arrêt de la surveillance:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Démarrer la surveillance VisualAI (admin seulement)
+  app.post('/api/admin/visual-ai/start', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      await visualAIService.startMonitoring();
+      
+      res.json({
+        success: true,
+        message: "Surveillance VisualAI démarrée"
+      });
+    } catch (error) {
+      console.error("Erreur lors du démarrage de la surveillance:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // ===== ROUTES MODERATION SERVICE =====
+  
+  // Statistiques de modération (admin seulement)
+  app.get('/api/admin/moderation/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const stats = moderationService.getStats();
+      res.json({
+        stats,
+        message: "Statistiques de modération récupérées"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la récupération des stats de modération:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Tester la validation d'un message (admin seulement)
+  app.post('/api/admin/moderation/test', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const { userId, content } = req.body;
+      if (!userId || !content) {
+        return res.status(400).json({ message: "userId et content sont requis" });
+      }
+
+      const result = await moderationService.canUserPostMessage(userId, content);
+      
+      res.json({
+        result,
+        message: "Test de modération effectué"
+      });
+    } catch (error) {
+      console.error("Erreur lors du test de modération:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Erreur serveur" 
+      });
+    }
+  });
+
+  // Forcer le cleanup de la modération (admin seulement)
+  app.post('/api/admin/moderation/cleanup', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      moderationService.cleanup();
+      
+      res.json({
+        success: true,
+        message: "Cleanup de modération effectué"
+      });
+    } catch (error) {
+      console.error("Erreur lors du cleanup de modération:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Valider un message pour le mini réseau social (utilisateurs connectés)
+  app.post('/api/mini-social/validate-message', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { content } = req.body;
+
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ 
+          allowed: false,
+          reason: "Contenu du message requis",
+          action: 'content_filter'
+        });
+      }
+
+      const result = await moderationService.canUserPostMessage(userId, content);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Erreur lors de la validation du message:", error);
+      res.status(500).json({ 
+        allowed: false,
+        reason: "Erreur de validation - veuillez réessayer",
+        action: 'content_filter'
+      });
+    }
+  });
+
+  // ===== ROUTES TRAFFIC MODE SERVICE =====
+  
+  // Statistiques des modes de trafic (admin seulement)
+  app.get('/api/admin/traffic-mode/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const stats = trafficModeService.getStats();
+      res.json({
+        stats,
+        message: "Statistiques des modes de trafic récupérées"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la récupération des stats traffic mode:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Forcer un mode spécifique pour un live show (admin seulement)
+  app.post('/api/admin/traffic-mode/set-mode/:liveShowId', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const liveShowId = req.params.liveShowId;
+      const { mode, durationMinutes } = req.body;
+
+      if (!mode || !['normal', 'normal_with_slow_mode', 'highlights_only', 'read_only', 'dnd'].includes(mode)) {
+        return res.status(400).json({ message: "Mode invalide" });
+      }
+
+      const duration = parseInt(durationMinutes) || 60;
+      if (duration < 1 || duration > 1440) { // Max 24h
+        return res.status(400).json({ message: "Durée doit être entre 1 et 1440 minutes" });
+      }
+
+      const trafficMode = await trafficModeService.setManualMode(liveShowId, mode, req.user.claims.sub, duration);
+      
+      res.json({
+        success: true,
+        trafficMode,
+        message: `Mode ${mode} activé pour ${duration} minutes`
+      });
+    } catch (error) {
+      console.error("Erreur lors du réglage du mode trafic:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Erreur serveur" 
+      });
+    }
+  });
+
+  // Supprimer l'override manuel et revenir au mode automatique (admin seulement)
+  app.delete('/api/admin/traffic-mode/clear-override/:liveShowId', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const liveShowId = req.params.liveShowId;
+      await trafficModeService.clearManualMode(liveShowId, req.user.claims.sub);
+      
+      res.json({
+        success: true,
+        message: "Override manuel supprimé, retour au mode automatique"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la suppression de l'override:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Récupérer l'historique des modes pour un live show (admin seulement)
+  app.get('/api/admin/traffic-mode/history/:liveShowId', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const liveShowId = req.params.liveShowId;
+      const history = trafficModeService.getModeHistory(liveShowId);
+      const currentMode = trafficModeService.getCurrentMode(liveShowId);
+      
+      res.json({
+        liveShowId,
+        currentMode,
+        history,
+        message: "Historique des modes récupéré"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la récupération de l'historique:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // ===== ROUTES HIGHLIGHTS SERVICE =====
+  
+  // Statistiques des highlights (admin seulement)
+  app.get('/api/admin/highlights/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const stats = highlightsService.getStats();
+      res.json({
+        stats,
+        message: "Statistiques des highlights récupérées"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la récupération des stats highlights:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Régénérer les highlights pour un live show (admin seulement)
+  app.post('/api/admin/highlights/regenerate/:liveShowId', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+      }
+
+      const liveShowId = req.params.liveShowId;
+      const highlights = await highlightsService.regenerateHighlights(liveShowId);
+      
+      res.json({
+        liveShowId,
+        highlights,
+        count: highlights.length,
+        message: "Highlights régénérés"
+      });
+    } catch (error) {
+      console.error("Erreur lors de la régénération des highlights:", error);
+      res.status(500).json({ message: "Erreur serveur" });
+    }
+  });
+
+  // Récupérer les highlights actuels pour un live show
+  app.get('/api/mini-social/highlights/:liveShowId', async (req, res) => {
+    try {
+      const liveShowId = req.params.liveShowId;
+      const highlights = highlightsService.getHighlights(liveShowId);
+      
+      res.set({
+        'Cache-Control': 'public, max-age=10', // Cache 10 secondes
+        'Content-Type': 'application/json'
+      });
+      
+      res.json({
+        liveShowId,
+        highlights,
+        count: highlights.length,
+        lastUpdated: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Erreur lors de la récupération des highlights:", error);
+      res.status(500).json({ message: "Erreur serveur" });
     }
   });
 

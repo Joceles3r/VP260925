@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { MiniSocialPanel } from '@/components/MiniSocialPanel';
+import { getSocket } from '@/lib/socket';
 
 interface LiveStreamProps {
   showId: string;
@@ -30,12 +32,145 @@ export default function LiveStream({
   const [selectedArtist, setSelectedArtist] = useState<'A' | 'B' | null>(null);
   const [investmentAmount, setInvestmentAmount] = useState(5);
   const [isInvesting, setIsInvesting] = useState(false);
-  const [chatMessage, setChatMessage] = useState('');
-  const [chatMessages, setChatMessages] = useState([
-    { user: 'Martin', message: 'Emma a une voix incroyable! 🎤', time: '2min' },
-    { user: 'Sophie', message: 'Viens d\'investir 15€ sur Marcus 💰', time: '1min' },
-    { user: 'Alex', message: 'La battle est serrée! 🔥', time: '30s' },
-  ]);
+  
+  // États pour MiniSocialPanel
+  const [miniSocialOpen, setMiniSocialOpen] = useState(false);
+  const [miniSocialConfig, setMiniSocialConfig] = useState({
+    autoshow: true,
+    position: 'auto' as 'sidebar' | 'drawer' | 'auto',
+    mode: 'normal' as 'normal' | 'normal_with_slow_mode' | 'highlights_only' | 'read_only' | 'dnd',
+    slowMode: true,
+    highTrafficMode: false
+  });
+
+  // WebSocket pour déclenchement automatique du mini réseau social
+  useEffect(() => {
+    if (!showId) return;
+
+    try {
+      const socket = getSocket();
+      
+      // Écouter l'événement de déclenchement automatique
+      const handleAutoTrigger = (data: any) => {
+        if (data.liveShowId === showId) {
+          console.log('[LiveStream] Mini réseau social déclenché automatiquement:', data);
+          
+          // Mettre à jour la configuration selon les données reçues
+          setMiniSocialConfig(prev => ({
+            ...prev,
+            autoshow: data.config?.autoshow ?? true,
+            position: data.config?.position ?? 'auto',
+            mode: data.trafficMode?.mode ?? 'normal',
+            slowMode: data.trafficMode?.mode === 'normal_with_slow_mode' || data.config?.slowMode,
+            highTrafficMode: data.config?.isHighTraffic ?? false
+          }));
+          
+          // Ouvrir automatiquement le panneau si autoshow activé
+          if (data.config?.autoshow) {
+            setMiniSocialOpen(true);
+          }
+          
+          // Afficher une notification selon le mode
+          const modeMessages = {
+            normal: "Chat en direct activé",
+            normal_with_slow_mode: "Chat en direct activé - mode lent",
+            highlights_only: "Mode highlights activé - messages populaires uniquement",
+            read_only: "Mode lecture seule activé - trafic élevé détecté",
+            dnd: "Mode silencieux activé"
+          };
+          
+          toast({
+            title: "Réseau social live",
+            description: modeMessages[data.trafficMode?.mode as keyof typeof modeMessages] || "Chat activé",
+          });
+        }
+      };
+
+      // Écouter l'événement de fermeture automatique
+      const handleAutoClose = (data: any) => {
+        if (data.liveShowId === showId) {
+          console.log('[LiveStream] Mini réseau social fermé automatiquement:', data);
+          setMiniSocialOpen(false);
+          
+          toast({
+            title: "Live terminé",
+            description: "Le chat en direct a été fermé",
+          });
+        }
+      };
+
+      // Écouter les changements de mode en temps réel
+      const handleModeChange = (data: any) => {
+        if (data.liveShowId === showId) {
+          console.log('[LiveStream] Changement de mode:', data);
+          
+          setMiniSocialConfig(prev => ({
+            ...prev,
+            mode: data.mode,
+            slowMode: data.mode === 'normal_with_slow_mode',
+            highTrafficMode: data.mode === 'highlights_only' || data.mode === 'read_only'
+          }));
+          
+          // Notification du changement de mode
+          const modeMessages = {
+            normal: "Mode normal rétabli",
+            normal_with_slow_mode: "Mode lent activé",
+            highlights_only: "Mode highlights - messages populaires",
+            read_only: "Mode lecture seule - trafic élevé",
+            dnd: "Mode silencieux activé"
+          };
+          
+          if (!data.isManual) {
+            toast({
+              title: "Mode automatique",
+              description: modeMessages[data.mode as keyof typeof modeMessages],
+            });
+          }
+        }
+      };
+
+      // Attacher les listeners
+      socket.on('mini_social_auto_trigger', handleAutoTrigger);
+      socket.on('mini_social_auto_close', handleAutoClose);
+      socket.on('mini_social_mode_change', handleModeChange);
+
+      // Fallback : Si le socket est connecté mais qu'on a un live show actif, 
+      // ouvrir le panneau automatiquement si autoshow est activé
+      if (socket.connected && miniSocialConfig.autoshow) {
+        const timer = setTimeout(() => {
+          console.log('[LiveStream] Fallback autoshow activé pour le live show:', showId);
+          setMiniSocialOpen(true);
+        }, 2000); // 2 secondes après le montage
+        
+        // Nettoyer le timer au démontage
+        return () => {
+          clearTimeout(timer);
+          socket.off('mini_social_auto_trigger', handleAutoTrigger);
+          socket.off('mini_social_auto_close', handleAutoClose);
+          socket.off('mini_social_mode_change', handleModeChange);
+        };
+      }
+
+      // Nettoyer les listeners au démontage
+      return () => {
+        socket.off('mini_social_auto_trigger', handleAutoTrigger);
+        socket.off('mini_social_auto_close', handleAutoClose);
+        socket.off('mini_social_mode_change', handleModeChange);
+      };
+    } catch (error) {
+      console.error('[LiveStream] Erreur lors de l\'initialisation WebSocket:', error);
+      
+      // Fallback si erreur socket : ouvrir quand même si autoshow activé
+      if (miniSocialConfig.autoshow) {
+        toast({
+          title: "Mode hors ligne",
+          description: "Chat local activé - fonctionnalités limitées",
+          variant: "destructive"
+        });
+        setMiniSocialOpen(true);
+      }
+    }
+  }, [showId, toast, miniSocialConfig.autoshow]);
 
   const handleInvestment = async (artist: 'A' | 'B') => {
     if (!user?.kycVerified) {
@@ -68,12 +203,7 @@ export default function LiveStream({
         description: `€${investmentAmount} investi sur ${artist === 'A' ? artistA : artistB}`,
       });
 
-      // Add investment to activity feed
-      const newMessage = `a investi €${investmentAmount} sur ${artist === 'A' ? artistA : artistB}`;
-      setChatMessages(prev => [
-        { user: user.firstName || 'Vous', message: newMessage, time: 'maintenant' },
-        ...prev,
-      ]);
+      // Activité investissement sera gérée par MiniSocialPanel via WebSocket
 
     } catch (error) {
       toast({
@@ -86,14 +216,10 @@ export default function LiveStream({
     }
   };
 
-  const sendChatMessage = () => {
-    if (chatMessage.trim()) {
-      setChatMessages(prev => [
-        { user: user?.firstName || 'Vous', message: chatMessage, time: 'maintenant' },
-        ...prev,
-      ]);
-      setChatMessage('');
-    }
+  // Gestion des messages pour MiniSocialPanel
+  const handleMiniSocialMessage = (message: string) => {
+    console.log('[LiveStream] Message envoyé via MiniSocialPanel:', message);
+    // Le message sera traité automatiquement par MiniSocialPanel via WebSocket
   };
 
   return (
@@ -218,71 +344,26 @@ export default function LiveStream({
         </div>
       </div>
 
-      {/* Live Chat & Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Live Chat */}
-        <div className="bg-card rounded-lg border border-border">
-          <div className="px-6 py-4 border-b border-border">
-            <h4 className="text-lg font-semibold text-foreground">Chat Live</h4>
-          </div>
-          
-          <div className="h-64 p-4 space-y-3 overflow-y-auto" data-testid="chat-messages">
-            {chatMessages.map((msg, index) => (
-              <div key={index} className="flex items-start space-x-2">
-                <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-xs text-primary-foreground font-medium">
-                  {msg.user[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm">
-                    <span className="font-medium text-foreground">{msg.user}</span>
-                    <span className="text-muted-foreground text-xs ml-2">{msg.time}</span>
-                  </div>
-                  <div className="text-sm text-foreground">{msg.message}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="p-4 border-t border-border">
-            <div className="flex space-x-2">
-              <Input
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                placeholder="Tapez votre message..."
-                onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                data-testid="chat-input"
-              />
-              <Button onClick={sendChatMessage} data-testid="send-message">
-                Envoyer
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Activity Feed */}
-        <div className="bg-card rounded-lg border border-border">
-          <div className="px-6 py-4 border-b border-border">
-            <h4 className="text-lg font-semibold text-foreground">Activité en Temps Réel</h4>
-          </div>
-          
-          <div className="h-64 p-4 space-y-3 overflow-y-auto" data-testid="activity-feed">
-            {[
-              { user: 'Julie', amount: 8, artist: artistA, time: '5s' },
-              { user: 'David', amount: 15, artist: artistB, time: '12s' },
-              { user: 'Claire', amount: 20, artist: artistA, time: '18s' },
-              { user: 'Thomas', amount: 5, artist: artistB, time: '25s' },
-            ].map((activity, index) => (
-              <div key={index} className="flex items-center space-x-3 p-2 rounded bg-muted/20">
-                <div className="w-2 h-2 bg-secondary rounded-full" />
-                <div className="flex-1 text-sm text-foreground">
-                  <span className="font-medium">{activity.user}</span> a investi{' '}
-                  <span className="font-medium text-secondary">€{activity.amount}</span> sur {activity.artist}
-                </div>
-                <span className="text-xs text-muted-foreground">Il y a {activity.time}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Mini Social Network - Remplace Chat & Activity */}
+      <div className="w-full">
+        <MiniSocialPanel
+          open={miniSocialOpen}
+          onOpenChange={setMiniSocialOpen}
+          autoshow={miniSocialConfig.autoshow}
+          position={miniSocialConfig.position}
+          defaultState="expanded"
+          isLiveShowActive={true}
+          liveShowId={showId}
+          viewerCount={viewerCount}
+          hostName={`${artistA} vs ${artistB}`}
+          showTitle={title}
+          onMessageSent={handleMiniSocialMessage}
+          onClose={() => setMiniSocialOpen(false)}
+          highTrafficMode={miniSocialConfig.highTrafficMode}
+          slowMode={miniSocialConfig.slowMode}
+          readOnly={miniSocialConfig.mode === 'read_only' || miniSocialConfig.mode === 'dnd'}
+          className="min-h-[500px]"
+        />
       </div>
     </div>
   );

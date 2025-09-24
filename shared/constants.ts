@@ -523,5 +523,12 @@ export const MINI_SOCIAL_RUNTIME_PARAMS = {
     type: 'boolean',
     description: 'Filtrage IA automatique des messages',
     modifiableByAdmin: true
+  },
+  'live_show.social.dnd_hours': {
+    key: 'live_show.social.dnd_hours',
+    value: '[]',
+    type: 'json',
+    description: 'Heures DND (Do Not Disturb) au format JSON [0,1,2...23]',
+    modifiableByAdmin: true
   }
 } as const;
