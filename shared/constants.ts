@@ -92,19 +92,39 @@ export const BOOK_VOTES_MAPPING: Record<AllowedBookReaderAmount, number> = {
   20: 10  // 20€ = 10 votes
 } as const;
 
-// Configuration LIVRES par défaut
+// Configuration LIVRES par défaut (Mensualisation v.24/09/2025)
 export const LIVRES_CONFIG = {
-  CYCLE_DURATION_DAYS: 30,           // Cycle 30 jours
+  // Cycle mensuel calendaire (remplace CYCLE_DURATION_DAYS: 30)
+  CYCLE_TYPE: 'monthly_calendar',    // Cycle mensuel calendaire
+  TIMEZONE: 'Europe/Paris',          // Fuseau horaire de référence
+  
+  // Configuration RRULE pour planification
+  OPENING_RRULE: 'FREQ=MONTHLY;BYMONTHDAY=1;BYHOUR=0;BYMINUTE=0;BYSECOND=0',          // 1er du mois à 00:00:00
+  CLOSING_RRULE: 'FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=23;BYMINUTE=59;BYSECOND=59',      // Dernier jour à 23:59:59
+  
+  // Paramètres de capacité et gagnants
   TARGET_AUTHORS: 100,               // 100 auteurs pour démarrer
   MAX_AUTHORS: 100,                  // Extensible à 200 (TOP 20)
   TOP_N_WINNERS: 10,                 // TOP 10 gagnants par défaut
+  
+  // Partage des ventes unitaires (inchangé)
   AUTHOR_REVENUE_SHARE: 0.70,        // 70% pour l'auteur
   PLATFORM_REVENUE_SHARE: 0.30,     // 30% pour VISUAL
-  POT_AUTHORS_SHARE: 0.60,           // 60% du pot pour auteurs TOP10
-  POT_READERS_SHARE: 0.40,           // 40% du pot pour lecteurs gagnants
+  
+  // Formules de redistribution du pot mensuel (nouvelles formules 60/40)
+  POT_AUTHORS_SHARE: 0.60,           // 60% du pot pour auteurs TOP10 (était 0.60)
+  POT_READERS_SHARE: 0.40,           // 40% du pot pour lecteurs gagnants (était 0.40)
+  POT_DISTRIBUTION_MODE: 'equipartition',  // Mode par défaut : équipartition
+  POT_EMPTY_READERS_POLICY: 'to_visual',   // Si aucun lecteur gagnant : 'to_authors' ou 'to_visual'
+  
+  // Arrondi euro-floor et résidus VISUAL
+  EURO_FLOOR_ROUNDING: true,         // Arrondi à l'euro inférieur pour utilisateurs
+  RESIDUALS_TO_VISUAL: true,         // Résidus (centimes + écarts) → VISUAL
+  
+  // Tokens et repêchage
   DOWNLOAD_TOKEN_TTL_HOURS: 72,      // Token expiration 72h
-  REPECHAGE_PRICE_EUR: 25,          // Repêchage 25€ (extensible de extension_price_eur)
-  REPECHAGE_WINDOW_HOURS: 24        // Fenêtre repêchage 24h
+  REPECHAGE_PRICE_EUR: 25,          // Repêchage 25€ pour rang 11-100
+  REPECHAGE_WINDOW_HOURS: 24        // Fenêtre repêchage 24h après clôture
 } as const;
 
 // Validation functions for LIVRES
