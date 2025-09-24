@@ -31,7 +31,10 @@ import {
   insertBookPurchaseSchema,
   insertDownloadTokenSchema,
   // Schéma feature toggles
-  insertFeatureToggleSchema
+  insertFeatureToggleSchema,
+  // Schémas petites annonces
+  insertPetitesAnnoncesSchema,
+  insertAdPhotosSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
 import { 
@@ -52,7 +55,11 @@ import {
   ALLOWED_BOOK_READER_AMOUNTS,
   isValidBookAuthorPrice,
   isValidBookReaderAmount,
-  BOOK_VOTES_MAPPING
+  BOOK_VOTES_MAPPING,
+  // Constantes photos petites annonces
+  AD_PHOTOS_CONFIG,
+  ACCEPTED_PHOTO_FORMATS,
+  PHOTO_ERROR_MESSAGES
 } from "@shared/constants";
 import { z } from "zod";
 import multer from "multer";
@@ -73,6 +80,7 @@ import { Top10Service } from "./services/top10Service.js";
 import { FidelityService } from "./services/fidelityService.js";
 import { miniSocialConfigService } from "./services/miniSocialConfigService";
 import { liveSocialService } from "./services/liveSocialService";
+import { ObjectStorageService } from "./objectStorage";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -5165,6 +5173,284 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Erreur lors de la récupération du leaderboard:", error);
       res.status(500).json({ 
         message: error.message || "Erreur serveur" 
+      });
+    }
+  });
+
+  // ===== ROUTES POUR LA GESTION DES PHOTOS DES PETITES ANNONCES =====
+
+  // Route pour obtenir l'URL de téléchargement présignée pour une photo
+  app.post('/api/petites-annonces/photos/upload-url', isAuthenticated, async (req: any, res) => {
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      
+      res.json({ 
+        success: true,
+        uploadURL,
+        maxFileSize: AD_PHOTOS_CONFIG.MAX_FILE_SIZE_BYTES,
+        acceptedFormats: Object.keys(ACCEPTED_PHOTO_FORMATS)
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la génération de l'URL de téléchargement:", error);
+      res.status(500).json({ 
+        success: false,
+        message: PHOTO_ERROR_MESSAGES.UPLOAD_FAILED 
+      });
+    }
+  });
+
+  // Route pour ajouter une photo à une annonce après téléchargement
+  app.post('/api/petites-annonces/:adId/photos', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { adId } = req.params;
+      
+      // Valider le schéma de la photo
+      const photoData = insertAdPhotosSchema.omit({ idx: true }).parse({
+        adId,
+        ...req.body
+      });
+
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce || annonce.authorId !== userId) {
+        return res.status(403).json({ 
+          success: false,
+          message: "Accès non autorisé à cette annonce" 
+        });
+      }
+
+      // Normaliser le chemin de stockage et définir les ACL
+      const objectStorageService = new ObjectStorageService();
+      const normalizedPath = objectStorageService.normalizeObjectEntityPath(photoData.storageKey);
+      
+      // Définir les ACL pour la photo (publique car dans une annonce)
+      await objectStorageService.trySetObjectEntityAclPolicy(photoData.storageKey, {
+        owner: userId,
+        visibility: 'public' // Les photos d'annonces sont publiques
+      });
+
+      // Créer la photo dans la base de données
+      const newPhoto = await storage.createAdPhoto({
+        ...photoData,
+        storageKey: normalizedPath
+      });
+
+      res.json({ 
+        success: true,
+        photo: newPhoto
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de l'ajout de la photo:", error);
+      res.status(500).json({ 
+        success: false,
+        message: error.message || PHOTO_ERROR_MESSAGES.PROCESSING_FAILED 
+      });
+    }
+  });
+
+  // Route pour récupérer les photos d'une annonce
+  app.get('/api/petites-annonces/:adId/photos', async (req: any, res) => {
+    try {
+      const { adId } = req.params;
+      const photos = await storage.getAdPhotos(adId);
+      
+      res.json({ 
+        success: true,
+        photos
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la récupération des photos:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Erreur lors de la récupération des photos" 
+      });
+    }
+  });
+
+  // Route pour réorganiser les photos d'une annonce
+  app.put('/api/petites-annonces/:adId/photos/reorder', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { adId } = req.params;
+      const { photoUpdates } = req.body;
+
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce || annonce.authorId !== userId) {
+        return res.status(403).json({ 
+          success: false,
+          message: "Accès non autorisé à cette annonce" 
+        });
+      }
+
+      // Valider les données de réorganisation
+      if (!Array.isArray(photoUpdates)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Format de données invalide" 
+        });
+      }
+
+      // Réorganiser les photos
+      await storage.reorderAdPhotos(adId, photoUpdates);
+      
+      // Retourner les photos mises à jour
+      const updatedPhotos = await storage.getAdPhotos(adId);
+      
+      res.json({ 
+        success: true,
+        photos: updatedPhotos
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la réorganisation des photos:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Erreur lors de la réorganisation" 
+      });
+    }
+  });
+
+  // Route pour définir la photo de couverture
+  app.put('/api/petites-annonces/:adId/photos/:photoId/cover', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { adId, photoId } = req.params;
+
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce || annonce.authorId !== userId) {
+        return res.status(403).json({ 
+          success: false,
+          message: "Accès non autorisé à cette annonce" 
+        });
+      }
+
+      // Définir la photo comme couverture
+      await storage.setCoverPhoto(adId, photoId);
+      
+      // Retourner la nouvelle photo de couverture
+      const coverPhoto = await storage.getAdCoverPhoto(adId);
+      
+      res.json({ 
+        success: true,
+        coverPhoto
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la définition de la photo de couverture:", error);
+      res.status(500).json({ 
+        success: false,
+        message: error.message || "Erreur lors de la définition de la couverture" 
+      });
+    }
+  });
+
+  // Route pour supprimer une photo
+  app.delete('/api/petites-annonces/:adId/photos/:photoId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { adId, photoId } = req.params;
+
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce || annonce.authorId !== userId) {
+        return res.status(403).json({ 
+          success: false,
+          message: "Accès non autorisé à cette annonce" 
+        });
+      }
+
+      // Vérifier que la photo appartient à l'annonce
+      const photo = await storage.getAdPhoto(photoId);
+      if (!photo || photo.adId !== adId) {
+        return res.status(404).json({ 
+          success: false,
+          message: "Photo non trouvée" 
+        });
+      }
+
+      // Supprimer la photo de la base de données
+      await storage.deleteAdPhoto(photoId);
+      
+      res.json({ 
+        success: true,
+        message: "Photo supprimée avec succès"
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la suppression de la photo:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Erreur lors de la suppression" 
+      });
+    }
+  });
+
+  // Route pour la modération des photos (admin seulement)
+  app.put('/api/petites-annonces/photos/:photoId/moderate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { photoId } = req.params;
+      const { decision, reason } = req.body;
+
+      // Vérifier que l'utilisateur est admin
+      const user = await storage.getUser(userId);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ 
+          success: false,
+          message: "Accès administrateur requis" 
+        });
+      }
+
+      // Valider la décision
+      if (!['pending', 'approved', 'rejected'].includes(decision)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Décision de modération invalide" 
+        });
+      }
+
+      // Modérer la photo
+      const moderatedPhoto = await storage.moderateAdPhoto(photoId, decision, userId, reason);
+      
+      res.json({ 
+        success: true,
+        photo: moderatedPhoto
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la modération:", error);
+      res.status(500).json({ 
+        success: false,
+        message: error.message || "Erreur lors de la modération" 
+      });
+    }
+  });
+
+  // Route pour récupérer les photos en attente de modération (admin seulement)
+  app.get('/api/petites-annonces/photos/moderation/pending', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      // Vérifier que l'utilisateur est admin
+      const user = await storage.getUser(userId);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ 
+          success: false,
+          message: "Accès administrateur requis" 
+        });
+      }
+
+      const pendingPhotos = await storage.getPendingPhotoModeration();
+      
+      res.json({ 
+        success: true,
+        photos: pendingPhotos
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la récupération des photos en attente:", error);
+      res.status(500).json({ 
+        success: false,
+        message: "Erreur serveur" 
       });
     }
   });
