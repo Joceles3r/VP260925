@@ -151,6 +151,53 @@ export const stripeTransferStatusEnum = pgEnum('stripe_transfer_status', [
 // Renewal status enum for project renewal system (25€)
 export const renewalStatusEnum = pgEnum('renewal_status', ['pending', 'paid', 'active', 'expired', 'cancelled']);
 
+// ===== PETITES ANNONCES ENUMS =====
+
+// Petites annonces category enum (thématique audiovisuel/spectacle uniquement)
+export const annoncesCategoryEnum = pgEnum('annonces_category', [
+  'talents_jobs',      // Casting, comédiens, figurants, réalisateurs, cadreurs, etc.
+  'services',          // Compositeur, voix off, étalonnage, montage, etc.
+  'lieux_tournage',    // Locations maisons, appartements, studios, etc.
+  'materiel'           // Caméras, optiques, lumières, véhicules d'époque, etc.
+]);
+
+// Petites annonces status enum
+export const annoncesStatusEnum = pgEnum('annonces_status', [
+  'pending',           // En attente de modération
+  'active',            // Publiée et visible
+  'rejected',          // Refusée par modération
+  'expired',           // Expirée
+  'archived',          // Archivée par l'auteur
+  'suspended'          // Suspendue pour violation
+]);
+
+// Moderation decision enum for petites annonces
+export const annonceModerationEnum = pgEnum('annonce_moderation', [
+  'auto_approved',     // Approuvé automatiquement par IA
+  'manual_review',     // Nécessite révision manuelle
+  'rejected_theme',    // Refusé : hors thématique audiovisuel
+  'rejected_content',  // Refusé : contenu inapproprié
+  'rejected_fraud',    // Refusé : suspicion de fraude
+  'rejected_duplicate' // Refusé : doublon détecté
+]);
+
+// Escrow status enum for protected payments
+export const escrowStatusEnum = pgEnum('escrow_status', [
+  'pending',           // En attente de paiement
+  'funded',            // Fonds déposés
+  'released',          // Paiement libéré au vendeur
+  'refunded',          // Remboursé à l'acheteur
+  'disputed',          // En litige
+  'cancelled'          // Annulé
+]);
+
+// Sanctions enum for user violations
+export const annonceSanctionEnum = pgEnum('annonce_sanction', [
+  'warning',           // Avertissement
+  'temporary_ban',     // Suspension temporaire
+  'permanent_ban'      // Bannissement définitif
+]);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1087,6 +1134,181 @@ export const stripeTransfers = pgTable("stripe_transfers", {
   unique("unique_reference_transfer").on(table.referenceType, table.referenceId), // Une seule tentative par référence
 ]);
 
+// ===== PETITES ANNONCES TABLES =====
+
+// Table principale des petites annonces (périmètre audiovisuel/spectacle uniquement)
+export const petitesAnnonces = pgTable("petites_annonces", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  
+  // Contenu de l'annonce
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  category: annoncesCategoryEnum("category").notNull(),
+  subcategory: varchar("subcategory", { length: 100 }), // Ex: "cameraman", "studio", "voix-off"
+  
+  // Informations pratiques
+  location: varchar("location", { length: 255 }).notNull(), // Ville/pays
+  availableDates: text("available_dates"), // Dates proposées (format texte libre)
+  priceIndicative: varchar("price_indicative", { length: 100 }), // Tarif indicatif/échelle
+  
+  // Médias
+  imageUrls: text("image_urls").array(), // Photos de l'annonce
+  videoUrl: varchar("video_url"), // Vidéo Bunny Stream (optionnelle, coût à l'annonceur)
+  
+  // Métadonnées
+  status: annoncesStatusEnum("status").default('pending'),
+  moderationDecision: annonceModerationEnum("moderation_decision"),
+  moderationReason: text("moderation_reason"),
+  moderatedBy: varchar("moderated_by").references(() => users.id), // Modérateur humain si applicable
+  moderatedAt: timestamp("moderated_at"),
+  
+  // Autorisations (pour lieux/matériel soumis à autorisation)
+  hasAuthorization: boolean("has_authorization").default(false),
+  authorizationDetails: text("authorization_details"),
+  
+  // Gestion des expiration et archives
+  expiresAt: timestamp("expires_at"), // Auto-calculé à la publication
+  isPromoted: boolean("is_promoted").default(false), // Mise en avant payante
+  viewCount: integer("view_count").default(0),
+  contactCount: integer("contact_count").default(0), // Nombre de contacts via messagerie
+  
+  // Escrow disponible
+  escrowAvailable: boolean("escrow_available").default(false),
+  escrowMinimumEUR: decimal("escrow_minimum_eur", { precision: 10, scale: 2 }),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_petites_annonces_category").on(table.category),
+  index("idx_petites_annonces_location").on(table.location),
+  index("idx_petites_annonces_status").on(table.status),
+  index("idx_petites_annonces_author").on(table.authorId),
+  index("idx_petites_annonces_expires").on(table.expiresAt),
+  index("idx_petites_annonces_active").on(table.status, table.expiresAt), // Annonces actives non expirées
+]);
+
+// Historique de modération des annonces
+export const annoncesModeration = pgTable("annonces_moderation", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  annonceId: varchar("annonce_id").notNull().references(() => petitesAnnonces.id, { onDelete: 'cascade' }),
+  moderatorId: varchar("moderator_id").references(() => users.id), // null si IA
+  
+  // Décision de modération
+  decision: annonceModerationEnum("decision").notNull(),
+  reason: text("reason"),
+  moderationType: varchar("moderation_type", { length: 20 }).notNull(), // 'ai' ou 'human'
+  
+  // Détails pour IA
+  aiScore: decimal("ai_score", { precision: 5, scale: 2 }), // Score de confiance IA (0-100)
+  aiFlags: text("ai_flags").array(), // Drapeaux détectés ['hors_theme', 'contenu_suspect', etc.]
+  
+  // Sanction appliquée si rejet
+  sanctionApplied: annonceSanctionEnum("sanction_applied"),
+  sanctionDuration: integer("sanction_duration"), // Durée en heures pour suspension temporaire
+  
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_annonces_moderation_annonce").on(table.annonceId),
+  index("idx_annonces_moderation_decision").on(table.decision),
+  index("idx_annonces_moderation_type").on(table.moderationType),
+]);
+
+// Signalements d'annonces par les utilisateurs
+export const annoncesReports = pgTable("annonces_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  annonceId: varchar("annonce_id").notNull().references(() => petitesAnnonces.id, { onDelete: 'cascade' }),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id),
+  
+  // Type et détails du signalement
+  reportType: reportTypeEnum("report_type").notNull(),
+  reportDetails: text("report_details").notNull(),
+  status: reportStatusEnum("status").default('pending'),
+  
+  // Résolution du signalement
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_annonces_reports_annonce").on(table.annonceId),
+  index("idx_annonces_reports_reporter").on(table.reporterId),
+  index("idx_annonces_reports_status").on(table.status),
+  // Empêcher les signalements multiples d'un même utilisateur pour une même annonce
+  unique("unique_user_annonce_report").on(table.reporterId, table.annonceId),
+]);
+
+// Transactions escrow pour paiements protégés (optionnels)
+export const escrowTransactions = pgTable("escrow_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  annonceId: varchar("annonce_id").notNull().references(() => petitesAnnonces.id),
+  buyerId: varchar("buyer_id").notNull().references(() => users.id),
+  sellerId: varchar("seller_id").notNull().references(() => users.id),
+  
+  // Montants
+  amountEUR: decimal("amount_eur", { precision: 10, scale: 2 }).notNull(),
+  serviceFeeEUR: decimal("service_fee_eur", { precision: 10, scale: 2 }).notNull(), // 5% min 1€
+  stripeFeeEUR: decimal("stripe_fee_eur", { precision: 10, scale: 2 }).notNull(),
+  totalAmountEUR: decimal("total_amount_eur", { precision: 10, scale: 2 }).notNull(),
+  
+  // Gestion du statut
+  status: escrowStatusEnum("status").default('pending'),
+  description: text("description").notNull(), // Description de la prestation
+  
+  // IDs Stripe pour suivi
+  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  stripeTransferId: varchar("stripe_transfer_id"), // Transfer vers le vendeur
+  
+  // Délais et résolution
+  deliveryExpectedAt: timestamp("delivery_expected_at"),
+  releasedAt: timestamp("released_at"), // Quand libéré au vendeur
+  refundedAt: timestamp("refunded_at"), // Quand remboursé à l'acheteur
+  
+  // Litige et médiation
+  disputeReason: text("dispute_reason"),
+  disputeResolvedBy: varchar("dispute_resolved_by").references(() => users.id), // Admin médiateur
+  disputeResolution: text("dispute_resolution"),
+  disputeResolvedAt: timestamp("dispute_resolved_at"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_escrow_transactions_annonce").on(table.annonceId),
+  index("idx_escrow_transactions_buyer").on(table.buyerId),
+  index("idx_escrow_transactions_seller").on(table.sellerId),
+  index("idx_escrow_transactions_status").on(table.status),
+  index("idx_escrow_transactions_delivery").on(table.deliveryExpectedAt),
+]);
+
+// Sanctions utilisateurs pour violations des règles petites annonces
+export const annoncesSanctions = pgTable("annonces_sanctions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  annonceId: varchar("annonce_id").references(() => petitesAnnonces.id), // Peut être null pour sanctions globales
+  
+  // Type et durée de sanction
+  sanctionType: annonceSanctionEnum("sanction_type").notNull(),
+  reason: text("reason").notNull(),
+  duration: integer("duration"), // Durée en heures pour suspensions temporaires
+  
+  // Appliquée par
+  appliedBy: varchar("applied_by").notNull().references(() => users.id),
+  isActive: boolean("is_active").default(true),
+  
+  // Dates
+  appliedAt: timestamp("applied_at").defaultNow(),
+  expiresAt: timestamp("expires_at"), // Calculé automatiquement pour suspensions temporaires
+  liftedAt: timestamp("lifted_at"), // Si levée avant expiration
+  liftedBy: varchar("lifted_by").references(() => users.id),
+}, (table) => [
+  index("idx_annonces_sanctions_user").on(table.userId),
+  index("idx_annonces_sanctions_active").on(table.isActive, table.expiresAt),
+  index("idx_annonces_sanctions_type").on(table.sanctionType),
+]);
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
@@ -1120,6 +1342,13 @@ export const usersRelations = relations(users, ({ many }) => ({
   weeklyStreaks: many(weeklyStreaks),
   // Relations pour transferts Stripe idempotents
   stripeTransfers: many(stripeTransfers),
+  // Relations pour petites annonces
+  petitesAnnonces: many(petitesAnnonces),
+  annoncesModeration: many(annoncesModeration),
+  annoncesReports: many(annoncesReports),
+  escrowTransactionsBuyer: many(escrowTransactions, { relationName: "buyer" }),
+  escrowTransactionsSeller: many(escrowTransactions, { relationName: "seller" }),
+  annoncesSanctions: many(annoncesSanctions),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -1472,6 +1701,88 @@ export const downloadTokensRelations = relations(downloadTokens, ({ one }) => ({
   book: one(books, {
     fields: [downloadTokens.bookId],
     references: [books.id],
+  }),
+}));
+
+// ===== RELATIONS POUR PETITES ANNONCES =====
+
+export const petitesAnnoncesRelations = relations(petitesAnnonces, ({ one, many }) => ({
+  author: one(users, {
+    fields: [petitesAnnonces.authorId],
+    references: [users.id],
+  }),
+  moderator: one(users, {
+    fields: [petitesAnnonces.moderatedBy],
+    references: [users.id],
+  }),
+  moderationHistory: many(annoncesModeration),
+  reports: many(annoncesReports),
+  escrowTransactions: many(escrowTransactions),
+}));
+
+export const annoncesModerationRelations = relations(annoncesModeration, ({ one }) => ({
+  annonce: one(petitesAnnonces, {
+    fields: [annoncesModeration.annonceId],
+    references: [petitesAnnonces.id],
+  }),
+  moderator: one(users, {
+    fields: [annoncesModeration.moderatorId],
+    references: [users.id],
+  }),
+}));
+
+export const annoncesReportsRelations = relations(annoncesReports, ({ one }) => ({
+  annonce: one(petitesAnnonces, {
+    fields: [annoncesReports.annonceId],
+    references: [petitesAnnonces.id],
+  }),
+  reporter: one(users, {
+    fields: [annoncesReports.reporterId],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [annoncesReports.reviewedBy],
+    references: [users.id],
+  }),
+}));
+
+export const escrowTransactionsRelations = relations(escrowTransactions, ({ one }) => ({
+  annonce: one(petitesAnnonces, {
+    fields: [escrowTransactions.annonceId],
+    references: [petitesAnnonces.id],
+  }),
+  buyer: one(users, {
+    fields: [escrowTransactions.buyerId],
+    references: [users.id],
+    relationName: "buyer",
+  }),
+  seller: one(users, {
+    fields: [escrowTransactions.sellerId],
+    references: [users.id],
+    relationName: "seller",
+  }),
+  disputeResolver: one(users, {
+    fields: [escrowTransactions.disputeResolvedBy],
+    references: [users.id],
+  }),
+}));
+
+export const annoncesSanctionsRelations = relations(annoncesSanctions, ({ one }) => ({
+  user: one(users, {
+    fields: [annoncesSanctions.userId],
+    references: [users.id],
+  }),
+  annonce: one(petitesAnnonces, {
+    fields: [annoncesSanctions.annonceId],
+    references: [petitesAnnonces.id],
+  }),
+  appliedBy: one(users, {
+    fields: [annoncesSanctions.appliedBy],
+    references: [users.id],
+  }),
+  liftedBy: one(users, {
+    fields: [annoncesSanctions.liftedBy],
+    references: [users.id],
   }),
 }));
 
@@ -2219,3 +2530,66 @@ export type FeatureToggle = typeof featureToggles.$inferSelect;
 // Types d'insertion et de sélection pour quêtes quotidiennes
 export type InsertDailyQuest = z.infer<typeof insertDailyQuestSchema>;
 export type DailyQuest = typeof dailyQuests.$inferSelect;
+
+// ===== SCHÉMAS D'INSERTION POUR PETITES ANNONCES =====
+
+// Schéma d'insertion pour petites annonces avec validation du périmètre
+export const insertPetitesAnnoncesSchema = createInsertSchema(petitesAnnonces).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  moderationDecision: true, // Sera défini par la modération
+  moderatedBy: true,
+  moderatedAt: true,
+  viewCount: true,
+  contactCount: true,
+}).extend({
+  // Validation obligatoire du périmètre audiovisuel/spectacle
+  category: z.enum(['talents_jobs', 'services', 'lieux_tournage', 'materiel']),
+  // Validation de la conformité au périmètre
+  confirmsAudiovisualScope: z.boolean().refine(val => val === true, {
+    message: "Vous devez confirmer que votre annonce respecte le périmètre audiovisuel/spectacle",
+  }),
+});
+
+export const insertAnnoncesModerationSchema = createInsertSchema(annoncesModeration).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAnnoncesReportsSchema = createInsertSchema(annoncesReports).omit({
+  id: true,
+  createdAt: true,
+  reviewedAt: true,
+});
+
+export const insertEscrowTransactionsSchema = createInsertSchema(escrowTransactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  releasedAt: true,
+  refundedAt: true,
+  disputeResolvedAt: true,
+});
+
+export const insertAnnoncesSanctionsSchema = createInsertSchema(annoncesSanctions).omit({
+  id: true,
+  appliedAt: true,
+  liftedAt: true,
+});
+
+// ===== TYPES POUR PETITES ANNONCES =====
+
+// Types d'insertion
+export type InsertPetitesAnnonces = z.infer<typeof insertPetitesAnnoncesSchema>;
+export type InsertAnnoncesModeration = z.infer<typeof insertAnnoncesModerationSchema>;
+export type InsertAnnoncesReports = z.infer<typeof insertAnnoncesReportsSchema>;
+export type InsertEscrowTransactions = z.infer<typeof insertEscrowTransactionsSchema>;
+export type InsertAnnoncesSanctions = z.infer<typeof insertAnnoncesSanctionsSchema>;
+
+// Types de sélection
+export type PetitesAnnonces = typeof petitesAnnonces.$inferSelect;
+export type AnnoncesModeration = typeof annoncesModeration.$inferSelect;
+export type AnnoncesReports = typeof annoncesReports.$inferSelect;
+export type EscrowTransactions = typeof escrowTransactions.$inferSelect;
+export type AnnoncesSanctions = typeof annoncesSanctions.$inferSelect;
