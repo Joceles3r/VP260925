@@ -5180,22 +5180,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== ROUTES POUR LA GESTION DES PHOTOS DES PETITES ANNONCES =====
 
   // Route pour obtenir l'URL de téléchargement présignée pour une photo
-  app.post('/api/petites-annonces/photos/upload-url', isAuthenticated, async (req: any, res) => {
+  app.post('/api/petites-annonces/:adId/photos/upload-url', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const { adId } = req.params;
+      
+      // Validation des paramètres
+      if (!adId || typeof adId !== 'string') {
+        return res.status(400).json({ 
+          error: "ID d'annonce invalide" 
+        });
+      }
+
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" 
+        });
+      }
+      if (annonce.authorId !== userId) {
+        return res.status(404).json({ // 404 pour éviter l'énumération
+          error: "Annonce non trouvée" 
+        });
+      }
+
+      // Vérifier le nombre de photos existantes (max 10)
+      const existingPhotos = await storage.getAdPhotos(adId);
+      if (existingPhotos.length >= AD_PHOTOS_CONFIG.MAX_PHOTOS_PER_AD) {
+        return res.status(409).json({ 
+          error: `Maximum ${AD_PHOTOS_CONFIG.MAX_PHOTOS_PER_AD} photos par annonce` 
+        });
+      }
+
+      // Générer l'URL présignée sécurisée avec ObjectStorageService
       const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const uploadConfig = await objectStorageService.getObjectEntityUploadURL({
+        userId,
+        adId,
+        allowedMimeTypes: Object.keys(ACCEPTED_PHOTO_FORMATS),
+        maxSizeBytes: AD_PHOTOS_CONFIG.MAX_FILE_SIZE_BYTES,
+        expiryMinutes: 5
+      });
       
       res.json({ 
-        success: true,
-        uploadURL,
+        uploadURL: uploadConfig.uploadURL,
+        storageKey: uploadConfig.storageKey,
+        uploadToken: uploadConfig.uploadToken,
         maxFileSize: AD_PHOTOS_CONFIG.MAX_FILE_SIZE_BYTES,
-        acceptedFormats: Object.keys(ACCEPTED_PHOTO_FORMATS)
+        acceptedFormats: Object.keys(ACCEPTED_PHOTO_FORMATS),
+        expiresAt: uploadConfig.expiresAt.toISOString()
       });
     } catch (error: any) {
       console.error("Erreur lors de la génération de l'URL de téléchargement:", error);
       res.status(500).json({ 
-        success: false,
-        message: PHOTO_ERROR_MESSAGES.UPLOAD_FAILED 
+        error: PHOTO_ERROR_MESSAGES.UPLOAD_FAILED 
       });
     }
   });
@@ -5206,46 +5245,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { adId } = req.params;
       
-      // Valider le schéma de la photo
-      const photoData = insertAdPhotosSchema.omit({ idx: true }).parse({
+      // Validation des paramètres de route
+      if (!adId || typeof adId !== 'string') {
+        return res.status(400).json({ 
+          error: "ID d'annonce invalide" 
+        });
+      }
+
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" 
+        });
+      }
+      if (annonce.authorId !== userId) {
+        return res.status(404).json({ // 404 pour éviter l'énumération
+          error: "Annonce non trouvée" 
+        });
+      }
+
+      // Vérifier le nombre de photos existantes (max 10)
+      const existingPhotos = await storage.getAdPhotos(adId);
+      if (existingPhotos.length >= AD_PHOTOS_CONFIG.MAX_PHOTOS_PER_AD) {
+        return res.status(409).json({ 
+          error: `Maximum ${AD_PHOTOS_CONFIG.MAX_PHOTOS_PER_AD} photos par annonce` 
+        });
+      }
+      
+      // Valider le schéma de la photo avec Zod
+      const photoValidation = insertAdPhotosSchema.omit({ idx: true }).safeParse({
         adId,
         ...req.body
       });
 
-      // Vérifier que l'annonce appartient à l'utilisateur
-      const annonce = await storage.getPetiteAnnonce(adId);
-      if (!annonce || annonce.authorId !== userId) {
-        return res.status(403).json({ 
-          success: false,
-          message: "Accès non autorisé à cette annonce" 
+      if (!photoValidation.success) {
+        return res.status(422).json({ 
+          error: "Données de photo invalides",
+          details: photoValidation.error.errors
         });
       }
 
-      // Normaliser le chemin de stockage et définir les ACL
+      const photoData = photoValidation.data;
+
+      // Validation supplémentaire du format et de la taille
+      if (!Object.keys(ACCEPTED_PHOTO_FORMATS).includes(photoData.mimeType)) {
+        return res.status(422).json({ 
+          error: "Format de fichier non supporté",
+          allowedFormats: Object.keys(ACCEPTED_PHOTO_FORMATS)
+        });
+      }
+
+      if (photoData.sizeBytes > AD_PHOTOS_CONFIG.MAX_FILE_SIZE_BYTES) {
+        return res.status(422).json({ 
+          error: `Taille de fichier trop importante (max ${AD_PHOTOS_CONFIG.MAX_FILE_SIZE_BYTES / 1024 / 1024}MB)`
+        });
+      }
+
+      // Vérifier que l'objet a bien été uploadé et correspond aux contraintes
       const objectStorageService = new ObjectStorageService();
+      const verification = await objectStorageService.verifyUploadedObject(
+        photoData.storageKey,
+        photoData.mimeType,
+        AD_PHOTOS_CONFIG.MAX_FILE_SIZE_BYTES
+      );
+
+      if (!verification.exists) {
+        return res.status(422).json({ 
+          error: "Fichier non trouvé - upload non complété ou invalide" 
+        });
+      }
+
+      // Normaliser le chemin de stockage
       const normalizedPath = objectStorageService.normalizeObjectEntityPath(photoData.storageKey);
       
       // Définir les ACL pour la photo (publique car dans une annonce)
-      await objectStorageService.trySetObjectEntityAclPolicy(photoData.storageKey, {
+      await objectStorageService.trySetObjectEntityAclPolicy(normalizedPath, {
         owner: userId,
         visibility: 'public' // Les photos d'annonces sont publiques
       });
-
-      // Créer la photo dans la base de données
+      
+      // Créer la photo dans la base de données avec transaction
       const newPhoto = await storage.createAdPhoto({
         ...photoData,
-        storageKey: normalizedPath
+        storageKey: normalizedPath,
+        moderationStatus: 'pending', // Modération requise par défaut
+        sizeBytes: verification.size || photoData.sizeBytes
       });
 
       res.json({ 
-        success: true,
         photo: newPhoto
       });
     } catch (error: any) {
       console.error("Erreur lors de l'ajout de la photo:", error);
+      
+      // Gestion d'erreur standardisée
+      if (error.code === '23505') { // Contrainte de duplicata PostgreSQL
+        return res.status(409).json({ 
+          error: "Photo déjà existante" 
+        });
+      }
+      
       res.status(500).json({ 
-        success: false,
-        message: error.message || PHOTO_ERROR_MESSAGES.PROCESSING_FAILED 
+        error: error.message || PHOTO_ERROR_MESSAGES.PROCESSING_FAILED 
       });
     }
   });
@@ -5254,17 +5356,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/petites-annonces/:adId/photos', async (req: any, res) => {
     try {
       const { adId } = req.params;
+      
+      // Validation des paramètres
+      if (!adId || typeof adId !== 'string') {
+        return res.status(400).json({ 
+          error: "ID d'annonce invalide" 
+        });
+      }
+
+      // Vérifier que l'annonce existe
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" 
+        });
+      }
+
+      // Contrôle d'accès : seuls les propriétaires ou annonces actives peuvent voir les photos
+      const userId = req.user?.claims?.sub;
+      const isOwner = userId && annonce.authorId === userId;
+      const isPubliclyVisible = annonce.status === 'active'; // Supposer qu'il y a un statut
+
+      if (!isOwner && !isPubliclyVisible) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" // 404 pour éviter l'énumération
+        });
+      }
+
       const photos = await storage.getAdPhotos(adId);
       
+      // Filtrer les photos selon le statut de modération
+      let visiblePhotos = photos;
+      if (!isOwner) {
+        // Les visiteurs ne voient que les photos approuvées
+        visiblePhotos = photos.filter(photo => photo.moderationStatus === 'approved');
+      }
+      
       res.json({ 
-        success: true,
-        photos
+        photos: visiblePhotos,
+        totalCount: visiblePhotos.length
       });
     } catch (error: any) {
       console.error("Erreur lors de la récupération des photos:", error);
       res.status(500).json({ 
-        success: false,
-        message: "Erreur lors de la récupération des photos" 
+        error: "Erreur lors de la récupération des photos" 
       });
     }
   });
@@ -5276,38 +5411,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { adId } = req.params;
       const { photoUpdates } = req.body;
 
+      // Validation des paramètres
+      if (!adId || typeof adId !== 'string') {
+        return res.status(400).json({ 
+          error: "ID d'annonce invalide" 
+        });
+      }
+
       // Vérifier que l'annonce appartient à l'utilisateur
       const annonce = await storage.getPetiteAnnonce(adId);
-      if (!annonce || annonce.authorId !== userId) {
-        return res.status(403).json({ 
-          success: false,
-          message: "Accès non autorisé à cette annonce" 
+      if (!annonce) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" 
+        });
+      }
+      if (annonce.authorId !== userId) {
+        return res.status(404).json({ // 404 pour éviter l'énumération
+          error: "Annonce non trouvée" 
         });
       }
 
       // Valider les données de réorganisation
       if (!Array.isArray(photoUpdates)) {
-        return res.status(400).json({ 
-          success: false,
-          message: "Format de données invalide" 
+        return res.status(422).json({ 
+          error: "Format de données invalide - tableau attendu" 
         });
       }
 
-      // Réorganiser les photos
+      // Obtenir les photos existantes pour validation
+      const existingPhotos = await storage.getAdPhotos(adId);
+      const existingIds = new Set(existingPhotos.map(p => p.id));
+
+      // Valider que tous les IDs des photos appartiennent à cette annonce
+      const updateIds = new Set(photoUpdates.map((update: any) => update.id));
+      
+      // Vérifier que tous les IDs existent et appartiennent à cette annonce
+      for (const update of photoUpdates) {
+        if (!update.id || typeof update.idx !== 'number') {
+          return res.status(422).json({ 
+            error: "Format d'update invalide - id et idx requis" 
+          });
+        }
+        
+        if (!existingIds.has(update.id)) {
+          return res.status(422).json({ 
+            error: `Photo ${update.id} n'appartient pas à cette annonce` 
+          });
+        }
+
+        if (update.idx < 0 || update.idx >= AD_PHOTOS_CONFIG.MAX_PHOTOS_PER_AD) {
+          return res.status(422).json({ 
+            error: `Index invalide: ${update.idx}. Doit être entre 0 et ${AD_PHOTOS_CONFIG.MAX_PHOTOS_PER_AD - 1}` 
+          });
+        }
+      }
+
+      // Vérifier que les longueurs correspondent
+      if (updateIds.size !== existingIds.size) {
+        return res.status(422).json({ 
+          error: "Le nombre de photos à réorganiser ne correspond pas aux photos existantes" 
+        });
+      }
+
+      // Vérifier l'unicité des indices
+      const indices = photoUpdates.map((update: any) => update.idx);
+      if (new Set(indices).size !== indices.length) {
+        return res.status(422).json({ 
+          error: "Indices dupliqués détectés" 
+        });
+      }
+
+      // Réorganiser les photos avec transaction atomique
       await storage.reorderAdPhotos(adId, photoUpdates);
       
       // Retourner les photos mises à jour
       const updatedPhotos = await storage.getAdPhotos(adId);
       
       res.json({ 
-        success: true,
         photos: updatedPhotos
       });
     } catch (error: any) {
       console.error("Erreur lors de la réorganisation des photos:", error);
+      
+      if (error.code === '23505') { // Contrainte d'unicité violée
+        return res.status(409).json({ 
+          error: "Conflit lors de la réorganisation" 
+        });
+      }
+      
       res.status(500).json({ 
-        success: false,
-        message: "Erreur lors de la réorganisation" 
+        error: "Erreur lors de la réorganisation" 
       });
     }
   });
@@ -5318,30 +5511,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { adId, photoId } = req.params;
 
-      // Vérifier que l'annonce appartient à l'utilisateur
-      const annonce = await storage.getPetiteAnnonce(adId);
-      if (!annonce || annonce.authorId !== userId) {
-        return res.status(403).json({ 
-          success: false,
-          message: "Accès non autorisé à cette annonce" 
+      // Validation des paramètres
+      if (!adId || typeof adId !== 'string' || !photoId || typeof photoId !== 'string') {
+        return res.status(400).json({ 
+          error: "Paramètres invalides" 
         });
       }
 
-      // Définir la photo comme couverture
+      // Vérifier que l'annonce appartient à l'utilisateur
+      const annonce = await storage.getPetiteAnnonce(adId);
+      if (!annonce) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" 
+        });
+      }
+      if (annonce.authorId !== userId) {
+        return res.status(404).json({ // 404 pour éviter l'énumération
+          error: "Annonce non trouvée" 
+        });
+      }
+
+      // Vérifier que la photo appartient à cette annonce
+      const photo = await storage.getAdPhoto(photoId);
+      if (!photo || photo.adId !== adId) {
+        return res.status(404).json({ 
+          error: "Photo non trouvée" 
+        });
+      }
+
+      // Vérifier que la photo est approuvée (optionnel selon les règles métier)
+      if (photo.moderationStatus === 'rejected') {
+        return res.status(422).json({ 
+          error: "Impossible de définir une photo rejetée comme couverture" 
+        });
+      }
+
+      // Définir la photo comme couverture avec transaction atomique
       await storage.setCoverPhoto(adId, photoId);
       
       // Retourner la nouvelle photo de couverture
       const coverPhoto = await storage.getAdCoverPhoto(adId);
       
       res.json({ 
-        success: true,
         coverPhoto
       });
     } catch (error: any) {
       console.error("Erreur lors de la définition de la photo de couverture:", error);
+      
+      if (error.code === '23505') { // Contrainte d'unicité violée
+        return res.status(409).json({ 
+          error: "Conflit lors de la définition de la couverture" 
+        });
+      }
+      
       res.status(500).json({ 
-        success: false,
-        message: error.message || "Erreur lors de la définition de la couverture" 
+        error: error.message || "Erreur lors de la définition de la couverture" 
       });
     }
   });
@@ -5352,12 +5576,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { adId, photoId } = req.params;
 
+      // Validation des paramètres
+      if (!adId || typeof adId !== 'string' || !photoId || typeof photoId !== 'string') {
+        return res.status(400).json({ 
+          error: "Paramètres invalides" 
+        });
+      }
+
       // Vérifier que l'annonce appartient à l'utilisateur
       const annonce = await storage.getPetiteAnnonce(adId);
-      if (!annonce || annonce.authorId !== userId) {
-        return res.status(403).json({ 
-          success: false,
-          message: "Accès non autorisé à cette annonce" 
+      if (!annonce) {
+        return res.status(404).json({ 
+          error: "Annonce non trouvée" 
+        });
+      }
+      if (annonce.authorId !== userId) {
+        return res.status(404).json({ // 404 pour éviter l'énumération
+          error: "Annonce non trouvée" 
         });
       }
 
@@ -5365,23 +5600,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const photo = await storage.getAdPhoto(photoId);
       if (!photo || photo.adId !== adId) {
         return res.status(404).json({ 
-          success: false,
-          message: "Photo non trouvée" 
+          error: "Photo non trouvée" 
         });
       }
 
-      // Supprimer la photo de la base de données
+      // Vérifier s'il s'agit de la photo de couverture
+      const isCoverPhoto = photo.isCover;
+      
+      // Supprimer la photo de la base de données et du stockage
       await storage.deleteAdPhoto(photoId);
       
+      // Supprimer aussi le fichier du stockage objet
+      try {
+        const objectStorageService = new ObjectStorageService();
+        await objectStorageService.deleteObject(photo.storageKey);
+      } catch (error) {
+        console.warn(`Impossible de supprimer l'objet ${photo.storageKey}:`, error);
+        // Ne pas faire échouer l'opération si la suppression du fichier échoue
+      }
+      
       res.json({ 
-        success: true,
-        message: "Photo supprimée avec succès"
+        message: "Photo supprimée avec succès",
+        wasCover: isCoverPhoto
       });
     } catch (error: any) {
       console.error("Erreur lors de la suppression de la photo:", error);
+      
+      if (error.code === '23503') { // Contrainte de clé étrangère
+        return res.status(409).json({ 
+          error: "Impossible de supprimer cette photo" 
+        });
+      }
+      
       res.status(500).json({ 
-        success: false,
-        message: "Erreur lors de la suppression" 
+        error: "Erreur lors de la suppression" 
       });
     }
   });
@@ -5393,35 +5645,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { photoId } = req.params;
       const { decision, reason } = req.body;
 
-      // Vérifier que l'utilisateur est admin
+      // Validation des paramètres
+      if (!photoId || typeof photoId !== 'string') {
+        return res.status(400).json({ 
+          error: "ID de photo invalide" 
+        });
+      }
+
+      // Vérifier strictement que l'utilisateur est admin
       const user = await storage.getUser(userId);
       if (!user || user.profileType !== 'admin') {
+        console.warn(`Tentative d'accès administrateur non autorisée: ${userId}`);
         return res.status(403).json({ 
-          success: false,
-          message: "Accès administrateur requis" 
+          error: "Accès administrateur requis" 
         });
       }
 
-      // Valider la décision
-      if (!['pending', 'approved', 'rejected'].includes(decision)) {
-        return res.status(400).json({ 
-          success: false,
-          message: "Décision de modération invalide" 
+      // Vérifier que la photo existe
+      const photo = await storage.getAdPhoto(photoId);
+      if (!photo) {
+        return res.status(404).json({ 
+          error: "Photo non trouvée" 
         });
       }
 
-      // Modérer la photo
+      // Valider la décision avec Zod ou validation manuelle stricte
+      const validDecisions = ['pending', 'approved', 'rejected'] as const;
+      if (!validDecisions.includes(decision)) {
+        return res.status(422).json({ 
+          error: "Décision de modération invalide",
+          allowedValues: validDecisions
+        });
+      }
+
+      // Validation optionnelle du motif pour les rejets
+      if (decision === 'rejected' && (!reason || reason.trim().length === 0)) {
+        return res.status(422).json({ 
+          error: "Motif requis pour les rejets" 
+        });
+      }
+
+      // Modérer la photo avec audit log
       const moderatedPhoto = await storage.moderateAdPhoto(photoId, decision, userId, reason);
       
+      // Log d'audit pour la modération
+      console.log(`[AUDIT] Modération photo ${photoId} par admin ${userId}: ${decision}${reason ? ` (${reason})` : ''}`);
+      
       res.json({ 
-        success: true,
         photo: moderatedPhoto
       });
     } catch (error: any) {
       console.error("Erreur lors de la modération:", error);
       res.status(500).json({ 
-        success: false,
-        message: error.message || "Erreur lors de la modération" 
+        error: error.message || "Erreur lors de la modération" 
       });
     }
   });
@@ -5431,26 +5707,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
 
-      // Vérifier que l'utilisateur est admin
+      // Vérifier strictement que l'utilisateur est admin
       const user = await storage.getUser(userId);
       if (!user || user.profileType !== 'admin') {
+        console.warn(`Tentative d'accès liste modération non autorisée: ${userId}`);
         return res.status(403).json({ 
-          success: false,
-          message: "Accès administrateur requis" 
+          error: "Accès administrateur requis" 
         });
       }
 
-      const pendingPhotos = await storage.getPendingPhotoModeration();
+      // Paramètres de pagination optionnels
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const offset = (page - 1) * limit;
+
+      const result = await storage.getPendingPhotoModeration(limit, offset);
       
       res.json({ 
-        success: true,
-        photos: pendingPhotos
+        photos: result.photos,
+        pagination: {
+          page,
+          limit,
+          total: result.total,
+          hasMore: offset + result.photos.length < result.total
+        }
       });
     } catch (error: any) {
       console.error("Erreur lors de la récupération des photos en attente:", error);
       res.status(500).json({ 
-        success: false,
-        message: "Erreur serveur" 
+        error: "Erreur serveur" 
       });
     }
   });
