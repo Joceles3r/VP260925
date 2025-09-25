@@ -42,6 +42,14 @@
   --shadow-2xl: 0px 2px 0px 0px hsl(214.3, 31.8%, 91.4%);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+
+  /* VISUAL Brand Colors */
+  --visual-blue: #00D1FF;
+  --visual-violet: #7B2CFF;
+  --visual-pink: #FF3CAC;
+  --visual-dark: #0A0B1E;
+  --visual-text: #EAEAFB;
+  --visual-gray: #9AA0B4;
 }
 
 .dark {
@@ -119,4 +127,173 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  /* VISUAL Interface Styles */
+  .visual-dark {
+    background-color: var(--visual-dark);
+    color: var(--visual-text);
+  }
+
+  .visual-gradient-bg {
+    background: linear-gradient(135deg, 
+      rgba(0, 209, 255, 0.1) 0%, 
+      rgba(123, 44, 255, 0.1) 50%, 
+      rgba(255, 60, 172, 0.1) 100%);
+    animation: gradient-shift 20s ease-in-out infinite;
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% { 
+      background: linear-gradient(135deg, 
+        rgba(0, 209, 255, 0.1) 0%, 
+        rgba(123, 44, 255, 0.1) 50%, 
+        rgba(255, 60, 172, 0.1) 100%); 
+    }
+    33% { 
+      background: linear-gradient(135deg, 
+        rgba(255, 60, 172, 0.1) 0%, 
+        rgba(0, 209, 255, 0.1) 50%, 
+        rgba(123, 44, 255, 0.1) 100%); 
+    }
+    66% { 
+      background: linear-gradient(135deg, 
+        rgba(123, 44, 255, 0.1) 0%, 
+        rgba(255, 60, 172, 0.1) 50%, 
+        rgba(0, 209, 255, 0.1) 100%); 
+    }
+  }
+
+  .visual-card {
+    @apply bg-gray-900/50 backdrop-blur-sm border border-gray-800/50 rounded-xl;
+    transition: all 0.2s ease;
+  }
+
+  .visual-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 
+      0 10px 25px rgba(0, 209, 255, 0.15),
+      0 0 0 1px rgba(0, 209, 255, 0.2);
+  }
+
+  .visual-glow-blue {
+    box-shadow: 0 0 20px rgba(0, 209, 255, 0.3);
+  }
+
+  .visual-glow-violet {
+    box-shadow: 0 0 20px rgba(123, 44, 255, 0.3);
+  }
+
+  .visual-glow-pink {
+    box-shadow: 0 0 20px rgba(255, 60, 172, 0.3);
+  }
+
+  .visual-btn {
+    @apply px-6 py-3 rounded-lg font-medium transition-all duration-200;
+    background: linear-gradient(135deg, var(--visual-blue), var(--visual-violet));
+    color: var(--visual-dark);
+    border: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .visual-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+  }
+
+  .visual-btn:hover::before {
+    left: 100%;
+  }
+
+  .visual-btn:hover {
+    transform: scale(0.98);
+    box-shadow: 0 4px 15px rgba(0, 209, 255, 0.4);
+  }
+
+  .visual-btn:active {
+    transform: scale(0.95);
+  }
+
+  .visual-badge {
+    @apply px-2 py-1 text-xs font-semibold rounded-full;
+  }
+
+  .visual-badge.trending {
+    background: linear-gradient(135deg, var(--visual-pink), var(--visual-violet));
+    color: white;
+  }
+
+  .visual-badge.top10 {
+    background: linear-gradient(135deg, var(--visual-blue), var(--visual-violet));
+    color: white;
+  }
+
+  .visual-badge.new {
+    background: linear-gradient(135deg, var(--visual-violet), var(--visual-pink));
+    color: white;
+  }
+
+  .visual-pulse {
+    animation: visual-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes visual-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .visual-bounce {
+    animation: visual-bounce 1s infinite;
+  }
+
+  @keyframes visual-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
+  .visual-text-gradient {
+    background: linear-gradient(135deg, var(--visual-blue), var(--visual-violet), var(--visual-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .visual-border-gradient {
+    background: linear-gradient(135deg, var(--visual-blue), var(--visual-violet), var(--visual-pink));
+    padding: 1px;
+    border-radius: 12px;
+  }
+
+  .visual-border-gradient > div {
+    background: var(--visual-dark);
+    border-radius: 11px;
+    padding: 1rem;
+  }
+
+  /* Animation pour les éléments qui apparaissent */
+  .visual-fade-in {
+    animation: visual-fade-in 0.6s ease-out forwards;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  @keyframes visual-fade-in {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Delay pour les animations en cascade */
+  .visual-delay-100 { animation-delay: 100ms; }
+  .visual-delay-200 { animation-delay: 200ms; }
+  .visual-delay-300 { animation-delay: 300ms; }
+  .visual-delay-400 { animation-delay: 400ms; }
+  .visual-delay-500 { animation-delay: 500ms; }
 }
