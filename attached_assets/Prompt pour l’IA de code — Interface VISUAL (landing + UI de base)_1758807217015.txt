@@ -1,0 +1,97 @@
+Prompt pour l’IA de code — Interface VISUAL (landing + UI de base) 
+
+Contexte & objectif
+Tu es une IA de code senior. Conçois une interface web moderne pour VISUAL, une plateforme hybride streaming + crowdfunding. Un internaute peut regarder des vidéos/films (extraits gratuits ou œuvres payantes). S’il paie, il accède au visuel complet.
+Des porteurs de projet (créateurs) publient leurs projets vidéo et sont rémunérés (ventes directes ou répartition). Des investisseurs soutiennent des projets avec de petites mises (selon la catégorie, de 0,20 € à 20 €) et peuvent recevoir un retour si leur sélection performe (principe de risque partagé conforme aux règles VISUAL).
+Catégories à mettre en scène
+Films / Vidéos / Documentaires (investissements 2–20 € ; prix porteur 2/3/4/5/10 €)
+Les Voix de l’Info (articles : micro‐prix 0,20–5 € ; partage 70% créateur / 30% VISUAL par vente)
+Visual Studio Live Show (présentations live, investissements en temps réel, mêmes règles de redistribution que “vidéo”)
+Livres (ebooks : prix auteur 2/3/4/5/8 € ; tranches lecteur 2–20 €)
+Petites Annonces (hors compétition, options payantes ; ne pas mélanger avec la redistribution)
+Design & identité
+Style : pro, clair, “wow” discret ; très simple à comprendre.
+Couleurs dominantes (néon sur fond sombre) :
+Bleu fluo #00D1FF
+Violet fluo #7B2CFF
+Rose fluo #FF3CAC
+Fond sombre #0A0B1E, texte #EAEAFB, gris #9AA0B4
+Motifs : dégradés légers (bleu→violet→rose), halos subtils, micro-animations 150–250 ms (hover/press/reveal).
+Accessibilité : contrastes AA minimum, focus visible, tailles réactives (mobile-first).
+Tech attendue (au choix, préciser tes décisions)
+Option A : React + Tailwind + Framer Motion (+ shadcn/ui si utile).
+Option B : Vue + Tailwind + Motion One.
+Option C : HTML/CSS + JS vanilla (si tu veux limiter les dépendances).
+Livrer du code complet et exécutable (une page ou mini-app), sans backend réel : données mockées + endpoints factices.
+
+Écrans à produire (MVP démo)
+1. Landing / Accueil (HERO pédagogique)
+Titre : “VISUAL — Streaming + Investissement créatif”.
+Sous-titre : “Regarde. Soutiens. Partage la réussite.”
+Cards Catégories (x6) avec icône, 1 phrase, CTA (Découvrir).
+Bloc “Comment ça marche ?” en 3 étapes :
+1. Regarde un extrait → paie petit pour voir en entier,
+2. Investis une petite somme (0,20–20 € selon catégorie) → gagne des votes,
+3. Gagne potentiellement si ton projet sélectionné termine en haut (règles résumées + lien “En savoir +”).
+Bandeau légal court (pas de promesse de gains, mention des risques) + lien Disclaimer.
+2. Liste des projets (catégorie active)
+Filtre Catégorie (affiche uniquement celles ON ; celles OFF montrent “Catégorie en cours / en travaux”).
+Cards projet : miniature/video teaser (auto-loop au hover, muet), titre, porteur, prix ou tranches d’investissement, votes.
+Badges : Tendance, TOP 10, Nouveau.
+3. Fiche projet (sheet/modale)
+Visuel (player mock), pitch, objectifs, grille d’achat/invest (boutons 2/3/4/5/6/8/10/12/15/20 € — adapter selon catégorie),
+Barre d’info : montants levés, nb d’investisseurs, coefficient d’engagement (tooltips).
+CTA : Voir l’extrait / Regarder en entier / Investir.
+“Règles de la catégorie” (popover).
+4. Dock de Curiosité (barre fixe bas)
+Boutons : En direct, Top 10, Nouveau, Surprends-moi, “? Surprise du jour +20 VISUpoints”.
+Effets légers (pulse, counters live).
+Le bouton Top 10 se désactive si la catégorie correspondante est OFF.
+5. État OFF (placeholders)
+Catégorie : “Catégorie en travaux” (ou “en cours”), noindex.
+Rubrique : “Rubrique en travaux”.
+6. Disclaimer & Legal (page simple)
+Rappels : risques d’investissement, conditions, 70/30 sur ventes d’articles (Info), arrondis à l’euro pour redistributions, 23 % VISUAL sur évènements de catégorie, etc.
+
+Données & comportements (mock)
+Toggles ON/OFF (endpoint public factice) :
+{
+  "films":{"visible":true,"message":""},
+  "videos":{"visible":true,"message":""},
+  "documentaires":{"visible":true,"message":""},
+  "voix_info":{"visible":true,"message":""},
+  "live_show":{"visible":true,"message":""},
+  "livres":{"visible":true,"message":""},
+  "petites_annonces":{"visible":true,"message":""}
+}
+Mapping votes (investissements) : 2→1, 3→2, 4→3, 5→4, 6→5, 8→6, 10→7, 12→8, 15→9, 20→10 (adapter Voix de l’Info aux micro-montants).
+Prix porteurs (affichage) :
+Vidéos : 2/3/4/5/10 € (max 10 €),
+Livres : 2/3/4/5/8 € (max 8 €).
+Etiquettes légales : “Arrondis à l’euro inférieur pour les utilisateurs ; restes → VISUAL”.
+Coups d’œil live : si live_show.visible=true, afficher compteur “X spectateurs”.
+
+Guideline d’animations (sobres & élégantes)
+Hover cards : léger lift + glow néon doux (ombre portée colorée).
+CTA : ripple/focus visible, press = scale 0.98.
+Transitions : pages 200 ms, modales 180 ms (fade+slide up léger).
+Arrière-plan : gradient animé ultra-lent (10–20 s) opacité 10–15 %, pas de distraction.
+
+Accessibilité & perf
+Navigation clavier, aria-labels, alt textes, trap focus dans les modales.
+LCP < 2,5 s cible : images optimisées, lazy-loading, vidéo en poster.
+Dark mode par défaut ; prévoir variante light (option).
+
+Livrables attendus
+Code complet (une page ou mini-app) + README rapide pour lancer.
+Données mock inline ou en mock.json.
+Aucun appel réseau réel requis.
+Style concis et professionnel, aux couleurs bleu/violet/rose fluo.
+
+Bonus (si temps)
+Onboarding 3 étapes (découvrir → suivre un porteur → investir 2 €).
+Favoris & Historique.
+Mini-teaser (2–3 s) au survol des cards.
+
+Rappel concept (en une phrase à réutiliser dans la UI)
+VISUAL combine streaming et micro-investissement : regarde, soutiens les créateurs, et partage les résultats selon les règles de chaque catégorie.
