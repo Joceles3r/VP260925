@@ -10,6 +10,7 @@ export default function Navigation() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', section: 'dashboard' },
+    { path: '/visual', label: 'VISUAL', section: 'visual', highlight: true },
     { path: '/projects', label: 'Projets', section: 'projects' },
     { path: '/portfolio', label: 'Portfolio', section: 'portfolio' },
     { path: '/live', label: 'Live', section: 'live' },
@@ -45,6 +46,8 @@ export default function Navigation() {
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
                     location === item.path
                       ? 'bg-primary text-primary-foreground'
+                      : item.highlight
+                      ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 border border-blue-400/20'
                       : 'text-foreground hover:bg-muted'
                   }`}
                   data-testid={`nav-${item.section}`}

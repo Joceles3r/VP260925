@@ -30,7 +30,7 @@ export interface VisualProject {
   engagementCoeff: number;
   badges: ('trending' | 'top10' | 'new')[];
   videoUrl?: string;
-  votesMapping: { [key: number]: number };
+  votesMapping: Record<number, number>;
 }
 
 export interface VisualCategory {
@@ -54,14 +54,22 @@ export const mockCategoryToggles: CategoryToggles = {
 };
 
 // Mapping des votes selon investissement
-export const votesMapping = {
+export const votesMapping: Record<number, number> = {
   2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 6, 10: 7, 12: 8, 15: 9, 20: 10
 };
 
 // Micro-montants pour Voix de l'Info
-export const voixInfoMapping = {
+export const voixInfoMapping: Record<number, number> = {
   0.2: 1, 0.5: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7
 };
+
+// Fonction pour résoudre le nombre de votes selon le montant et la catégorie
+export function resolveVotes(amount: number, category: keyof CategoryToggles): number {
+  if (category === 'voix_info') {
+    return voixInfoMapping[amount] || 1;
+  }
+  return votesMapping[amount] || 1;
+}
 
 // Catégories avec leurs métadonnées
 export const visualCategories: VisualCategory[] = [
@@ -243,9 +251,13 @@ export const mockEndpoints = {
   getLiveStats: () => Promise.resolve(mockLiveStats),
   investInProject: (projectId: string, amount: number) => {
     console.log(`Mock investment: ${amount}€ in project ${projectId}`);
+    const project = mockProjects.find(p => p.id === projectId);
+    const category = project?.category || 'films';
+    const votes = resolveVotes(amount, category);
+    
     return Promise.resolve({ 
       success: true, 
-      votes: (votesMapping as any)[amount] || (voixInfoMapping as any)[amount] || 1 
+      votes 
     });
   },
   purchaseContent: (projectId: string) => {
