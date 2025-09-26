@@ -297,12 +297,12 @@ export default function Home() {
             </div>
 
             {/* Category */}
-            <Select value={filters.category || ''} onValueChange={(value) => updateFilter('category', value || undefined)}>
+            <Select value={filters.category || 'all'} onValueChange={(value) => updateFilter('category', value === 'all' ? undefined : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Toutes les catégories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Toutes les catégories</SelectItem>
+                <SelectItem value="all">Toutes les catégories</SelectItem>
                 <SelectItem value="documentaire">Documentaire</SelectItem>
                 <SelectItem value="court-métrage">Court-métrage</SelectItem>
                 <SelectItem value="clip">Clip</SelectItem>
