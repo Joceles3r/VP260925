@@ -1,36 +1,21 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
-import session from "express-session";
-import ConnectPgSimple from "connect-pg-simple";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import { initializeWebSocket } from "./websocket";
+import cors from "cors";
+import dotenv from "dotenv";
+import path from "path";
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 
-// Create HTTP server for WebSocket
+// Create HTTP server
 const server = createServer(app);
 
-// Initialize WebSocket service
-initializeWebSocket(server);
-
-// Session configuration for Replit Auth
-const PgSession = ConnectPgSimple(session);
-
-app.use(session({
-  store: new PgSession({
-    conString: process.env.DATABASE_URL,
-    tableName: 'sessions'
-  }),
-  name: 'visual.sid',
-  secret: process.env.SESSION_SECRET || 'visual-session-secret-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-  }
+// CORS configuration
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  credentials: true
 }));
 
 // Request logging middleware
