@@ -30,6 +30,10 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 
 // Authentication types
 export interface AuthUser extends User {
+  firstName: string;
+  lastName: string;
+  email: string;
+  profileImageUrl?: string;
   isAdmin: boolean;
   isCreator: boolean;
 }
