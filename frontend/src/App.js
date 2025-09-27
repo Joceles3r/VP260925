@@ -64,6 +64,8 @@ function Router() {
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />
             <Route path="/social" component={Social} />
+            <Route path="/demo" component={ProjectDemo} />
+            <Route path="/i18n" component={TranslationFeatures} />
             {user?.isAdmin && <Route path="/admin" component={Admin} />}
             <Route component={NotFound} />
           </>
