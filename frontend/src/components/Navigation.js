@@ -69,13 +69,16 @@ const Navigation = () => {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
+            {/* Language Selector */}
+            <LanguageSelector />
+            
             <div className="flex items-center space-x-2">
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">
                   {user?.firstName} {user?.lastName}
                 </p>
                 <p className="text-xs text-gray-500">
-                  Balance: {user?.balanceEUR}€
+                  Balance: {formatCurrency(parseFloat(user?.balanceEUR || '0'))}
                 </p>
               </div>
               <Avatar>
