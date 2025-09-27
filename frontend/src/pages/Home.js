@@ -8,32 +8,33 @@ import { TrendingUp, DollarSign, Eye, Users } from 'lucide-react';
 
 const Home = () => {
   const { user } = useAuth();
+  const { t, formatCurrency } = useI18n();
   const [, navigate] = useLocation();
 
   const stats = [
     {
-      title: 'Balance totale',
-      value: `${user?.balanceEUR}€`,
+      title: t('dashboard.stats.balance'),
+      value: formatCurrency(parseFloat(user?.balanceEUR || '0')),
       icon: DollarSign,
       color: 'text-green-600',
       bgColor: 'bg-green-100'
     },
     {
-      title: 'Total investi',
-      value: `${user?.totalInvested}€`,
+      title: t('dashboard.stats.invested'),
+      value: formatCurrency(parseFloat(user?.totalInvested || '0')),
       icon: TrendingUp,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
     },
     {
-      title: 'Gains totaux',
-      value: `${user?.totalGains}€`,
+      title: t('dashboard.stats.gains'),
+      value: formatCurrency(parseFloat(user?.totalGains || '0')),
       icon: Eye,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100'
     },
     {
-      title: 'Projets suivis',
+      title: t('dashboard.stats.projects'),
       value: '12',
       icon: Users,
       color: 'text-orange-600',
