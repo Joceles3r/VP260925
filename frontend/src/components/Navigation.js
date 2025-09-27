@@ -19,14 +19,15 @@ import {
 const Navigation = () => {
   const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
+  const { t, formatCurrency } = useI18n();
 
   const navigationItems = [
-    { name: 'Accueil', href: '/', icon: Home },
-    { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
-    { name: 'Projets', href: '/projects', icon: FolderOpen },
-    { name: 'Portfolio', href: '/portfolio', icon: Briefcase },
-    { name: 'Live', href: '/live', icon: Radio },
-    { name: 'Social', href: '/social', icon: Users },
+    { name: t('nav.home'), href: '/', icon: Home },
+    { name: t('nav.dashboard'), href: '/dashboard', icon: BarChart3 },
+    { name: t('nav.projects'), href: '/projects', icon: FolderOpen },
+    { name: t('nav.portfolio'), href: '/portfolio', icon: Briefcase },
+    { name: t('nav.live'), href: '/live', icon: Radio },
+    { name: t('nav.social'), href: '/social', icon: Users },
   ];
 
   if (user?.isAdmin) {
