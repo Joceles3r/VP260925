@@ -246,17 +246,35 @@ async def get_investments(page: int = 1, limit: int = 20):
     }
 
 @app.get("/api/notifications")
-async def get_notifications(page: int = 1, limit: int = 20):
-    # Mock notifications
+async def get_notifications(page: int = 1, limit: int = 20, locale: str = "fr-FR"):
+    # Notifications multilingues selon la locale
+    notification_texts = {
+        "fr-FR": {
+            "title": "Nouveau projet disponible",
+            "message": "Un nouveau documentaire vient d'être publié et recherche des investisseurs."
+        },
+        "en-US": {
+            "title": "New project available",
+            "message": "A new documentary has been published and is looking for investors."
+        },
+        "es-ES": {
+            "title": "Nuevo proyecto disponible", 
+            "message": "Se ha publicado un nuevo documental y busca inversores."
+        }
+    }
+    
+    texts = notification_texts.get(locale, notification_texts["fr-FR"])
+    
     notifications = [
         {
             "id": "notif-1",
-            "title": "Nouveau projet disponible",
-            "message": "Un nouveau documentaire vient d'être publié et recherche des investisseurs.",
+            "title": texts["title"],
+            "message": texts["message"],
             "type": "new_project",
             "isRead": False,
             "createdAt": "2024-01-20T14:30:00Z",
-            "project": None
+            "project": None,
+            "locale": locale
         }
     ]
     
@@ -268,6 +286,67 @@ async def get_notifications(page: int = 1, limit: int = 20):
             "limit": limit,
             "total": len(notifications),
             "totalPages": 1
+        }
+    }
+
+@app.get("/api/projects/{project_id}/subtitles")
+async def get_project_subtitles(project_id: str):
+    # Mock subtitles pour un projet - générés par IA avec post-édition humaine
+    subtitles = [
+        {
+            "lang": "fr-FR",
+            "label": "Français", 
+            "flag": "🇫🇷",
+            "url": f"/api/subtitles/{project_id}/fr-FR.vtt",
+            "generated_by": "AI",
+            "human_reviewed": True,
+            "confidence": 0.95
+        },
+        {
+            "lang": "en-US",
+            "label": "English",
+            "flag": "🇺🇸", 
+            "url": f"/api/subtitles/{project_id}/en-US.vtt",
+            "generated_by": "AI",
+            "human_reviewed": False,
+            "confidence": 0.87
+        },
+        {
+            "lang": "es-ES",
+            "label": "Español",
+            "flag": "🇪🇸",
+            "url": f"/api/subtitles/{project_id}/es-ES.vtt",
+            "generated_by": "AI", 
+            "human_reviewed": True,
+            "confidence": 0.92
+        }
+    ]
+    
+    return {
+        "success": True,
+        "data": subtitles
+    }
+
+@app.get("/api/i18n/config")
+async def get_i18n_config():
+    # Configuration i18n publique
+    return {
+        "success": True,
+        "data": {
+            "default_locale": "fr-FR",
+            "supported_locales": ["fr-FR", "en-US", "es-ES", "de-DE", "it-IT"],
+            "url_strategy": "path-prefix",
+            "seo": {
+                "hreflang": True,
+                "localized_sitemaps": True
+            },
+            "subtitle_formats": ["vtt", "srt"],
+            "mt_provider": "auto",
+            "tm_enabled": True,
+            "fallback_order": ["fr-FR", "en-US"],
+            "currency_format": {
+                "EUR": "fr-FR"
+            }
         }
     }
 
