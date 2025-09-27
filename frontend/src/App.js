@@ -18,6 +18,8 @@ import Live from "@/pages/Live";
 import Social from "@/pages/Social";
 import Admin from "@/pages/Admin";
 import KYCOnboarding from "@/pages/KYCOnboarding";
+import ProjectDemo from "@/pages/ProjectDemo";
+import TranslationFeatures from "@/components/TranslationFeatures";
 import NotFound from "@/pages/NotFound";
 
 // Create a client
