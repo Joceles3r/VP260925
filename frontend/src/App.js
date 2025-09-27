@@ -1,53 +1,85 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { Switch, Route } from "wouter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/components/theme-provider";
+import { useAuth } from "@/hooks/useAuth";
+import Navigation from "@/components/Navigation";
+import LoadingScreen from "@/components/LoadingScreen";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Pages
+import Landing from "@/pages/Landing";
+import Home from "@/pages/Home";
+import Dashboard from "@/pages/Dashboard";
+import Projects from "@/pages/Projects";
+import Portfolio from "@/pages/Portfolio";
+import Live from "@/pages/Live";
+import Social from "@/pages/Social";
+import Admin from "@/pages/Admin";
+import KYCOnboarding from "@/pages/KYCOnboarding";
+import NotFound from "@/pages/NotFound";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 1,
+    },
+  },
+});
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+function Router() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
+    <div className="min-h-screen bg-background">
+      {/* Show navigation only for authenticated users */}
+      {isAuthenticated && <Navigation />}
+      
+      <Switch>
+        {!isAuthenticated ? (
+          <>
+            <Route path="/" component={Landing} />
+            <Route path="/landing" component={Landing} />
+            <Route component={Landing} />
+          </>
+        ) : (
+          <>
+            <Route path="/" component={Home} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/kyc" component={KYCOnboarding} />
+            <Route path="/projects" component={Projects} />
+            <Route path="/portfolio" component={Portfolio} />
+            <Route path="/live" component={Live} />
+            <Route path="/social" component={Social} />
+            {user?.isAdmin && <Route path="/admin" component={Admin} />}
+            <Route component={NotFound} />
+          </>
+        )}
+      </Switch>
     </div>
   );
-};
+}
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="light" storageKey="visual-theme">
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 
