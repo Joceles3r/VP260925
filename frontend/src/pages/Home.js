@@ -68,10 +68,10 @@ const Home = () => {
       {/* Welcome Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">
-          Bonjour {user?.firstName} ! 👋
+          {t('dashboard.welcome', { name: user?.firstName })}
         </h1>
         <p className="mt-2 text-gray-600">
-          Voici un aperçu de votre activité sur VISUAL Platform
+          {t('dashboard.subtitle')}
         </p>
       </div>
 
