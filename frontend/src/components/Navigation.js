@@ -1,8 +1,10 @@
 import React from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import LanguageSelector from '@/components/LanguageSelector';
 import { 
   Home, 
   BarChart3, 
