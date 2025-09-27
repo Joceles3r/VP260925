@@ -1,30 +1,76 @@
 #!/usr/bin/env python3
 """
-VISUAL Platform Backend Server
-FastAPI server for VISUAL investment platform
+VISUAL Platform Backend Server - Production Ready
+FastAPI server optimized for production deployment
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List, Dict, Any
 import os
 import json
+import logging
+import time
+from datetime import datetime, timedelta
 
-app = FastAPI(
-    title="VISUAL API",
-    description="API for VISUAL investment platform",
-    version="1.0.0"
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
+
+# FastAPI app configuration
+app = FastAPI(
+    title="VISUAL Platform API",
+    description="API for VISUAL investment platform - Production Ready",
+    version="1.0.0",
+    docs_url="/api/docs" if os.getenv("NODE_ENV") != "production" else None,
+    redoc_url="/api/redoc" if os.getenv("NODE_ENV") != "production" else None,
+)
+
+# Security middleware
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["*"]  # Configure properly in production
+)
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173", 
+        "https://*.replit.dev",
+        "https://*.replit.app"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Request timing middleware
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    
+    # Log API requests
+    if request.url.path.startswith("/api"):
+        logger.info(
+            f"{request.method} {request.url.path} - "
+            f"{response.status_code} - {process_time:.4f}s"
+        )
+    
+    return response
 
 # Pydantic models
 class User(BaseModel):
