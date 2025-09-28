@@ -274,3 +274,5 @@ router.post("/api/admin/agents/command", requireAdminAccess, async (req: Request
       error: 'Failed to execute agent command'
     });
   }
+}
+)

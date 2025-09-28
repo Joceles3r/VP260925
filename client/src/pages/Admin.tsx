@@ -9,6 +9,7 @@ import AgentCoordinatorPanel from '@/components/admin/AgentCoordinatorPanel';
 +import VisualScoutPanel from '@/components/admin/VisualScoutPanel';
  
  interface AdminStats {
+ }
 @@ .. @@
         <TabsList className="grid w-full grid-cols-6">
            <TabsTrigger value="users">Utilisateurs</TabsTrigger>

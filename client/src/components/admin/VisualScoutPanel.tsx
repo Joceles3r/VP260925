@@ -5,21 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Search, 
-  Target, 
-  TrendingUp, 
-  AlertTriangle, 
-  Play, 
-  Pause, 
-  StopCircle,
-  Eye,
-  MousePointer,
-  Users,
-  DollarSign,
-  Activity,
-  Zap
-} from 'lucide-react';
+import { Search, Target, TrendingUp, TriangleAlert as AlertTriangle, Play, Pause, CircleStop as StopCircle, Eye, MousePointer, Users, DollarSign, Activity, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ScoutMetrics {
