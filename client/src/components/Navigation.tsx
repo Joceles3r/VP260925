@@ -19,3 +19,5 @@
    ];
 
    const adminNavItems = [
+
+export default adminNavItems
