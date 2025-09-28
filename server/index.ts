@@ -172,6 +172,76 @@ app.get('/api/notifications', (req: Request, res: Response) => {
   });
 });
 
+app.get('/api/books', (req: Request, res: Response) => {
+  const mockBooks = [
+    {
+      id: '1',
+      title: 'Guide du Réalisateur Indépendant',
+      description: 'Un guide complet pour créer des films avec un budget limité.',
+      author: { id: '1', firstName: 'Marie', lastName: 'Dubois' },
+      price: 5,
+      status: 'active',
+      totalSales: 1250.00,
+      votesCount: 89,
+      monthlyRank: 3,
+      createdAt: new Date().toISOString()
+    }
+  ];
+
+  res.json({
+    success: true,
+    data: mockBooks,
+    pagination: {
+      page: 1,
+      limit: 20,
+      total: mockBooks.length,
+      totalPages: 1
+    }
+  });
+});
+
+// Mock ads route for Petites Annonces
+app.get('/api/ads', (req: Request, res: Response) => {
+  const mockAds = [
+    {
+      id: '1',
+      title: 'Recherche Cadreur Expérimenté',
+      description: 'Nous recherchons un cadreur expérimenté pour un documentaire.',
+      category: 'job',
+      author: { id: '1', firstName: 'Marie', lastName: 'Dubois' },
+      location: 'Paris, France',
+      price: 2500,
+      status: 'active',
+      viewsCount: 45,
+      createdAt: new Date().toISOString()
+    }
+  ];
+
+  res.json({
+    success: true,
+    data: mockAds,
+    pagination: {
+      page: 1,
+      limit: 20,
+      total: mockAds.length,
+      totalPages: 1
+    }
+  });
+});
+
+// Mock curiosity stats for dock
+app.get('/api/curiosity-stats', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      liveViewers: Math.floor(Math.random() * 100) + 20,
+      liveShows: Math.floor(Math.random() * 8) + 2,
+      newCount: Math.floor(Math.random() * 15) + 5,
+      topActive: Math.random() > 0.2
+    }
+  });
+});
+
 // Mock logout route
 app.post('/api/logout', (req: Request, res: Response) => {
   res.json({

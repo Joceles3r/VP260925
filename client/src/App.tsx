@@ -16,12 +16,17 @@ import Projects from "@/pages/Projects";
 import Portfolio from "@/pages/Portfolio";
 import Live from "@/pages/Live";
 import Social from "@/pages/Social";
+import Books from "@/pages/Books";
+import PetitesAnnonces from "@/pages/PetitesAnnonces";
 import Admin from "@/pages/Admin";
 import KYCOnboarding from "@/pages/KYCOnboarding";
 import NotFound from "@/pages/NotFound";
+import CuriosityDock from "@/components/CuriosityDock";
+import { useCuriosityDock } from "@/hooks/useCuriosityDock";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { stats, actions } = useCuriosityDock();
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -48,11 +53,25 @@ function Router() {
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />
             <Route path="/social" component={Social} />
+            <Route path="/books" component={Books} />
+            <Route path="/petites-annonces" component={PetitesAnnonces} />
             {user?.isAdmin && <Route path="/admin" component={Admin} />}
             <Route component={NotFound} />
           </>
         )}
       </Switch>
+      
+      {/* Curiosity Dock - only show for authenticated users */}
+      {isAuthenticated && (
+        <CuriosityDock
+          stats={stats}
+          onGoLive={actions.goLive}
+          onTop10={actions.showTop10}
+          onNew={actions.showNew}
+          onRandom={actions.showRandom}
+          onQuest={actions.showQuest}
+        />
+      )}
     </div>
   );
 }

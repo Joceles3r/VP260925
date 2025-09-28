@@ -67,6 +67,15 @@ export const reportTypeEnum = pgEnum('report_type', [
 // Content type enum for reports
 export const contentTypeEnum = pgEnum('content_type', ['article', 'video', 'social_post', 'comment', 'project']);
 
+// Book category specific enums
+export const bookStatusEnum = pgEnum('book_status', ['pending', 'active', 'completed', 'rejected']);
+export const bookPriceEnum = pgEnum('book_price', ['2', '3', '4', '5', '8']);
+
+// Ad category enums for Petites Annonces
+export const adCategoryEnum = pgEnum('ad_category', ['job', 'service', 'location', 'equipment', 'formation']);
+export const adStatusEnum = pgEnum('ad_status', ['pending', 'active', 'expired', 'rejected']);
+export const moderationStatusEnum = pgEnum('moderation_status', ['pending', 'approved', 'rejected']);
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -149,6 +158,86 @@ export const liveShows = pgTable("live_shows", {
   investmentA: decimal("investment_a", { precision: 10, scale: 2 }).default('0.00'),
   investmentB: decimal("investment_b", { precision: 10, scale: 2 }).default('0.00'),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Books table for "Livres" category
+export const books = pgTable("books", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  price: bookPriceEnum("price").notNull(),
+  status: bookStatusEnum("status").default('pending'),
+  fileUrl: varchar("file_url"),
+  coverUrl: varchar("cover_url"),
+  totalSales: decimal("total_sales", { precision: 10, scale: 2 }).default('0.00'),
+  votesCount: integer("votes_count").default(0),
+  monthlyRank: integer("monthly_rank"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Book purchases for tracking readers
+export const bookPurchases = pgTable("book_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  bookId: varchar("book_id").notNull().references(() => books.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  votesGiven: integer("votes_given").default(0),
+  downloadToken: varchar("download_token"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Petites Annonces table
+export const ads = pgTable("ads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  category: adCategoryEnum("category").notNull(),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  location: varchar("location", { length: 100 }),
+  price: decimal("price", { precision: 10, scale: 2 }),
+  status: adStatusEnum("status").default('pending'),
+  expiresAt: timestamp("expires_at"),
+  viewsCount: integer("views_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Ad photos table (up to 10 photos per ad)
+export const adPhotos = pgTable("ad_photos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adId: varchar("ad_id").notNull().references(() => ads.id, { onDelete: 'cascade' }),
+  idx: integer("idx").notNull(), // order 0-9
+  isCover: boolean("is_cover").default(false),
+  alt: text("alt"),
+  storageKey: varchar("storage_key").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  bytes: integer("bytes").notNull(),
+  contentType: varchar("content_type").notNull(),
+  sha256: varchar("sha256").notNull(),
+  moderationStatus: moderationStatusEnum("moderation_status").default('pending'),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Curiosity dock stats for real-time counters
+export const curiosityStats = pgTable("curiosity_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: varchar("type", { length: 50 }).notNull(), // 'live_viewers', 'new_projects', etc.
+  value: integer("value").default(0),
+  metadata: jsonb("metadata"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User language preferences for i18n
+export const userLanguagePreferences = pgTable("user_language_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  preferredLanguage: varchar("preferred_language", { length: 10 }).default('fr-FR'),
+  detectedLanguage: varchar("detected_language", { length: 10 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Social posts table
