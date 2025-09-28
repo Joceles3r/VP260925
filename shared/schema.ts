@@ -67,6 +67,13 @@ export const reportTypeEnum = pgEnum('report_type', [
 // Content type enum for reports
 export const contentTypeEnum = pgEnum('content_type', ['article', 'video', 'social_post', 'comment', 'project']);
 
+// VisualScoutAI enums
+export const tcSegmentStatusEnum = pgEnum('tc_segment_status', ['active', 'paused']);
+export const tcCampaignStatusEnum = pgEnum('tc_campaign_status', ['draft', 'active', 'paused', 'stopped', 'archived']);
+export const tcCreativeStatusEnum = pgEnum('tc_creative_status', ['draft', 'approved', 'rejected', 'running']);
+export const tcChannelEnum = pgEnum('tc_channel', ['meta_ads', 'tiktok_ads', 'youtube_ads', 'x_ads', 'seo_content']);
+export const tcObjectiveEnum = pgEnum('tc_objective', ['traffic', 'video_views', 'leads']);
+
 // Book category specific enums
 export const bookStatusEnum = pgEnum('book_status', ['pending', 'active', 'completed', 'rejected']);
 export const bookPriceEnum = pgEnum('book_price', ['2', '3', '4', '5', '8']);
@@ -346,6 +353,76 @@ export const auditLogs = pgTable("audit_logs", {
   details: jsonb("details"),
   ipAddress: varchar("ip_address"),
   userAgent: varchar("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// VisualScoutAI Tables
+export const tcSignals = pgTable("tc_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  keyword: varchar("keyword", { length: 255 }),
+  hashtag: varchar("hashtag", { length: 255 }),
+  lang: varchar("lang", { length: 10 }),
+  ts: timestamp("ts").notNull(),
+  engagementJson: jsonb("engagement_json").notNull(),
+  sampleUrlHash: varchar("sample_url_hash", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tcSegments = pgTable("tc_segments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  rules: jsonb("rules").notNull(),
+  locale: varchar("locale", { length: 10 }).notNull(),
+  status: tcSegmentStatusEnum("status").default('active'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tcScores = pgTable("tc_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  segmentId: varchar("segment_id").notNull().references(() => tcSegments.id, { onDelete: 'cascade' }),
+  window: varchar("window", { length: 50 }).notNull(),
+  interestScoreAvg: decimal("interest_score_avg", { precision: 5, scale: 2 }).notNull(),
+  ctrPred: decimal("ctr_pred", { precision: 5, scale: 2 }),
+  cvrPred: decimal("cvr_pred", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tcCampaigns = pgTable("tc_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channel: tcChannelEnum("channel").notNull(),
+  objective: tcObjectiveEnum("objective").notNull(),
+  budgetCents: integer("budget_cents").notNull(),
+  currency: varchar("currency", { length: 3 }).default('EUR'),
+  startAt: timestamp("start_at"),
+  endAt: timestamp("end_at"),
+  status: tcCampaignStatusEnum("status").default('draft'),
+  segmentId: varchar("segment_id").references(() => tcSegments.id),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tcCreatives = pgTable("tc_creatives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => tcCampaigns.id, { onDelete: 'cascade' }),
+  locale: varchar("locale", { length: 10 }).notNull(),
+  copy: text("copy").notNull(),
+  assetRef: varchar("asset_ref"),
+  kpiJson: jsonb("kpi_json"),
+  status: tcCreativeStatusEnum("status").default('draft'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tcConsentLeads = pgTable("tc_consent_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: varchar("source", { length: 100 }).notNull(),
+  emailHash: varchar("email_hash", { length: 64 }).unique(),
+  consentTs: timestamp("consent_ts").notNull(),
+  locale: varchar("locale", { length: 10 }),
+  topics: jsonb("topics"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
