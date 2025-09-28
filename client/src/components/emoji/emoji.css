@@ -1,0 +1,16 @@
+.emoji-particle {
+  font-size: 22px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+  will-change: transform, opacity;
+}
+
+@keyframes emoji-rise {
+  0%   { transform: translate(-50%,-50%) translate3d(0,0,0) rotate(0) scale(var(--scale)); opacity: 0; }
+  8%   { opacity: 1; }
+  100% { transform: translate(-50%,-50%) translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(var(--scale)); opacity: 0; }
+}
+
+/* Glow néon subtil (option) pour le bouton déclencheur */
+.neon-glow {
+  box-shadow: 0 0 12px rgba(0,209,255,0.35), 0 0 18px rgba(123,44,255,0.25), 0 0 26px rgba(255,60,172,0.18);
+}

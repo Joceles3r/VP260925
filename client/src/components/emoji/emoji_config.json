@@ -1,0 +1,136 @@
+{
+  "enabled": true,
+  "global": {
+    "maxPerMinute": 6,
+    "cooldownMs": 3000
+  },
+  "profiles": {
+    "visitor": {
+      "density": "low"
+    },
+    "investisseur": {
+      "density": "medium"
+    },
+    "porteur": {
+      "density": "low"
+    },
+    "admin": {
+      "density": "low"
+    }
+  },
+  "events": {
+    "category_open": {
+      "packs": {
+        "films": [
+          "🎬",
+          "📽️",
+          "🍿",
+          "✨"
+        ],
+        "videos": [
+          "🎬",
+          "📽️",
+          "✨"
+        ],
+        "documentaires": [
+          "🎥",
+          "🧭",
+          "✨"
+        ],
+        "voix_info": [
+          "📰",
+          "🎙️",
+          "✨"
+        ],
+        "livres": [
+          "📚",
+          "📖",
+          "✨"
+        ],
+        "live_show": [
+          "🔴",
+          "🎥",
+          "✨"
+        ],
+        "petites_annonces": [
+          "📌",
+          "📸",
+          "🎭",
+          "✨"
+        ]
+      },
+      "count": {
+        "low": 6,
+        "medium": 10,
+        "high": 14
+      }
+    },
+    "invest_success": {
+      "emojis": [
+        "💸",
+        "🚀",
+        "✨"
+      ],
+      "count": {
+        "low": 8,
+        "medium": 12,
+        "high": 16
+      }
+    },
+    "purchase_success": {
+      "emojis": [
+        "🎟️",
+        "🎉",
+        "🍿"
+      ],
+      "count": {
+        "low": 8,
+        "medium": 12,
+        "high": 16
+      }
+    },
+    "follow_creator": {
+      "emojis": [
+        "⭐",
+        "🤝",
+        "✨"
+      ],
+      "count": {
+        "low": 6,
+        "medium": 10,
+        "high": 12
+      }
+    },
+    "live_show_start": {
+      "emojis": [
+        "🔴",
+        "🎉",
+        "✨"
+      ],
+      "count": {
+        "low": 8,
+        "medium": 12,
+        "high": 16
+      },
+      "oncePerSession": true
+    },
+    "announcement_new": {
+      "emojis": [
+        "📣",
+        "✨"
+      ],
+      "count": {
+        "low": 4,
+        "medium": 6,
+        "high": 8
+      }
+    },
+    "category_off_view": {
+      "emojis": [
+        "🚧",
+        "🛠️"
+      ],
+      "static": true
+    }
+  }
+}
