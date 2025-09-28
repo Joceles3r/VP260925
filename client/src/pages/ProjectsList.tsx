@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Play, Search, ListFilter as Filter, TrendingUp, Star, Users, Eye, Heart, Share2, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useEmojiSystem } from '@/hooks/useEmojiSystem';
+import ProjectModal from '@/components/ProjectModal';
 
 // Mock data pour les toggles de catégories
 const mockToggles = {
@@ -91,203 +93,12 @@ const getVotesFromAmount = (amount: number): number => {
   return mapping[amount] || 1;
 };
 
-interface ProjectModalProps {
-  project: any;
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-function ProjectModal({ project, isOpen, onClose }: ProjectModalProps) {
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-  const [showRules, setShowRules] = useState(false);
-
-  if (!isOpen) return null;
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="bg-slate-800 border border-slate-700 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="p-6 border-b border-slate-700">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-2">{project.title}</h2>
-                <p className="text-gray-400">par {project.creator}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  {project.trending && (
-                    <Badge className="bg-red-500/90 text-white">Tendance</Badge>
-                  )}
-                  {project.topTen && (
-                    <Badge className="bg-yellow-500/90 text-black">TOP 10</Badge>
-                  )}
-                  {project.isNew && (
-                    <Badge className="bg-green-500/90 text-white">Nouveau</Badge>
-                  )}
-                </div>
-              </div>
-              <Button variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white">
-                ✕
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
-            {/* Visuel */}
-            <div>
-              <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden mb-4 relative group">
-                <img 
-                  src={project.thumbnail} 
-                  alt={project.title}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                  <Button className="bg-white/20 backdrop-blur-sm hover:bg-white/30">
-                    <Play className="h-6 w-6 mr-2" />
-                    Voir l'extrait
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="text-sm text-gray-400 mb-4">
-                {project.description}
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="bg-slate-900/50 rounded-lg p-3">
-                  <div className="text-2xl font-bold text-blue-400">{project.votes}</div>
-                  <div className="text-sm text-gray-400">Votes</div>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3">
-                  <div className="text-2xl font-bold text-purple-400">{project.investors}</div>
-                  <div className="text-sm text-gray-400">Investisseurs</div>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3">
-                  <div className="text-2xl font-bold text-green-400">{project.amountRaised}€</div>
-                  <div className="text-sm text-gray-400">Collecté</div>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3">
-                  <div className="text-2xl font-bold text-pink-400">{project.engagementCoeff}</div>
-                  <div className="text-sm text-gray-400">Coeff. engagement</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div>
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-white mb-3">Regarder en entier</h3>
-                <Button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 mb-2">
-                  <Play className="h-4 w-4 mr-2" />
-                  Regarder pour {project.price}€
-                </Button>
-                <p className="text-xs text-gray-500">Accès complet à l'œuvre</p>
-              </div>
-
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-white">Investir</h3>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => setShowRules(!showRules)}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    <Info className="h-4 w-4 mr-1" />
-                    Règles
-                  </Button>
-                </div>
-                
-                {showRules && (
-                  <div className="bg-slate-900/50 rounded-lg p-3 mb-4 text-sm text-gray-400">
-                    <p className="mb-2">
-                      <strong>Règles de la catégorie :</strong>
-                    </p>
-                    <ul className="list-disc list-inside space-y-1 text-xs">
-                      <li>Investissement minimum : 2€, maximum : 20€</li>
-                      <li>Plus vous investissez, plus vous avez de votes</li>
-                      <li>Redistribution selon classement final</li>
-                      <li>Arrondis à l'euro inférieur</li>
-                    </ul>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-5 gap-2 mb-4">
-                  {project.investmentOptions.map((amount: number) => (
-                    <Button
-                      key={amount}
-                      variant={selectedAmount === amount ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedAmount(amount)}
-                      className={`text-xs ${
-                        selectedAmount === amount 
-                          ? 'bg-gradient-to-r from-blue-500 to-purple-600' 
-                          : 'border-slate-600 text-gray-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      {amount}€
-                    </Button>
-                  ))}
-                </div>
-
-                {selectedAmount && (
-                  <div className="bg-slate-900/50 rounded-lg p-3 mb-4">
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-gray-400">Montant :</span>
-                      <span className="text-white font-semibold">{selectedAmount}€</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Votes obtenus :</span>
-                      <span className="text-blue-400 font-semibold">{getVotesFromAmount(selectedAmount)}</span>
-                    </div>
-                  </div>
-                )}
-
-                <Button 
-                  className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
-                  disabled={!selectedAmount}
-                >
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Investir {selectedAmount ? `${selectedAmount}€` : ''}
-                </Button>
-              </div>
-
-              {/* Actions secondaires */}
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1 border-slate-600 text-gray-300">
-                  <Heart className="h-4 w-4 mr-1" />
-                  Favoris
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1 border-slate-600 text-gray-300">
-                  <Share2 className="h-4 w-4 mr-1" />
-                  Partager
-                </Button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
 export default function ProjectsList() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProject, setSelectedProject] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const emoji = useEmojiSystem();
 
   // Récupération des toggles de catégories
   const { data: toggles = mockToggles } = useQuery({
@@ -327,6 +138,27 @@ export default function ProjectsList() {
     { id: 'live_show', name: 'Live Show', visible: toggles.live_show?.visible },
     { id: 'livres', name: 'Livres', visible: toggles.livres?.visible },
   ];
+
+  const handleCategoryClick = (categoryId: string, e: React.MouseEvent) => {
+    if (categoryId === 'all') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    
+    if (categories.find(c => c.id === categoryId)?.visible) {
+      emoji.triggerCategoryOpen(categoryId, x, y);
+    } else {
+      emoji.triggerCategoryOff(x, y);
+    }
+  };
+
+  const handleProjectClick = (project: any, e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerPurchaseSuccess(x, y);
+    setSelectedProject(project);
+  };
 
   if (isLoading) {
     return (
@@ -380,7 +212,10 @@ export default function ProjectsList() {
                 key={category.id}
                 variant={selectedCategory === category.id ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={(e) => {
+                  handleCategoryClick(category.id, e);
+                  setSelectedCategory(category.id);
+                }}
                 disabled={!category.visible}
                 className={`${
                   selectedCategory === category.id
@@ -411,7 +246,7 @@ export default function ProjectsList() {
             >
               <Card 
                 className="bg-slate-800/50 border-slate-700 hover:border-slate-600 transition-all duration-200 backdrop-blur-sm overflow-hidden group cursor-pointer"
-                onClick={() => setSelectedProject(project)}
+                onClick={(e) => handleProjectClick(project, e)}
               >
                 <div className="relative overflow-hidden">
                   <img 

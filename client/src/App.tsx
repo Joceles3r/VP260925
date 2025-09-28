@@ -24,10 +24,12 @@ import KYCOnboarding from "@/pages/KYCOnboarding";
 import NotFound from "@/pages/NotFound";
 import CuriosityDock from "@/components/CuriosityDock";
 import { useCuriosityDock } from "@/hooks/useCuriosityDock";
+import { useEmojiSystem } from "@/hooks/useEmojiSystem";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { stats, actions } = useCuriosityDock();
+  const emoji = useEmojiSystem();
 
   if (isLoading) {
     return <LoadingScreen />;

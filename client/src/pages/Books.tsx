@@ -17,6 +17,7 @@ import {
 import { formatCurrency } from '@shared/utils';
 import { VISUAL_CONSTANTS } from '@shared/visual-constants';
 import { useI18n } from '@/hooks/useI18n';
+import { useEmojiSystem } from '@/hooks/useEmojiSystem';
 
 interface Book {
   id: string;
@@ -40,6 +41,7 @@ export default function Books() {
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<'votes' | 'sales' | 'recent'>('votes');
   const { t, formatCurrency: formatCurrencyI18n, formatDate } = useI18n();
+  const emoji = useEmojiSystem();
 
   // Mock data for demonstration
   const mockBooks: Book[] = [
@@ -120,6 +122,16 @@ export default function Books() {
   const handlePurchase = (book: Book) => {
     // This would integrate with the payment system
     console.log('Purchase book:', book.id);
+    // Trigger success animation
+    emoji.triggerPurchaseSuccess();
+  };
+
+  const handleCategoryFilter = (price: number | null, e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerCategoryOpen('livres', x, y);
+    setSelectedPrice(price);
   };
 
   if (isLoading) {
@@ -179,7 +191,7 @@ export default function Books() {
           <Button
             variant={selectedPrice === null ? "default" : "outline"}
             size="sm"
-            onClick={() => setSelectedPrice(null)}
+            onClick={(e) => handleCategoryFilter(null, e)}
           >
             {t('common.all')}
           </Button>
@@ -188,7 +200,7 @@ export default function Books() {
               key={price}
               variant={selectedPrice === price ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedPrice(price)}
+              onClick={(e) => handleCategoryFilter(price, e)}
             >
               {price}€
             </Button>

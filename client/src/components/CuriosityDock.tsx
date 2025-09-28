@@ -12,6 +12,7 @@ import {
   Zap
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useEmojiSystem } from '@/hooks/useEmojiSystem';
 
 interface CuriosityDockProps {
   stats?: {
@@ -35,6 +36,49 @@ export default function CuriosityDock({
   onRandom,
   onQuest,
 }: CuriosityDockProps) {
+  const emoji = useEmojiSystem();
+
+  const handleGoLive = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerLiveShowStart(x, y);
+    onGoLive();
+  };
+
+  const handleTop10 = (e: React.MouseEvent) => {
+    if (!stats.topActive) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerCategoryOpen('films', x, y); // Assume films for demo
+    onTop10();
+  };
+
+  const handleNew = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerAnnouncement(x, y);
+    onNew();
+  };
+
+  const handleRandom = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.trigger('invest_success', { x, y });
+    onRandom();
+  };
+
+  const handleQuest = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.trigger('purchase_success', { x, y });
+    onQuest();
+  };
+
   return (
     <motion.div 
       initial={{ y: 100, opacity: 0 }}
@@ -49,8 +93,8 @@ export default function CuriosityDock({
             <Button
             variant="ghost"
             size="sm"
-            onClick={onGoLive}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-500/10 transition-all duration-200 text-white"
+            onClick={handleGoLive}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-500/10 transition-all duration-200 text-white live-pulse"
             >
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -77,7 +121,7 @@ export default function CuriosityDock({
             <Button
             variant="ghost"
             size="sm"
-            onClick={onTop10}
+            onClick={handleTop10}
             disabled={!stats.topActive}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${
               stats.topActive 
@@ -100,7 +144,7 @@ export default function CuriosityDock({
             <Button
             variant="ghost"
             size="sm"
-            onClick={onNew}
+            onClick={handleNew}
             className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-blue-500/10 transition-all duration-200 text-white"
             >
             <Sparkles className="h-4 w-4 text-blue-500" />
@@ -117,8 +161,8 @@ export default function CuriosityDock({
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
             size="sm"
-            onClick={onRandom}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+            onClick={handleRandom}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl neon-glow"
             >
             <Shuffle className="h-4 w-4" />
             <span className="text-sm font-semibold">Surprends-moi</span>
@@ -130,7 +174,7 @@ export default function CuriosityDock({
             <Button
             variant="outline"
             size="sm"
-            onClick={onQuest}
+            onClick={handleQuest}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 text-amber-300 hover:from-amber-500/20 hover:to-orange-500/20 transition-all duration-200"
             >
             <Gift className="h-4 w-4" />

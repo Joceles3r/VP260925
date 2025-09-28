@@ -19,6 +19,7 @@ import {
   Info
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useEmojiSystem } from '@/hooks/useEmojiSystem';
 
 // Mock data pour les catégories
 const categories = [
@@ -109,6 +110,21 @@ const featuredProjects = [
 export default function Landing() {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const emoji = useEmojiSystem();
+
+  const handleCategoryClick = (categoryId: string, e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerCategoryOpen(categoryId, x, y);
+  };
+
+  const handleProjectClick = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    emoji.triggerPurchaseSuccess(x, y);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -198,7 +214,8 @@ export default function Landing() {
                         {category.description}
                       </p>
                       <Button 
-                        className={`w-full bg-gradient-to-r ${category.color} hover:opacity-90 text-white font-semibold transition-all duration-200`}
+                        onClick={(e) => handleCategoryClick(category.id, e)}
+                        className={`w-full bg-gradient-to-r ${category.color} hover:opacity-90 text-white font-semibold transition-all duration-200 hover:neon-glow`}
                       >
                         Découvrir
                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -341,7 +358,11 @@ export default function Landing() {
                         </span>
                         <span className="text-blue-400 font-semibold">{project.price}€</span>
                       </div>
-                      <Button size="sm" className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
+                      <Button 
+                        size="sm" 
+                        onClick={handleProjectClick}
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 hover:neon-glow"
+                      >
                         Voir
                       </Button>
                     </div>
