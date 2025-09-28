@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from 'url';
+import { router as togglesRouter } from './api/toggles';
+import { VISUAL_CONSTANTS } from '../shared/visual-constants';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +18,9 @@ app.use(cors({
 
 // Parse JSON bodies
 app.use(express.json());
+
+// API routes
+app.use(togglesRouter);
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -55,6 +60,8 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
 
 // Mock projects route  
 app.get('/api/projects', (req: Request, res: Response) => {
+  const { category, status, page = 1, limit = 20 } = req.query;
+  
   const mockProjects = [
     {
       id: 'proj-1',
@@ -100,14 +107,30 @@ app.get('/api/projects', (req: Request, res: Response) => {
     }
   ];
 
+  let filteredProjects = mockProjects;
+  
+  // Apply filters
+  if (category && category !== 'all') {
+    filteredProjects = filteredProjects.filter(p => p.category === category);
+  }
+  
+  if (status) {
+    filteredProjects = filteredProjects.filter(p => p.status === status);
+  }
+  
+  // Apply pagination
+  const startIndex = (Number(page) - 1) * Number(limit);
+  const endIndex = startIndex + Number(limit);
+  const paginatedProjects = filteredProjects.slice(startIndex, endIndex);
+
   res.json({
     success: true,
-    data: mockProjects,
+    data: paginatedProjects,
     pagination: {
-      page: 1,
-      limit: 20,
-      total: mockProjects.length,
-      totalPages: 1
+      page: Number(page),
+      limit: Number(limit),
+      total: filteredProjects.length,
+      totalPages: Math.ceil(filteredProjects.length / Number(limit))
     }
   });
 });
@@ -243,17 +266,30 @@ app.get('/api/curiosity-stats', (req: Request, res: Response) => {
 });
 
 // Mock category toggles
-app.get('/api/category-toggles', (req: Request, res: Response) => {
+app.get('/api/visual-constants', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: VISUAL_CONSTANTS
+  });
+});
+
+// Disclaimer page
+app.get('/api/disclaimer', (req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
-      films: { visible: true, message: "" },
-      videos: { visible: true, message: "" },
-      documentaires: { visible: true, message: "" },
-      voix_info: { visible: false, message: "Catégorie en travaux" },
-      live_show: { visible: true, message: "" },
-      livres: { visible: true, message: "" },
-      petites_annonces: { visible: true, message: "" }
+      title: "Disclaimer & Informations essentielles",
+      lastUpdated: new Date().toISOString(),
+      sections: [
+        {
+          title: "Avertissement général",
+          content: "VISUAL combine streaming et micro-investissement. Risques de perte. Aucune garantie de gains."
+        },
+        {
+          title: "Règles financières",
+          content: "70% créateur / 30% VISUAL sur ventes. Arrondis à l'euro inférieur pour utilisateurs."
+        }
+      ]
     }
   });
 });

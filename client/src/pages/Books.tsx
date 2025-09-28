@@ -15,6 +15,8 @@ import {
   Calendar
 } from 'lucide-react';
 import { formatCurrency } from '@shared/utils';
+import { VISUAL_CONSTANTS } from '@shared/visual-constants';
+import { useI18n } from '@/hooks/useI18n';
 
 interface Book {
   id: string;
@@ -37,6 +39,7 @@ interface Book {
 export default function Books() {
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<'votes' | 'sales' | 'recent'>('votes');
+  const { t, formatCurrency: formatCurrencyI18n, formatDate } = useI18n();
 
   // Mock data for demonstration
   const mockBooks: Book[] = [
@@ -107,7 +110,7 @@ export default function Books() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const priceOptions = [2, 3, 4, 5, 8];
+  const priceOptions = VISUAL_CONSTANTS.priceTiers.livresAuthor;
 
   // Calculate monthly cycle info
   const now = new Date();
@@ -135,9 +138,9 @@ export default function Books() {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <BookOpen className="h-8 w-8 text-green-600" />
-          <h1 className="text-3xl font-bold">Catégorie Livres</h1>
+          <h1 className="text-3xl font-bold">{t('category.books')}</h1>
           <Badge variant="secondary" className="bg-green-100 text-green-800">
-            Cycle Mensuel
+            {t('books.monthlyCycle')}
           </Badge>
         </div>
         
@@ -148,15 +151,15 @@ export default function Books() {
               <div className="flex items-center gap-4">
                 <Calendar className="h-5 w-5 text-green-600" />
                 <div>
-                  <p className="font-medium text-green-900">Cycle en cours</p>
+                  <p className="font-medium text-green-900">{t('books.currentCycle')}</p>
                   <p className="text-sm text-green-700">
-                    Clôture le dernier jour du mois à 23:59:59 (Europe/Paris)
+                    {t('books.closureInfo')}
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-green-900">{daysRemaining}</p>
-                <p className="text-sm text-green-700">jours restants</p>
+                <p className="text-sm text-green-700">{t('books.daysRemaining')}</p>
               </div>
             </div>
             <div className="mt-4">
@@ -172,13 +175,13 @@ export default function Books() {
       {/* Filters */}
       <div className="flex flex-wrap gap-4 mb-6">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Prix :</span>
+          <span className="text-sm font-medium">{t('finance.price')} :</span>
           <Button
             variant={selectedPrice === null ? "default" : "outline"}
             size="sm"
             onClick={() => setSelectedPrice(null)}
           >
-            Tous
+            {t('common.all')}
           </Button>
           {priceOptions.map(price => (
             <Button
@@ -193,27 +196,27 @@ export default function Books() {
         </div>
         
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Trier par :</span>
+          <span className="text-sm font-medium">{t('common.sortBy')} :</span>
           <Button
             variant={sortBy === 'votes' ? "default" : "outline"}
             size="sm"
             onClick={() => setSortBy('votes')}
           >
-            Votes
+            {t('finance.votes')}
           </Button>
           <Button
             variant={sortBy === 'sales' ? "default" : "outline"}
             size="sm"
             onClick={() => setSortBy('sales')}
           >
-            Ventes
+            {t('books.sales')}
           </Button>
           <Button
             variant={sortBy === 'recent' ? "default" : "outline"}
             size="sm"
             onClick={() => setSortBy('recent')}
           >
-            Récent
+            {t('common.recent')}
           </Button>
         </div>
       </div>
@@ -256,11 +259,11 @@ export default function Books() {
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4" />
-                    <span>{book.votesCount}</span>
+                    <span>{book.votesCount} {t('finance.votes')}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Euro className="h-4 w-4" />
-                    <span>{formatCurrency(book.totalSales)}</span>
+                    <span>{formatCurrencyI18n(book.totalSales)}</span>
                   </div>
                 </div>
                 <div className="text-lg font-bold text-green-600">
@@ -273,7 +276,7 @@ export default function Books() {
                 className="w-full bg-green-600 hover:bg-green-700"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Acheter & Télécharger
+                {t('action.buyAndDownload')}
               </Button>
             </CardContent>
           </Card>
@@ -284,7 +287,7 @@ export default function Books() {
         <div className="text-center py-12">
           <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <p className="text-muted-foreground">
-            Aucun livre trouvé avec les filtres sélectionnés.
+            {t('books.noResults')}
           </p>
         </div>
       )}

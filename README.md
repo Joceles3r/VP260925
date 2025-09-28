@@ -8,17 +8,22 @@
 
 ## 🚀 Vue d'ensemble
 
-VISUAL est une plateforme révolutionnaire qui permet aux investisseurs de soutenir des projets de contenus visuels avec de petits montants (€1-€20) tout en influençant les classements via un système de vote communautaire. Les créateurs perçoivent des droits d'auteur et financements, tandis que les investisseurs gagnent s'ils sélectionnent les projets du TOP 10.
+VISUAL est une plateforme révolutionnaire qui permet aux investisseurs de soutenir des projets de contenus visuels avec de petits montants tout en influençant les classements via un système de vote communautaire. Les créateurs perçoivent des droits d'auteur et financements, tandis que les investisseurs gagnent s'ils sélectionnent les projets du TOP 10.
 
 ### ✨ Fonctionnalités principales
 
-- **💰 Micro-investissements** : €1 à €20 par projet avec calculs ROI automatiques
+- **💰 Micro-investissements** : Montants selon catégorie avec calculs ROI automatiques
+  - **Vidéos/Documentaires/Films** : 2-20€ (prix porteurs 2/3/4/5/10€)
+  - **Livres** : 2-20€ lecteurs (prix auteurs 2/3/4/5/8€)
+  - **Les Voix de l'Info** : 0,20-10€ (micro-prix articles 0,20-5€)
 - **🎯 Système de vote** : Influence communautaire sur les classements de projets  
 - **🤖 Scoring ML** : Évaluation automatique des projets (0-10 points)
 - **📊 Dashboard avancé** : Suivi portefeuille et métriques de performance
 - **🔴 Shows live** : Battles d'artistes en temps réel avec investissements
 - **👥 Réseau social** : Posts, likes, commentaires et partage de projets
 - **🛡️ Conformité AMF** : Rapports automatiques et audit trail complet
+- **🌍 Multilingue** : Support FR/EN/ES avec routing i18n
+- **📱 Toggles ON/OFF** : Gestion dynamique des catégories
 
 ## 🏗️ Architecture
 
@@ -134,6 +139,7 @@ docker run -d \
 | `SESSION_SECRET` | Clé de session | `your-secure-secret-key` |
 | `NODE_ENV` | Environnement | `production` |
 | `STRIPE_SECRET_KEY` | Paiements Stripe | `sk_live_...` |
+| `STRIPE_WEBHOOK_SECRET` | Webhooks Stripe | `whsec_...` |
 
 ### Structure base de données
 
@@ -184,16 +190,55 @@ PATCH /api/notifications/{id}/read  # Marquer lu
 ## 🎯 Modèle économique
 
 ### Répartition des revenus
-- **70%** → Créateurs de contenus
-- **30%** → Commission plateforme  
+- **Articles/Livres** : 70% créateur / 30% VISUAL
+- **Évènements vidéo** : 40% investisseurs TOP10, 30% porteurs TOP10, 7% investisseurs 11-100, 23% VISUAL
 
 ### Redistribution mensuelle
-- **60%** → TOP 10 créateurs du mois
-- **40%** → Investisseurs gagnants
+- **Catégorie Livres** : 60% auteurs gagnants / 40% lecteurs gagnants (cycle mensuel calendaire)
+- **Arrondis** : Paiements utilisateurs à l'euro inférieur, restes → VISUAL
 
 ### Système VISUpoints
 - **1 EUR = 100 VISUpoints**
 - Minimum retrait : **2 500 VP** (25€)
+- Conversion avec KYC/Stripe requis
+
+## 🌍 Internationalisation
+
+### Langues supportées
+- **Français (FR)** - Langue par défaut
+- **Anglais (EN)** - English
+- **Espagnol (ES)** - Español
+
+### Routing multilingue
+- URLs avec préfixes : `/fr/`, `/en/`, `/es/`
+- Balises `hreflang` automatiques
+- Sitemaps localisés par langue
+- Détection automatique langue navigateur
+
+## 📋 Catégories & Règles
+
+### Films / Vidéos / Documentaires
+- **Tranches investissement** : 2, 3, 4, 5, 6, 8, 10, 12, 15, 20€
+- **Prix porteurs** : 2, 3, 4, 5, 10€ (max 10€)
+- **Redistribution** : 40/30/7/23 (investisseurs TOP10/porteurs TOP10/investisseurs 11-100/VISUAL)
+
+### Livres (Cycle mensuel)
+- **Ouverture** : 1er de chaque mois 00:00:00 (Europe/Paris)
+- **Clôture** : Dernier jour 23:59:59 (28/29/30/31 jours)
+- **Prix auteurs** : 2, 3, 4, 5, 8€ (max 8€)
+- **Tranches lecteurs** : 2, 3, 4, 5, 6, 8, 10, 12, 15, 20€
+- **Pot mensuel** : 60% auteurs gagnants / 40% lecteurs gagnants
+
+### Les Voix de l'Info
+- **Micro-prix articles** : 0,20; 0,50; 1; 2; 3; 4; 5€
+- **Tranches lecteurs** : 0,20; 0,50; 1; 2; 3; 4; 5; 10€
+- **Split par vente** : 70% créateur / 30% VISUAL
+
+### Petites Annonces
+- **Hors redistribution** (pas de 40/30/7/23)
+- **Revenus VISUAL** : Options payantes, Pro 25€/mois, escrow 5%
+- **Jusqu'à 10 photos** par annonce
+- **Thématique** : Audiovisuel/spectacle uniquement
 
 ## 🛡️ Sécurité
 
@@ -203,6 +248,7 @@ PATCH /api/notifications/{id}/read  # Marquer lu
 - ✅ **Rate limiting** Protection API 
 - ✅ **Validation** Zod schemas côté backend
 - ✅ **Audit logs** Traçabilité complète des actions
+- ✅ **Toggles sécurisés** Gestion ON/OFF avec cache
 
 ## 🚦 Monitoring & Logs
 
@@ -216,6 +262,9 @@ curl http://localhost/api/health
 
 # Logs temps réel
 docker-compose logs -f visual-app
+
+# Toggles des catégories
+curl http://localhost:8001/api/public/toggles
 ```
 
 ### Métriques disponibles
@@ -247,7 +296,7 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 - **Documentation** : [docs.visual-platform.com](https://docs.visual-platform.com)
 - **Issues** : [GitHub Issues](https://github.com/visual-platform/visual/issues)  
 - **Email** : support@visual-platform.com
-- **Discord** : [Communauté VISUAL](https://discord.gg/visual)
+- **Disclaimer** : [Informations légales](/disclaimer)
 
 ---
 
