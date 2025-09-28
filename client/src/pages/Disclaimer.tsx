@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Shield, AlertTriangle, Info, DollarSign, FileText, Phone } from 'lucide-react';
+import { Shield, TriangleAlert as AlertTriangle, Info, DollarSign, FileText, Phone } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Disclaimer() {
@@ -43,7 +43,7 @@ export default function Disclaimer() {
                 VISUAL est une plateforme qui combine <strong>streaming de contenus</strong> et{' '}
                 <strong>micro-investissement</strong> dans des projets créatifs. Les montants engagés 
                 comportent un <strong>risque de perte</strong>. VISUAL <strong>ne garantit aucun gain</strong>. 
-                Les utilisateurs doivent n'investir que des sommes qu'ils peuvent se permettre de perdre.
+                Les utilisateurs doivent n'investir que des sommes qu\'ils peuvent se permettre de perdre.
               </p>
             </CardContent>
           </Card>
