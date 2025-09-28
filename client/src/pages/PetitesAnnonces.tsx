@@ -4,18 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { 
-  Briefcase, 
-  MapPin, 
-  Clock, 
-  Euro,
-  Camera,
-  Users,
-  Settings,
-  Search,
-  Filter,
-  Plus
-} from 'lucide-react';
+import { Briefcase, MapPin, Clock, Euro, Camera, Users, Settings, Search, ListFilter as Filter, Plus } from 'lucide-react';
 import { formatCurrency } from '@shared/utils';
 
 interface Ad {
