@@ -365,7 +365,7 @@ export default function Landing() {
               <div className="text-sm text-gray-400 leading-relaxed">
                 <p className="mb-2">
                   <strong className="text-gray-300">Avertissement :</strong> Les investissements comportent des risques. 
-                  Aucune promesse de gains n'est garantie. Les redistributions sont arrondies à l'euro inférieur pour les utilisateurs, 
+                  Aucune promesse de gains n'est garantie. Les redistributions sont arrondies à l\'euro inférieur pour les utilisateurs, 
                   les restes reviennent à VISUAL.
                 </p>
                 <p>

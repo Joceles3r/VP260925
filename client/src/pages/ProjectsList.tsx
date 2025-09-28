@@ -4,18 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { 
-  Play, 
-  Search, 
-  Filter,
-  TrendingUp,
-  Star,
-  Users,
-  Eye,
-  Heart,
-  Share2,
-  Info
-} from 'lucide-react';
+import { Play, Search, ListFilter as Filter, TrendingUp, Star, Users, Eye, Heart, Share2, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Mock data pour les toggles de catégories
