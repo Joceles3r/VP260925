@@ -125,6 +125,16 @@
         "high": 8
       }
     },
+    "surprise": {
+      "emojis": [
+        "✨"
+      ],
+      "count": {
+        "low": 8,
+        "medium": 12,
+        "high": 16
+      }
+    },
     "category_off_view": {
       "emojis": [
         "🚧",

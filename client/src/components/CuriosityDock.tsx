@@ -161,7 +161,13 @@ export default function CuriosityDock({
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
             size="sm"
-            onClick={handleRandom}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = rect.left + rect.width / 2;
+              const y = rect.top + rect.height / 2;
+              emoji.triggerSurprise(x, y);
+              onRandom();
+            }}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl neon-glow"
             >
             <Shuffle className="h-4 w-4" />
@@ -174,7 +180,13 @@ export default function CuriosityDock({
             <Button
             variant="outline"
             size="sm"
-            onClick={handleQuest}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = rect.left + rect.width / 2;
+              const y = rect.top + rect.height / 2;
+              emoji.triggerSurprise(x, y);
+              onQuest();
+            }}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 text-amber-300 hover:from-amber-500/20 hover:to-orange-500/20 transition-all duration-200"
             >
             <Gift className="h-4 w-4" />

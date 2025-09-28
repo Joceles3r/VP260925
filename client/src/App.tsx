@@ -5,6 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
+import { useEmojiOnRouteChange } from "@/hooks/useEmojiOnRouteChange";
+import { initEmojiOrchestrator } from "@/components/emoji/emoji_orchestrator";
+import emojiConfig from "@/components/emoji/emoji_config.json";
 import Navigation from "@/components/Navigation";
 import LoadingScreen from "@/components/LoadingScreen";
 
@@ -29,7 +32,18 @@ import { useEmojiSystem } from "@/hooks/useEmojiSystem";
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { stats, actions } = useCuriosityDock();
-  const emoji = useEmojiSystem();
+  
+  // Initialize emoji system on app boot
+  useEffect(() => {
+    initEmojiOrchestrator(emojiConfig as any);
+  }, []);
+  
+  // Auto-trigger emojis on route changes
+  useEmojiOnRouteChange({
+    profile: user?.profileType === 'creator' ? 'porteur' : 
+             user?.profileType === 'admin' ? 'admin' :
+             user ? 'investisseur' : 'visitor'
+  });
 
   if (isLoading) {
     return <LoadingScreen />;

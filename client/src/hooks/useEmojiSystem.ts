@@ -1,60 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from './useAuth';
 import { initEmojiOrchestrator, triggerEmoji } from '@/components/emoji/emoji_orchestrator';
+import emojiConfig from '@/components/emoji/emoji_config.json';
 
-// Configuration des emojis
-const emojiConfig = {
-  enabled: true,
-  global: {
-    maxPerMinute: 6,
-    cooldownMs: 3000
-  },
-  profiles: {
-    visitor: { density: "low" as const },
-    investisseur: { density: "medium" as const },
-    porteur: { density: "low" as const },
-    admin: { density: "low" as const }
-  },
-  events: {
-    category_open: {
-      packs: {
-        films: ["🎬", "📽️", "🍿", "✨"],
-        videos: ["🎬", "📽️", "✨"],
-        documentaires: ["🎥", "🧭", "✨"],
-        voix_info: ["📰", "🎙️", "✨"],
-        livres: ["📚", "📖", "✨"],
-        live_show: ["🔴", "🎥", "✨"],
-        petites_annonces: ["📌", "📸", "🎭", "✨"]
-      },
-      count: { low: 6, medium: 10, high: 14 }
-    },
-    invest_success: {
-      emojis: ["💸", "🚀", "✨"],
-      count: { low: 8, medium: 12, high: 16 }
-    },
-    purchase_success: {
-      emojis: ["🎟️", "🎉", "🍿"],
-      count: { low: 8, medium: 12, high: 16 }
-    },
-    follow_creator: {
-      emojis: ["⭐", "🤝", "✨"],
-      count: { low: 6, medium: 10, high: 12 }
-    },
-    live_show_start: {
-      emojis: ["🔴", "🎉", "✨"],
-      count: { low: 8, medium: 12, high: 16 },
-      oncePerSession: true
-    },
-    announcement_new: {
-      emojis: ["📣", "✨"],
-      count: { low: 4, medium: 6, high: 8 }
-    },
-    category_off_view: {
-      emojis: ["🚧", "🛠️"],
-      static: true
-    }
-  }
-};
 
 export function useEmojiSystem() {
   const { user } = useAuth();
@@ -113,6 +61,10 @@ export function useEmojiSystem() {
     trigger('announcement_new', { x, y });
   };
 
+  const triggerSurprise = (x?: number, y?: number) => {
+    trigger('surprise', { x, y });
+  };
+
   const triggerCategoryOff = (x?: number, y?: number) => {
     trigger('category_off_view', { x, y });
   };
@@ -124,6 +76,7 @@ export function useEmojiSystem() {
     triggerFollowCreator,
     triggerLiveShowStart,
     triggerAnnouncement,
+    triggerSurprise,
     triggerCategoryOff,
     trigger
   };

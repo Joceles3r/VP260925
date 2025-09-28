@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Briefcase, MapPin, Clock, Euro, Camera, Users, Settings, Search, ListFilter as Filter, Plus } from 'lucide-react';
 import { formatCurrency } from '@shared/utils';
+import { ToggleGate } from '@/components/ToggleGate';
+import { useEmojiSystem } from '@/hooks/useEmojiSystem';
 
 interface Ad {
   id: string;
@@ -51,6 +53,7 @@ export default function PetitesAnnonces() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const { triggerCategoryOpen } = useEmojiSystem();
 
   // Mock data for demonstration
   const mockAds: Ad[] = [
@@ -147,6 +150,7 @@ export default function PetitesAnnonces() {
 
   const getDaysRemaining = (expiresAt: string) => {
     const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    triggerCategoryOpen('petites_annonces', x, y);
     return Math.max(0, days);
   };
 
@@ -161,7 +165,8 @@ export default function PetitesAnnonces() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <ToggleGate section="petites_annonces" profile="visitor">
+      <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -311,6 +316,7 @@ export default function PetitesAnnonces() {
           </p>
         </div>
       )}
-    </div>
+      </div>
+    </ToggleGate>
   );
 }

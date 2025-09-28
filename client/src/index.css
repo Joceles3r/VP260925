@@ -3,6 +3,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import emoji animations */
+@import './components/emoji/emoji.css';
+
 /* Emoji animations */
 .emoji-particle {
   font-size: 22px;
