@@ -242,6 +242,22 @@ app.get('/api/curiosity-stats', (req: Request, res: Response) => {
   });
 });
 
+// Mock category toggles
+app.get('/api/category-toggles', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      films: { visible: true, message: "" },
+      videos: { visible: true, message: "" },
+      documentaires: { visible: true, message: "" },
+      voix_info: { visible: false, message: "Catégorie en travaux" },
+      live_show: { visible: true, message: "" },
+      livres: { visible: true, message: "" },
+      petites_annonces: { visible: true, message: "" }
+    }
+  });
+});
+
 // Mock logout route
 app.post('/api/logout', (req: Request, res: Response) => {
   res.json({

@@ -8,8 +8,10 @@ import {
   Shuffle, 
   Gift,
   Users,
-  Eye
+  Eye,
+  Zap
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface CuriosityDockProps {
   stats?: {
@@ -34,93 +36,112 @@ export default function CuriosityDock({
   onQuest,
 }: CuriosityDockProps) {
   return (
-    <div className="fixed inset-x-0 bottom-4 z-50 mx-auto max-w-6xl px-4">
-      <div className="mx-auto rounded-2xl shadow-2xl bg-white/90 backdrop-blur-md border border-gray-200/50 dark:bg-gray-900/90 dark:border-gray-700/50">
+    <motion.div 
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="fixed inset-x-0 bottom-4 z-50 mx-auto max-w-6xl px-4"
+    >
+      <div className="mx-auto rounded-2xl shadow-2xl bg-slate-800/90 backdrop-blur-md border border-slate-700/50">
         <div className="flex items-center justify-between px-6 py-3 gap-3">
           {/* En Direct */}
-          <Button
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
             variant="ghost"
             size="sm"
             onClick={onGoLive}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-all duration-200"
-          >
+            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-500/10 transition-all duration-200 text-white"
+            >
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Radio className="h-4 w-4 text-red-500" />
-                <div className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                <motion.div 
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500"
+                />
               </div>
-              <span className="text-sm font-medium">En direct</span>
+              <span className="text-sm font-medium text-white">En direct</span>
             </div>
-            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-1 text-xs text-gray-400">
               <Users className="h-3 w-3" />
               <span>{stats.liveViewers}</span>
               <span>•</span>
               <span>{stats.liveShows} lives</span>
             </div>
-          </Button>
+            </Button>
+          </motion.div>
 
           {/* TOP 10 */}
-          <Button
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
             variant="ghost"
             size="sm"
             onClick={onTop10}
             disabled={!stats.topActive}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${
               stats.topActive 
-                ? 'hover:bg-amber-50 dark:hover:bg-amber-950/20' 
+                ? 'hover:bg-amber-500/10 text-white' 
                 : 'opacity-40 cursor-not-allowed'
             }`}
-          >
+            >
             <Trophy className="h-4 w-4 text-amber-500" />
-            <span className="text-sm font-medium">TOP 10</span>
+            <span className="text-sm font-medium text-white">TOP 10</span>
             {stats.topActive && (
-              <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                🔥
+              <Badge variant="secondary" className="text-xs bg-amber-500/20 text-amber-300 border-amber-500/30">
+                <Zap className="h-3 w-3" />
               </Badge>
             )}
-          </Button>
+            </Button>
+          </motion.div>
 
           {/* Nouveau */}
-          <Button
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
             variant="ghost"
             size="sm"
             onClick={onNew}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all duration-200"
-          >
+            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-blue-500/10 transition-all duration-200 text-white"
+            >
             <Sparkles className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium">Nouveau</span>
+            <span className="text-sm font-medium text-white">Nouveau</span>
             {stats.newCount > 0 && (
-              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+              <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-300 border-blue-500/30">
                 +{stats.newCount}
               </Badge>
             )}
-          </Button>
+            </Button>
+          </motion.div>
 
           {/* Surprends-moi */}
-          <Button
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
             size="sm"
             onClick={onRandom}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
+            >
             <Shuffle className="h-4 w-4" />
             <span className="text-sm font-semibold">Surprends-moi</span>
-          </Button>
+            </Button>
+          </motion.div>
 
           {/* Surprise du jour */}
-          <Button
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
             variant="outline"
             size="sm"
             onClick={onQuest}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:from-amber-100 hover:to-orange-100 dark:from-amber-950/20 dark:to-orange-950/20 dark:border-amber-800 dark:text-amber-200 transition-all duration-200"
-          >
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 text-amber-300 hover:from-amber-500/20 hover:to-orange-500/20 transition-all duration-200"
+            >
             <Gift className="h-4 w-4" />
             <span className="text-sm font-medium">🎁 Surprise du jour</span>
-            <Badge variant="secondary" className="text-xs bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200">
+            <Badge variant="secondary" className="text-xs bg-amber-500/20 text-amber-300 border-amber-500/30">
               +20 VP
             </Badge>
-          </Button>
+            </Button>
+          </motion.div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

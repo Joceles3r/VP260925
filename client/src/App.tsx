@@ -10,6 +10,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 
 // Pages
 import Landing from "@/pages/Landing";
+import ProjectsList from "@/pages/ProjectsList";
 import Home from "@/pages/Home";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
@@ -47,6 +48,7 @@ function Router() {
         ) : (
           <>
             <Route path="/" component={Home} />
+            <Route path="/projects" component={ProjectsList} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/kyc" component={KYCOnboarding} />
             <Route path="/projects" component={Projects} />
