@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import { router as togglesRouter } from './api/toggles';
 import { router as visualScoutRouter } from './api/visualScout';
+import { router as visualAIRouter } from './api/visualAI';
 import { VISUAL_CONSTANTS } from '../shared/visual-constants';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ app.use(express.json());
 // API routes
 app.use(togglesRouter);
 app.use(visualScoutRouter);
+app.use(visualAIRouter);
 
 // Request logging middleware
 app.use((req, res, next) => {

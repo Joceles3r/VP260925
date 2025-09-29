@@ -6,6 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Activity, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Circle as XCircle, Zap, Shield, Eye, Brain } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+// Import missing icons
+import { Search, DollarSign, StopCircle } from 'lucide-react';
+
 interface AgentStatus {
   name: string;
   enabled: boolean;

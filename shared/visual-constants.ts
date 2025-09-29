@@ -77,6 +77,32 @@ export const VISUAL_CONSTANTS = {
     supportedLocales: ["fr-FR","en-US","es-ES"],
     urlStrategy: "path-prefix", // /fr, /en, /es
     fallbackOrder: ["fr-FR","en-US"]
+  },
+
+  // Agents IA configuration
+  agents: {
+    visualAI: {
+      enabled: true,
+      maxDecisionsPerMinute: 100,
+      validationThresholds: {
+        userBlock: true,
+        massEmail: 10000,
+        highPayment: 500,
+        policyChange: true,
+        securityIncident: true
+      }
+    },
+    visualFinanceAI: {
+      enabled: true,
+      maxSinglePayout: 50000, // 500€ en centimes
+      auditRetentionDays: 2555, // 7 ans
+      extensionPriceEur: 25
+    },
+    visualScoutAI: {
+      enabled: true,
+      maxBudgetEur: 1000,
+      scoreThreshold: 62
+    }
   }
 } as const;
 
