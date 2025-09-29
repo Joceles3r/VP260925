@@ -4,18 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Heart, 
-  MessageCircle, 
-  Share2, 
-  Plus,
-  Image,
-  Video,
-  Users,
-  TrendingUp,
-  Clock,
-  MoreHorizontal
-} from 'lucide-react';
+import { Heart, MessageCircle, Share2, Plus, Image, Video, Users, TrendingUp, Clock, MoveHorizontal as MoreHorizontal } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmojiSystem } from '@/hooks/useEmojiSystem';

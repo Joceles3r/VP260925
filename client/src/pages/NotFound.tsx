@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Home, ArrowLeft } from 'lucide-react';
+import { Hop as Home, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function NotFound() {

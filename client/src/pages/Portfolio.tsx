@@ -4,18 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  PieChart, 
-  BarChart3,
-  Eye,
-  Star,
-  Calendar,
-  ArrowUpRight,
-  ArrowDownRight
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, ChartPie as PieChart, ChartBar as BarChart3, Eye, Star, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatCurrency, formatPercentage, calculateROI } from '@shared/utils';
 import { useAuth } from '@/hooks/useAuth';

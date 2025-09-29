@@ -6,22 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Play, 
-  Search, 
-  Filter, 
-  TrendingUp, 
-  Star, 
-  Users, 
-  Eye, 
-  Heart, 
-  Share2,
-  Euro,
-  BarChart3,
-  PieChart,
-  Calendar,
-  Clock
-} from 'lucide-react';
+import { Play, Search, ListFilter as Filter, TrendingUp, Star, Users, Eye, Heart, Share2, Euro, ChartBar as BarChart3, ChartPie as PieChart, Calendar, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEmojiSystem } from '@/hooks/useEmojiSystem';
 import { useAuth } from '@/hooks/useAuth';
