@@ -1,0 +1,101 @@
+# Docker Compose configuration for VISUAL Platform
+# Production-ready setup with Nginx reverse proxy
+version: '3.8'
+
+services:
+  # VISUAL Platform Application
+  visual-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: visual-platform
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      # Database configuration (use external service or add postgres service)
+      - DATABASE_URL=${DATABASE_URL}
+      # Stripe configuration
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - VITE_STRIPE_PUBLIC_KEY=${VITE_STRIPE_PUBLIC_KEY}
+      # Object storage
+      - DEFAULT_OBJECT_STORAGE_BUCKET_ID=${DEFAULT_OBJECT_STORAGE_BUCKET_ID}
+      - PRIVATE_OBJECT_DIR=${PRIVATE_OBJECT_DIR}
+      - PUBLIC_OBJECT_SEARCH_PATHS=${PUBLIC_OBJECT_SEARCH_PATHS}
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - visual_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/healthz', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy with Security Headers
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: visual-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/security_headers.conf:/etc/nginx/conf.d/security_headers.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # Mount SSL certificates
+      - ./client/public:/var/www/static:ro  # Mount static files (robots.txt, security.txt, sitemaps)
+      - uploads_data:/var/www/uploads:ro
+    depends_on:
+      - visual-app
+    networks:
+      - visual_network
+
+  # PostgreSQL Database (optional - use external service for production)
+  postgres:
+    image: postgres:15-alpine
+    container_name: visual-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=visual_prod
+      - POSTGRES_USER=visual_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - visual_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U visual_user -d visual_prod"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis for Session Store (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: visual-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - visual_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  visual_network:
+    driver: bridge
