@@ -5,46 +5,28 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
-import { useEmojiOnRouteChange } from "@/hooks/useEmojiOnRouteChange";
-import { initEmojiOrchestrator } from "@/components/emoji/emoji_orchestrator";
-import emojiConfig from "@/components/emoji/emoji_config.json";
+import { useEffect } from 'react';
 import Navigation from "@/components/Navigation";
 import LoadingScreen from "@/components/LoadingScreen";
 
 // Pages
 import Landing from "@/pages/Landing";
-import ProjectsList from "@/pages/ProjectsList";
 import Home from "@/pages/Home";
 import Dashboard from "@/pages/Dashboard";
-import Projects from "@/pages/Projects";
 import Portfolio from "@/pages/Portfolio";
 import Live from "@/pages/Live";
 import Social from "@/pages/Social";
 import Books from "@/pages/Books";
 import PetitesAnnonces from "@/pages/PetitesAnnonces";
 import Admin from "@/pages/Admin";
-import KYCOnboarding from "@/pages/KYCOnboarding";
 import NotFound from "@/pages/NotFound";
 import CuriosityDock from "@/components/CuriosityDock";
 import { useCuriosityDock } from "@/hooks/useCuriosityDock";
-import { useEmojiSystem } from "@/hooks/useEmojiSystem";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { stats, actions } = useCuriosityDock();
   
-  // Initialize emoji system on app boot
-  useEffect(() => {
-    initEmojiOrchestrator(emojiConfig as any);
-  }, []);
-  
-  // Auto-trigger emojis on route changes
-  useEmojiOnRouteChange({
-    profile: user?.profileType === 'creator' ? 'porteur' : 
-             user?.profileType === 'admin' ? 'admin' :
-             user ? 'investisseur' : 'visitor'
-  });
-
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -64,16 +46,14 @@ function Router() {
         ) : (
           <>
             <Route path="/" component={Home} />
-            <Route path="/projects" component={ProjectsList} />
             <Route path="/dashboard" component={Dashboard} />
-            <Route path="/kyc" component={KYCOnboarding} />
-            <Route path="/projects" component={Projects} />
+            <Route path="/projects" component={Home} />
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />
             <Route path="/social" component={Social} />
             <Route path="/books" component={Books} />
             <Route path="/petites-annonces" component={PetitesAnnonces} />
-            {user?.isAdmin && <Route path="/admin" component={Admin} />}
+            <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </>
         )}
