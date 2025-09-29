@@ -17,6 +17,7 @@ export default function Navigation() {
     { path: '/wallet', label: 'Portefeuille', section: 'wallet' },
     { path: '/social', label: 'Social', section: 'social' },
     { path: '/receipts', label: 'Reçus', section: 'receipts' },
+    { path: '/info', label: 'Info', section: 'info' },
     ...(user?.profileType === 'admin' ? [{ path: '/admin', label: 'Admin', section: 'admin' }] : []),
   ];
 

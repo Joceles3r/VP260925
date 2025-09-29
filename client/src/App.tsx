@@ -22,6 +22,7 @@ import ReceiptsPage from "@/pages/receipts";
 import Top10Page from "@/pages/top10";
 import FidelityPage from "@/pages/fidelity";
 import VisualPage from "@/pages/visual";
+import InfoPage from "@/pages/info";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -44,6 +45,7 @@ function Router() {
             <Route path="/" component={Landing} />
             <Route path="/landing" component={Landing} />
             <Route path="/visual" component={VisualPage} />
+            <Route path="/info" component={InfoPage} />
             <Route path="/projects" component={Projects} />
             <Route component={Landing} />
           </>
@@ -53,6 +55,7 @@ function Router() {
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/kyc" component={KYCOnboarding} />
             <Route path="/visual" component={VisualPage} />
+            <Route path="/info" component={InfoPage} />
             <Route path="/projects" component={Projects} />
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />
