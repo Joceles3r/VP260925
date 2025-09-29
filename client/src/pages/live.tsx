@@ -72,7 +72,7 @@ export default function Live() {
           <div>
             <h4 className="font-medium text-foreground mb-2">Règles d'Investissement</h4>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Investissement en temps réel de €1 à €20</li>
+              <li>• Investissement en temps réel de **2–20 €**</li>
               <li>• Choix entre les deux artistes en compétition</li>
               <li>• Commission réduite à 10% pour les live shows</li>
               <li>• Redistribution immédiate après la battle</li>
