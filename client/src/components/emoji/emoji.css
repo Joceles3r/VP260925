@@ -1,0 +1,62 @@
+/* Emoji animations for VISUAL platform */
+
+.emoji-particle {
+  font-size: 22px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+  will-change: transform, opacity;
+  pointer-events: none;
+  user-select: none;
+}
+
+@keyframes emoji-rise {
+  0% { 
+    transform: translate(-50%,-50%) translate3d(0,0,0) rotate(0) scale(var(--scale)); 
+    opacity: 0; 
+  }
+  8% { 
+    opacity: 1; 
+  }
+  100% { 
+    transform: translate(-50%,-50%) translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(var(--scale)); 
+    opacity: 0; 
+  }
+}
+
+/* Glow néon subtil pour les boutons déclencheurs */
+.neon-glow {
+  box-shadow: 
+    0 0 12px rgba(0,209,255,0.35), 
+    0 0 18px rgba(123,44,255,0.25), 
+    0 0 26px rgba(255,60,172,0.18);
+}
+
+/* Pulse animation pour les éléments live */
+@keyframes neon-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 5px rgba(0,209,255,0.3); 
+  }
+  50% { 
+    box-shadow: 
+      0 0 20px rgba(0,209,255,0.6), 
+      0 0 30px rgba(123,44,255,0.4); 
+  }
+}
+
+.live-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .emoji-particle {
+    animation-duration: 0.3s;
+  }
+  
+  .neon-glow {
+    box-shadow: none;
+  }
+  
+  .live-pulse {
+    animation: none;
+  }
+}
