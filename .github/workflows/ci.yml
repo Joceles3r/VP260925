@@ -1,0 +1,147 @@
+name: CI/CD VISUAL Platform
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-and-build:
+    name: Lint & Build (Node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Type checking
+        run: npx tsc --noEmit
+      
+      - name: Lint client
+        run: npx eslint client/src --ext .ts,.tsx --max-warnings 0
+        continue-on-error: true
+      
+      - name: Lint server  
+        run: npx eslint server --ext .ts --max-warnings 0
+        continue-on-error: true
+      
+      - name: Build application
+        run: npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-files
+          path: |
+            dist/
+            client/dist/
+
+  test-endpoints:
+    name: Test API Endpoints
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: visual_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Setup test database
+        env:
+          DATABASE_URL: postgres://postgres:test_password@localhost:5432/visual_test
+        run: |
+          npm run db:push --force
+      
+      - name: Test health endpoints
+        env:
+          DATABASE_URL: postgres://postgres:test_password@localhost:5432/visual_test
+          STRIPE_SECRET_KEY: sk_test_dummy_key_for_ci
+          STRIPE_WEBHOOK_SECRET: whsec_test_dummy_secret
+        run: |
+          npm run dev &
+          sleep 10
+          curl -f http://localhost:5000/healthz || exit 1
+          curl -f http://localhost:5000/readyz || exit 1
+          curl -f http://localhost:5000/metrics || exit 1
+          pkill -f "npm run dev"
+
+  generate-sitemaps:
+    name: Generate Sitemaps
+    runs-on: ubuntu-latest
+    needs: [lint-and-build, test-endpoints]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate localized sitemaps
+        env:
+          SITE_BASE_URL: https://visual-platform.replit.app
+        run: |
+          if [ -f scripts/generate_sitemaps.mjs ]; then 
+            node scripts/generate_sitemaps.mjs
+          else 
+            echo "Sitemap generation script not found, skipping"
+          fi
+      
+      - name: Upload sitemap artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sitemaps
+          path: client/public/sitemaps/*.xml
+        continue-on-error: true
+
+  security-scan:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Security audit
+        run: npm audit --audit-level moderate
+        continue-on-error: true
+      
+      - name: Check for vulnerable packages
+        run: |
+          if npm audit --audit-level high --json | jq -e '.metadata.vulnerabilities.high > 0 or .metadata.vulnerabilities.critical > 0'; then
+            echo "High or critical vulnerabilities found!"
+            npm audit --audit-level high
+            exit 1
+          else
+            echo "No high or critical vulnerabilities found"
+          fi

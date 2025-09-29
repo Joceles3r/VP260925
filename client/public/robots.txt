@@ -37,8 +37,8 @@ Allow: *.webp
 Allow: *.svg
 Allow: *.ico
 
-# Sitemap location
-Sitemap: https://visual.replit.app/sitemaps/sitemap-index.xml
+# Sitemap location (updated PRO configuration - aligned with generator)
+Sitemap: https://visual-platform.replit.app/sitemaps/sitemap-index.xml
 
 # Délai de crawl poli (éviter surcharge)
 Crawl-delay: 1
