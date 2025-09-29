@@ -5,13 +5,14 @@
  import { useAuth } from '@/hooks/useAuth';
 import AgentCoordinatorPanel from '@/components/admin/AgentCoordinatorPanel';
 +import VisualScoutPanel from '@/components/admin/VisualScoutPanel';
-import VisualAIPanel from '@/components/admin/VisualAIPanel';
-import VisualFinancePanel from '@/components/admin/VisualFinancePanel';
  
  interface AdminStats {
  }
 @@ .. @@
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-9">
+          <TabsTrigger value="master" className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-300 font-bold">
+            👑 PATRON
+          </TabsTrigger>
            <TabsTrigger value="users">Utilisateurs</TabsTrigger>
            <TabsTrigger value="projects">Projets</TabsTrigger>
            <TabsTrigger value="transactions">Transactions</TabsTrigger>
@@ -24,6 +25,10 @@ import VisualFinancePanel from '@/components/admin/VisualFinancePanel';
              </div>
            </Card>
          </TabsContent>
+
+        <TabsContent value="master" className="space-y-4">
+          <MasterControlPanel />
+        </TabsContent>
 
         <TabsContent value="agents" className="space-y-4">
           <AgentCoordinatorPanel />
