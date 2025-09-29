@@ -259,6 +259,7 @@ export default function InfoPage() {
                     key={doc.id}
                     onClick={() => setActiveSection(doc.id)}
                     className="bg-card p-4 rounded-lg border border-border text-left hover:border-[#00D1FF]/50 transition-colors"
+                    data-testid={`legal-nav-${doc.id}`}
                   >
                     <p className="text-foreground hover:text-[#00D1FF]">{doc.title}</p>
                   </button>
@@ -513,10 +514,214 @@ export default function InfoPage() {
           </div>
         );
 
+      case 'contact':
+        return (
+          <div className="space-y-6">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] bg-clip-text text-transparent">
+              Contact
+            </h1>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-card p-6 rounded-lg border border-border" data-testid="contact-general">
+                <h3 className="text-xl font-semibold text-[#00D1FF] mb-4">Informations générales</h3>
+                <div className="space-y-3 text-muted-foreground">
+                  <p>• <strong>Éditeur</strong> : VISUAL SAS</p>
+                  <p>• <strong>Adresse du siège</strong> : 123 Avenue des Champs-Élysées, 75008 Paris, France</p>
+                  <p>• <strong>Téléphone</strong> : +33 1 XX XX XX XX</p>
+                  <p>• <strong>Email général</strong> : <strong className="text-[#00D1FF]">contact@visual.fr</strong></p>
+                  <p>• <strong>Heures d'ouverture</strong> : Lun-Ven 9h-18h, Sam 10h-16h</p>
+                </div>
+              </div>
+              
+              <div className="bg-card p-6 rounded-lg border border-border" data-testid="contact-team">
+                <h3 className="text-xl font-semibold text-[#7B2CFF] mb-4">Équipe dirigeante</h3>
+                <div className="space-y-3 text-muted-foreground">
+                  <p>• <strong>Directeur de la publication</strong> : Jean Dupont</p>
+                  <p>• <strong>DPO (données personnelles)</strong> : Marie Martin — <strong className="text-[#7B2CFF]">dpo@visual.fr</strong></p>
+                  <p>• <strong>Responsable conformité</strong> : Pierre Dubois — <strong className="text-[#7B2CFF]">compliance@visual.fr</strong></p>
+                  <p>• <strong>Support technique</strong> : <strong className="text-[#7B2CFF]">support@visual.fr</strong></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'statut':
+        return (
+          <div className="space-y-6">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] bg-clip-text text-transparent">
+              Statut
+            </h1>
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-6 rounded-lg border border-green-500/20" data-testid="status-main">
+                <h3 className="text-xl font-semibold text-green-500 mb-4">🟢 Tous les services sont opérationnels</h3>
+                <p className="text-muted-foreground">Suivi temps réel de l'infrastructure et incidents : <strong className="text-[#00D1FF]">status.visual.fr</strong></p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="uptime-target">
+                  <h4 className="font-semibold text-[#00D1FF] mb-2">Objectif de disponibilité</h4>
+                  <p className="text-2xl font-bold text-[#00D1FF]">99,9%</p>
+                  <p className="text-sm text-muted-foreground">Uptime cible</p>
+                </div>
+                
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="incident-history">
+                  <h4 className="font-semibold text-[#7B2CFF] mb-2">Historique</h4>
+                  <p className="text-sm text-muted-foreground">Historique des incidents disponible sur notre page de statut</p>
+                  <p className="text-xs text-[#7B2CFF] mt-2">status.visual.fr/historique</p>
+                </div>
+
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="alerts-subscription">
+                  <h4 className="font-semibold text-[#FF3CAC] mb-2">Alertes</h4>
+                  <p className="text-sm text-muted-foreground">Abonnement alertes par email ou RSS</p>
+                  <p className="text-xs text-[#FF3CAC] mt-2">status.visual.fr/alertes</p>
+                </div>
+              </div>
+
+              <div className="bg-card p-6 rounded-lg border border-border">
+                <h3 className="text-xl font-semibold mb-4">Services surveillés</h3>
+                <div className="space-y-3">
+                  {[
+                    { service: 'Interface web', status: 'Opérationnel', color: 'text-green-500' },
+                    { service: 'API VISUAL', status: 'Opérationnel', color: 'text-green-500' },
+                    { service: 'Streaming vidéo', status: 'Opérationnel', color: 'text-green-500' },
+                    { service: 'Paiements (Stripe)', status: 'Opérationnel', color: 'text-green-500' },
+                    { service: 'Stockage fichiers', status: 'Opérationnel', color: 'text-green-500' }
+                  ].map((item, index) => (
+                    <div key={index} className="flex justify-between items-center p-2 bg-muted rounded" data-testid={`service-${index}`}>
+                      <span className="text-foreground">{item.service}</span>
+                      <span className={`text-sm font-medium ${item.color}`}>🟢 {item.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'blog':
+        return (
+          <div className="space-y-6">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] bg-clip-text text-transparent">
+              Blog
+            </h1>
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-[#00D1FF]/10 to-[#7B2CFF]/10 p-6 rounded-lg border border-[#00D1FF]/20" data-testid="blog-intro">
+                <h3 className="text-xl font-semibold text-[#00D1FF] mb-4">Le Blog VISUAL</h3>
+                <p className="text-muted-foreground">
+                  Découvrez les dernières actualités, guides pratiques et retours d'expérience de la communauté VISUAL.
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  URL : <strong className="text-[#00D1FF]">blog.visual.fr</strong>
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="blog-content-types">
+                  <h3 className="text-xl font-semibold text-[#7B2CFF] mb-4">Le Blog VISUAL couvre :</h3>
+                  <ul className="space-y-2 text-muted-foreground">
+                    <li className="flex items-start">
+                      <ChevronRight className="w-4 h-4 text-[#7B2CFF] mt-1 mr-2" />
+                      Cas d'usage & retours d'expérience de porteurs
+                    </li>
+                    <li className="flex items-start">
+                      <ChevronRight className="w-4 h-4 text-[#7B2CFF] mt-1 mr-2" />
+                      Nouveautés produit, IA & créa
+                    </li>
+                    <li className="flex items-start">
+                      <ChevronRight className="w-4 h-4 text-[#7B2CFF] mt-1 mr-2" />
+                      Guides : monétiser un court, lancer un Live Show, publier un livre
+                    </li>
+                    <li className="flex items-start">
+                      <ChevronRight className="w-4 h-4 text-[#7B2CFF] mt-1 mr-2" />
+                      Mises à jour légales & sécurité
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="blog-recent">
+                  <h3 className="text-xl font-semibold text-[#FF3CAC] mb-4">Articles récents</h3>
+                  <div className="space-y-3">
+                    {[
+                      'Comment optimiser votre campagne VISUAL',
+                      'Nouveaux tarifs 2-20€ : guide complet',
+                      'Live Shows : meilleures pratiques',
+                      'VISUpoints : tout savoir sur la conversion'
+                    ].map((title, index) => (
+                      <div key={index} className="p-3 bg-muted rounded text-sm" data-testid={`article-${index}`}>
+                        <p className="text-foreground font-medium">{title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Il y a {index + 1} jour{index > 0 ? 's' : ''}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'cookies':
+        return (
+          <div className="space-y-6">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] bg-clip-text text-transparent">
+              Cookies
+            </h1>
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-[#00D1FF]/10 to-[#7B2CFF]/10 p-6 rounded-lg border border-[#00D1FF]/20" data-testid="cookies-intro">
+                <h3 className="text-xl font-semibold text-[#00D1FF] mb-4">Politique de cookies</h3>
+                <p className="text-muted-foreground">
+                  VISUAL utilise des cookies pour améliorer votre expérience utilisateur et analyser l'utilisation de notre plateforme.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="cookies-essential">
+                  <h3 className="text-xl font-semibold text-[#7B2CFF] mb-4">Cookies essentiels</h3>
+                  <div className="space-y-2 text-muted-foreground text-sm">
+                    <p>• <strong>Authentification</strong> : maintien de votre session de connexion</p>
+                    <p>• <strong>Sécurité</strong> : protection contre les attaques CSRF</p>
+                    <p>• <strong>Préférences</strong> : sauvegarde de vos réglages (langue, thème)</p>
+                  </div>
+                </div>
+
+                <div className="bg-card p-6 rounded-lg border border-border" data-testid="cookies-analytics">
+                  <h3 className="text-xl font-semibold text-[#FF3CAC] mb-4">Cookies analytiques</h3>
+                  <div className="space-y-2 text-muted-foreground text-sm">
+                    <p>• <strong>Usage</strong> : analyse des pages visitées et du comportement utilisateur</p>
+                    <p>• <strong>Performance</strong> : optimisation de la plateforme</p>
+                    <p>• <strong>Statistiques</strong> : métriques anonymisées</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-card p-6 rounded-lg border border-border" data-testid="cookies-management">
+                <h3 className="text-xl font-semibold mb-4">Gestion des cookies</h3>
+                <div className="space-y-3 text-muted-foreground">
+                  <p>• <strong>Banneau de consentement</strong> : affiché lors de votre première visite</p>
+                  <p>• <strong>Préférences</strong> : modifiables à tout moment via les paramètres de votre compte</p>
+                  <p>• <strong>Refus</strong> : possible pour les cookies non-essentiels sans impact sur les fonctionnalités de base</p>
+                  <p>• <strong>Durée</strong> : cookies de session (supprimés à la fermeture) et persistants (maximum 13 mois)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       default:
         return (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Section en cours de développement...</p>
+          <div className="text-center py-12" data-testid="section-default">
+            <div className="bg-gradient-to-r from-[#00D1FF]/10 to-[#7B2CFF]/10 p-8 rounded-lg border border-[#00D1FF]/20 max-w-md mx-auto">
+              <h2 className="text-xl font-semibold text-[#00D1FF] mb-2">Section non trouvée</h2>
+              <p className="text-muted-foreground mb-4">
+                La section demandée n'existe pas ou est en cours de développement.
+              </p>
+              <button
+                onClick={() => setActiveSection('plateforme')}
+                className="px-4 py-2 bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] text-white rounded-lg hover:opacity-90 transition-opacity"
+                data-testid="return-to-platform"
+              >
+                Retour à la section Plateforme
+              </button>
+            </div>
           </div>
         );
     }
@@ -544,6 +749,7 @@ export default function InfoPage() {
                         ? 'bg-[#00D1FF]/10 text-[#00D1FF] border border-[#00D1FF]/20'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     }`}
+                    aria-current={activeSection === section.id ? 'page' : undefined}
                     data-testid={`nav-${section.id}`}
                   >
                     <section.icon className="w-4 h-4 mr-2" />
