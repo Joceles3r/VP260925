@@ -5,21 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  PieChart, 
-  BarChart3, 
-  Shield, 
-  AlertTriangle,
-  CheckCircle,
-  FileText,
-  Calculator,
-  CreditCard,
-  StopCircle,
-  RefreshCw,
-  Download
-} from 'lucide-react';
+import { DollarSign, TrendingUp, ChartPie as PieChart, ChartBar as BarChart3, Shield, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, FileText, Calculator, CreditCard, CircleStop as StopCircle, RefreshCw, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface FinancialMetrics {

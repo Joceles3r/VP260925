@@ -7,7 +7,7 @@ import { Activity, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, C
 import { useToast } from '@/hooks/use-toast';
 
 // Import missing icons
-import { Search, DollarSign, StopCircle } from 'lucide-react';
+import { Search, DollarSign, CircleStop as StopCircle } from 'lucide-react';
 
 interface AgentStatus {
   name: string;
