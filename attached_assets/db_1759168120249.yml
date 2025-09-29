@@ -1,0 +1,11 @@
+name: db-migrations
+on: [pull_request]
+jobs:
+  check-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SQL presence
+        run: |
+          test -f db/migrations/001_init.sql
+          echo "Migrations present."
