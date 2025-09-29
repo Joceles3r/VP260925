@@ -629,6 +629,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
+  // =======================
+  // MISE À NIVEAU PRO - MIDDLEWARES DE SÉCURITÉ (ORDRE CRITIQUE)
+  // =======================
+  
+  // Imports pour les middlewares PRO
+  const rateLimit = (await import('express-rate-limit')).default;
+  const { securityHeaders, rateLimitConfig, strictRateLimitConfig, auditLogger, requireMonitoringAccess } = await import('./middleware/security');
+  
+  // Appliquer les en-têtes de sécurité sur toutes les routes (après auth, avant routes)
+  app.use(securityHeaders);
+  
+  // Rate limiting général sur toutes les API
+  const generalLimiter = rateLimit(rateLimitConfig);
+  app.use('/api', generalLimiter);
+  
+  // Rate limiting strict pour les opérations financières sensibles (CRITIQUE : AVANT les routes)
+  const strictLimiter = rateLimit(strictRateLimitConfig);
+  app.use('/api/investments', strictLimiter);
+  app.use('/api/transactions', strictLimiter);
+  app.use('/api/withdrawals', strictLimiter);
+  app.use('/api/payouts', strictLimiter);
+  
+  // Audit logging sur les opérations sensibles (CRITIQUE : AVANT les routes)
+  app.use('/api/investments', auditLogger('investment', 'financial'));
+  app.use('/api/transactions', auditLogger('transaction', 'financial'));
+  app.use('/api/admin/*', auditLogger('admin_action', 'administration'));
+
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -5739,6 +5766,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // =======================
+  // MISE À NIVEAU PRO - ENDPOINTS DE SANTÉ
+  // =======================
+  
+  // Imports pour les endpoints de santé
+  const { healthzHandler, readyzHandler, metricsHandler, statusHandler } = await import('./health/endpoints');
+  
+  // Health check endpoints avec protection appropriée
+  app.get('/healthz', healthzHandler); // Public - pour load balancers
+  app.get('/readyz', requireMonitoringAccess, readyzHandler); // Protégé - détails internes
+  app.get('/metrics', requireMonitoringAccess, metricsHandler); // Protégé - métriques sensibles
+  app.get('/status', requireMonitoringAccess, statusHandler); // Protégé - état des services
 
   return httpServer;
 }

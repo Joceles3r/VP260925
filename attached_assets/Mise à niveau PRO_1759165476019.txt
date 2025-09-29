@@ -1,0 +1,180 @@
+Ce qui manque encore pour un niveau “pro”
+A. Sécurité & conformité (priorité haute)
+
+En-têtes de sécurité (CSP/STS) au reverse-proxy
+Nginx (snippet) :
+
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: https:; media-src https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https:;" always;
+add_header X-Content-Type-Options nosniff always;
+add_header X-Frame-Options DENY always;
+add_header Referrer-Policy strict-origin-when-cross-origin always;
+add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+
+2FA partout (admin + opérations sensibles) & rate-limit API
+FastAPI (extrait) :
+
+from fastapi import Depends, HTTPException
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
+
+@app.post("/api/finance/payouts")
+@limiter.limit("5/minute")
+def create_payout(..., user=Depends(require_2fa_verified)):
+    ...
+
+
+Journalisation/audit trail signé + Sentry
+
+// Node/TS
+import * as Sentry from "@sentry/node";
+Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.2 });
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
+
+RGPD “pro”
+
+Export/Suppression des données (self-service)
+
+.well-known/security.txt + page Accessibilité
+
+Liste des sous-traitants (Stripe, CDN vidéo, email, etc.) et DPA.
+
+/.well-known/security.txt :
+
+Contact: mailto:security@visual.example
+Policy: https://visual.example/security
+Preferred-Languages: fr, en
+
+B. Fiabilité & observabilité
+
+Healthcheck + readiness + métriques
+FastAPI :
+
+@app.get("/healthz")     # liveness
+def health(): return {"ok": True}
+
+@app.get("/readyz")      # readiness (DB/Stripe)
+def ready(...): return {"db": "ok", "stripe": "ok"}
+
+@app.get("/metrics")     # Prometheus text format
+def metrics(): return Response(generate_metrics(), media_type="text/plain")
+
+
+Surveillance
+
+Uptime (Status page) + alertes (webhook Slack/Email).
+
+Backups PostgreSQL chiffrés (RPO≤24 h, RTO≤4 h).
+
+C. Paiements (durci)
+
+Stripe webhooks (idempotence + retries + logs)
+
+app.post("/webhooks/stripe", bodyParser.raw({ type: 'application/json' }), (req,res)=>{
+  const sig = req.headers['stripe-signature'];
+  const event = stripe.webhooks.constructEvent(req.body, sig!, process.env.STRIPE_WH!);
+  // idempotence: ignore if already processed
+  if (ledger.has(event.id)) return res.status(200).end();
+  handleStripeEvent(event).then(()=> { ledger.add(event.id); res.sendStatus(200); })
+  .catch((e)=> { console.error(e); res.sendStatus(500); });
+});
+
+
+Escrow petites annonces (si activé) : états, médiation, délais, frais affichés.
+
+D. Internationalisation & accessibilité
+
+Fichiers de langue complets (FR/EN/ES), fallback testés, hreflang + sitemaps (tu as la spec — assure la génération & le cron).
+
+A11y : audit axe/Lighthouse, contrastes AA, focus visibles, sous-titres VTT/SRT par défaut.
+
+E. Performance & UX
+
+Budget Web Vitals (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) + images/vidéos optimisées.
+
+Skeletons & prefetch sur les pages lourdes, PWA minimal (manifest + offline pour UI).
+
+F. DevEx & CI/CD
+
+Workflows GitHub Actions (build, tests, lint, CodeQL, Docker publish)
+
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run lint && npm run test && npm run build
+  codeql:
+    uses: github/codeql-action/.github/workflows/codeql.yml@v3
+
+name: docker-publish
+on: { push: { branches: [ main ] } }
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { username: ${{ secrets.DOCKER_USER }}, password: ${{ secrets.DOCKER_PASS }} }
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: visual/visual-platform:latest
+
+
+Migrations DB (Drizzle) verrouillées en CI + seed de données démo.
+
+Changelog versionné + READMEs module-scoped (client/server/docs) et checklist de release.
+
+G. Produit & contenu
+
+Onboarding produit (tours guidés, “demo mode”, contenus d’exemple), FAQ & centre d’aide publiés (tu as le Markdown prêt).
+
+CMP cookies (consentement), analytics (Plausible/Matomo) conformes.
+
+Support unifié (email + formulaire + SLA) & statut public.
+
+Quick-wins (cette semaine)
+
+CSP + STS au Nginx (snippet ci-dessus).
+
+/healthz /readyz /metrics sur le backend.
+
+Workflows GitHub Actions (CI + CodeQL + Docker).
+
+robots.txt + sitemaps (déjà spécifiés → brancher la génération & exposer /sitemaps/sitemap-index.xml).
+
+.well-known/security.txt + page Accessibilité minimale.
+
+Next steps (lot 2)
+
+Axe/Lighthouse CI + seuils Vitals.
+
+Sentry + Alerting (Better Uptime/Healthchecks).
+
+Pages légales en ligne (tes Markdown “Mentions/CGU/Confidentialité/AMF”).
+
+Export/Erase RGPD auto.
+
+Backups chiffrés & runbook incidents.
+
+Pourquoi je dis que c’est prioritaire (preuves dans le repo)
+
+Le README présente bien l’archi, les paliers 2–20 € et l’i18n/toggles, mais on ne voit pas encore d’en-têtes de sécurité, ni de /healthz/readyz/metrics documentés. 
+GitHub
+
+Les fichiers Dockerfile et docker-compose.yml sont là (donc facile à ajouter CSP/STS via Nginx et healthchecks). 
+GitHub
+
+Les docs “complètes” existent (16-09-2025), mais pour du prod-grade il faut : CI/CD+CodeQL, Sentry, backups, status page, RGPD self-service.

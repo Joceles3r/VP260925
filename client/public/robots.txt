@@ -1,0 +1,44 @@
+# Robots.txt pour VISUAL - Plateforme d'investissement créatif
+# Mise à niveau PRO - Sept 2025
+
+User-agent: *
+Allow: /
+Allow: /visual
+Allow: /info
+Allow: /accessibility
+Allow: /projects
+
+# Pages publiques importantes
+Allow: /.well-known/security.txt
+Allow: /sitemaps/
+
+# Endpoints techniques (non indexables)
+Disallow: /api/
+Disallow: /healthz
+Disallow: /readyz 
+Disallow: /metrics
+Disallow: /status
+Disallow: /_vite/
+
+# Pages privées/sensibles
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /wallet
+Disallow: /kyc
+Disallow: /portfolio
+
+# Ressources statiques autorisées pour SEO
+Allow: *.css
+Allow: *.js
+Allow: *.jpg
+Allow: *.jpeg
+Allow: *.png
+Allow: *.webp
+Allow: *.svg
+Allow: *.ico
+
+# Sitemap location
+Sitemap: https://visual.replit.app/sitemaps/sitemap-index.xml
+
+# Délai de crawl poli (éviter surcharge)
+Crawl-delay: 1

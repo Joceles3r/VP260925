@@ -23,6 +23,7 @@ import Top10Page from "@/pages/top10";
 import FidelityPage from "@/pages/fidelity";
 import VisualPage from "@/pages/visual";
 import InfoPage from "@/pages/info";
+import AccessibilityPage from "@/pages/accessibility";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -46,6 +47,7 @@ function Router() {
             <Route path="/landing" component={Landing} />
             <Route path="/visual" component={VisualPage} />
             <Route path="/info" component={InfoPage} />
+            <Route path="/accessibility" component={AccessibilityPage} />
             <Route path="/projects" component={Projects} />
             <Route component={Landing} />
           </>
@@ -56,6 +58,7 @@ function Router() {
             <Route path="/kyc" component={KYCOnboarding} />
             <Route path="/visual" component={VisualPage} />
             <Route path="/info" component={InfoPage} />
+            <Route path="/accessibility" component={AccessibilityPage} />
             <Route path="/projects" component={Projects} />
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />
