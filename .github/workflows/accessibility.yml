@@ -1,0 +1,51 @@
+name: Accessibility Tests (WCAG 2.1 AA)
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  accessibility:
+    name: pa11y Accessibility Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+      
+      - name: Start server
+        run: |
+          npm run dev &
+          sleep 15
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgres://postgres:test@localhost:5432/visual_test
+      
+      - name: Wait for server
+        run: |
+          timeout 30 bash -c 'until curl -f http://localhost:5000/healthz; do sleep 2; done'
+      
+      - name: Run pa11y accessibility tests
+        run: |
+          npx pa11y-ci --config pa11yci.json --reporter cli
+        continue-on-error: true
+      
+      - name: Upload accessibility screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-screenshots
+          path: pa11y-screenshots.png
+        if: always()

@@ -2643,6 +2643,93 @@ export const insertAdPhotosSchema = createInsertSchema(adPhotos).omit({
   height: z.number().min(240),
 });
 
+// ===== NOUVELLES TABLES POUR MODERNISATION PRO =====
+
+// Enums pour nouveaux systèmes
+export const stripeEventTypeEnum = pgEnum('stripe_event_type', [
+  'payment_intent.succeeded', 'payment_intent.payment_failed', 
+  'checkout.session.completed', 'charge.refunded', 'payout.paid'
+]);
+
+export const twoFAStatusEnum = pgEnum('twofa_status', ['disabled', 'enabled', 'backup_only']);
+
+export const gdprRequestTypeEnum = pgEnum('gdpr_request_type', ['export', 'deletion']);
+export const gdprRequestStatusEnum = pgEnum('gdpr_request_status', ['pending', 'processing', 'completed', 'failed']);
+
+// Stripe events pour idempotence webhooks
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: stripeEventTypeEnum("type").notNull(),
+  processed: boolean("processed").notNull().default(false),
+  data: jsonb("data"),
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+});
+
+// Trail d'audit sécurisé HMAC pour nouveaux systèmes
+export const securityAuditLog = pgTable("security_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  actorId: varchar("actor_id").notNull(),
+  actionType: varchar("action_type").notNull(),
+  resourceType: varchar("resource_type").notNull(),
+  resourceId: varchar("resource_id"),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  hmacSignature: text("hmac_signature").notNull(),
+}, (table) => [
+  index("idx_security_audit_timestamp").on(table.timestamp),
+  index("idx_security_audit_actor").on(table.actorId),
+  index("idx_security_audit_action").on(table.actionType),
+]);
+
+// 2FA TOTP pour authentification renforcée  
+export const user2FA = pgTable("user_2fa", {
+  userId: varchar("user_id").primaryKey(),
+  totpSecret: text("totp_secret").notNull(),
+  backupCodes: text("backup_codes").array().notNull().default(sql`'{}'`),
+  status: twoFAStatusEnum("status").notNull().default('disabled'),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at"),
+});
+
+// Requêtes RGPD export/suppression
+export const gdprRequests = pgTable("gdpr_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  requestType: gdprRequestTypeEnum("request_type").notNull(),
+  status: gdprRequestStatusEnum("status").notNull().default('pending'),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  filePath: text("file_path"),
+  expiryDate: timestamp("expiry_date"),
+}, (table) => [
+  index("idx_gdpr_user").on(table.userId),
+  index("idx_gdpr_status").on(table.status),
+]);
+
+// ===== SCHÉMAS D'INSERTION PRO =====
+
+export const insertStripeEventsSchema = createInsertSchema(stripeEvents).omit({
+  receivedAt: true,
+});
+
+export const insertSecurityAuditLogSchema = createInsertSchema(securityAuditLog).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertUser2FASchema = createInsertSchema(user2FA).omit({
+  createdAt: true,
+  lastUsedAt: true,
+});
+
+export const insertGdprRequestsSchema = createInsertSchema(gdprRequests).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
 // ===== TYPES POUR PETITES ANNONCES =====
 
 // Types d'insertion
@@ -2653,6 +2740,12 @@ export type InsertEscrowTransactions = z.infer<typeof insertEscrowTransactionsSc
 export type InsertAnnoncesSanctions = z.infer<typeof insertAnnoncesSanctionsSchema>;
 export type InsertAdPhotos = z.infer<typeof insertAdPhotosSchema>;
 
+// Types d'insertion PRO
+export type InsertStripeEvents = z.infer<typeof insertStripeEventsSchema>;
+export type InsertSecurityAuditLog = z.infer<typeof insertSecurityAuditLogSchema>;
+export type InsertUser2FA = z.infer<typeof insertUser2FASchema>;
+export type InsertGdprRequests = z.infer<typeof insertGdprRequestsSchema>;
+
 // Types de sélection
 export type PetitesAnnonces = typeof petitesAnnonces.$inferSelect;
 export type AnnoncesModeration = typeof annoncesModeration.$inferSelect;
@@ -2660,3 +2753,9 @@ export type AnnoncesReports = typeof annoncesReports.$inferSelect;
 export type EscrowTransactions = typeof escrowTransactions.$inferSelect;
 export type AnnoncesSanctions = typeof annoncesSanctions.$inferSelect;
 export type AdPhotos = typeof adPhotos.$inferSelect;
+
+// Types de sélection PRO
+export type StripeEvents = typeof stripeEvents.$inferSelect;
+export type SecurityAuditLog = typeof securityAuditLog.$inferSelect;
+export type User2FA = typeof user2FA.$inferSelect;
+export type GdprRequests = typeof gdprRequests.$inferSelect;

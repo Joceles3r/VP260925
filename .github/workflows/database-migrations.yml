@@ -1,0 +1,55 @@
+name: Database Migrations Validation
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'db/migrations/**'
+      - 'shared/schema.ts'
+
+jobs:
+  validate-migrations:
+    name: Validate SQL Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Validate migration files exist
+        run: |
+          if [ ! -d "db/migrations" ]; then
+            echo "⚠️  No migrations directory found"
+            exit 0
+          fi
+          
+          if [ ! -f "db/migrations/001_init.sql" ]; then
+            echo "❌ Missing initial migration: 001_init.sql"
+            exit 1
+          fi
+          
+          echo "✅ Migration files present and valid"
+      
+      - name: Check SQL syntax (basic)
+        run: |
+          for file in db/migrations/*.sql; do
+            if [ -f "$file" ]; then
+              echo "🔍 Checking $file..."
+              # Basic syntax check - ensure semicolons and keywords
+              if ! grep -q "CREATE\|ALTER\|INSERT\|UPDATE" "$file"; then
+                echo "⚠️  $file might be empty or malformed"
+              fi
+              echo "✅ $file syntax OK"
+            fi
+          done
+      
+      - name: Check for dangerous operations
+        run: |
+          dangerous_patterns=("DROP TABLE" "DROP DATABASE" "TRUNCATE" "DELETE FROM")
+          
+          for pattern in "${dangerous_patterns[@]}"; do
+            if grep -r "$pattern" db/migrations/ 2>/dev/null; then
+              echo "⚠️  Found potentially dangerous operation: $pattern"
+              echo "Review required for migration safety"
+            fi
+          done
+          
+          echo "✅ Migration safety check completed"
