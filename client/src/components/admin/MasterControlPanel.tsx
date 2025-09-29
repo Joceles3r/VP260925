@@ -5,25 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Crown, 
-  Zap, 
-  Shield, 
-  Activity, 
-  TrendingUp, 
-  Users, 
-  DollarSign,
-  Eye,
-  Play,
-  Pause,
-  CircleStop as StopCircle,
-  Settings,
-  TriangleAlert as AlertTriangle,
-  CheckCircle,
-  Clock,
-  Target,
-  Sparkles
-} from 'lucide-react';
+import { Crown, Zap, Shield, Activity, TrendingUp, Users, DollarSign, Eye, Play, Pause, CircleStop as StopCircle, Settings, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Clock, Target, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface MasterStats {
