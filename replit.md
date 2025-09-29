@@ -2,7 +2,7 @@
 
 ## Overview
 
-VISUAL is a web application that enables users to invest in visual content projects with small amounts (€1-€20) while influencing rankings through a voting system. The platform supports traditional project investments, live shows/battles between artists, and provides a comprehensive dashboard for portfolio management. Built with a modern full-stack architecture using React, Express, TypeScript, and PostgreSQL.
+VISUAL is a web application that enables users to invest in visual content projects with small amounts **(2–20 € selon la catégorie)** while influencing rankings through a voting system. The platform supports traditional project investments, live shows/battles between artists, and provides a comprehensive dashboard for portfolio management. Built with a modern full-stack architecture using React, Express, TypeScript, and PostgreSQL.
 
 ## User Preferences
 

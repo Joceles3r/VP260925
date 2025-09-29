@@ -37,7 +37,7 @@ export default function Landing() {
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto mb-8" data-testid="hero-subtitle">
-            Investissez par tranches de 1 à 20 € et influencez le classement grâce aux VISUpoints. 
+            Investissez par tranches de **2–20 €** (vidéos/livres) et influencez le classement grâce aux VISUpoints. 
             Découvrez une nouvelle façon de soutenir la création audiovisuelle.
           </p>
 
@@ -64,7 +64,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8" data-testid="key-numbers">
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary mb-2">1–20 €</div>
+              <div className="text-3xl font-bold text-primary mb-2">2–20 €</div>
               <div className="text-muted-foreground">Tranches d'investissement</div>
             </div>
             <div className="text-center">
@@ -103,7 +103,7 @@ export default function Landing() {
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-3">2. Investissez par tranches</h3>
               <p className="text-muted-foreground">
-                1, 2, 5, 10, 11–15, 20 € → 1 à 10 votes VISUpoints. Plafonds : ≤ 100 €/projet/jour.
+                2, 3, 4, 5, 8, 10, 15, 20 € → 1 à 10 votes VISUpoints. Plafonds : ≤ 100 €/projet/jour.
               </p>
             </div>
 

@@ -1084,8 +1084,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate amount
       const investmentAmount = parseFloat(amount);
-      if (investmentAmount < 1 || investmentAmount > 20) {
-        return res.status(400).json({ message: "Investment amount must be between €1 and €20" });
+      if (investmentAmount < 2 || investmentAmount > 20) {
+        return res.status(400).json({ message: "Investment amount must be between **2–20 €**" });
       }
 
       // Update live show investments

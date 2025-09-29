@@ -182,10 +182,10 @@ export default function LiveStream({
       return;
     }
 
-    if (investmentAmount < 1 || investmentAmount > 20) {
+    if (investmentAmount < 2 || investmentAmount > 20) {
       toast({
         title: "Montant invalide",
-        description: "L'investissement doit être entre €1 et €20",
+        description: "L'investissement doit être entre **2–20 €**",
         variant: "destructive",
       });
       return;
@@ -307,11 +307,11 @@ export default function LiveStream({
             <div className="flex items-center space-x-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  Montant d'investissement (€1-20)
+                  Montant d'investissement (**2–20 €**)
                 </label>
                 <Input
                   type="number"
-                  min="1"
+                  min="2"
                   max="20"
                   value={investmentAmount}
                   onChange={(e) => setInvestmentAmount(parseInt(e.target.value) || 1)}
