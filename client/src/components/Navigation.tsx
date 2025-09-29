@@ -7,21 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { 
-  Home,
-  BarChart3,
-  FolderOpen,
-  Briefcase,
-  Radio,
-  Users,
-  BookOpen,
-  MessageSquare,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  Bell
-} from 'lucide-react';
+import { Hop as Home, ChartBar as BarChart3, FolderOpen, Briefcase, Radio, Users, BookOpen, MessageSquare, Settings, LogOut, Menu, X, Bell } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from 'wouter';
 import LanguageSelector from './LanguageSelector';
