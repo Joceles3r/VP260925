@@ -78,6 +78,7 @@ import {
   securityAuditLog,
   user2FA,
   gdprRequests,
+  adminBreakGlassOtp,
   livePredictions,
   predictionBets,
   type User,
@@ -4449,6 +4450,60 @@ export class DatabaseStorage implements IStorage {
       .update(stripeEvents)
       .set({ processed: true, updatedAt: new Date() })
       .where(eq(stripeEvents.id, id));
+  }
+
+  // Admin Break-Glass OTP operations
+  async createAdminBreakGlassOtp(data: any): Promise<any> {
+    const [result] = await db.insert(adminBreakGlassOtp).values(data).returning();
+    return result;
+  }
+
+  async getActiveAdminOtp(otpCode: string): Promise<any> {
+    const [result] = await db
+      .select()
+      .from(adminBreakGlassOtp)
+      .where(
+        and(
+          eq(adminBreakGlassOtp.otpCode, otpCode),
+          eq(adminBreakGlassOtp.status, 'active'),
+          gt(adminBreakGlassOtp.expiresAt, new Date())
+        )
+      )
+      .limit(1);
+    return result || null;
+  }
+
+  async useAdminBreakGlassOtp(otpCode: string, userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
+    await db
+      .update(adminBreakGlassOtp)
+      .set({
+        status: 'used',
+        usedAt: new Date(),
+        usedBy: userId,
+        ipAddress,
+        userAgent,
+      })
+      .where(eq(adminBreakGlassOtp.otpCode, otpCode));
+  }
+
+  async expireOldAdminOtps(): Promise<void> {
+    await db
+      .update(adminBreakGlassOtp)
+      .set({ status: 'expired' })
+      .where(
+        and(
+          eq(adminBreakGlassOtp.status, 'active'),
+          lt(adminBreakGlassOtp.expiresAt, new Date())
+        )
+      );
+  }
+
+  async getAdminOtpHistory(limit: number = 50): Promise<any[]> {
+    return await db
+      .select()
+      .from(adminBreakGlassOtp)
+      .orderBy(desc(adminBreakGlassOtp.createdAt))
+      .limit(limit);
   }
 }
 

@@ -2708,6 +2708,25 @@ export const gdprRequests = pgTable("gdpr_requests", {
   index("idx_gdpr_status").on(table.status),
 ]);
 
+// OTPs temporaires pour accès admin d'urgence (break-glass)
+export const adminBreakGlassOtpStatusEnum = pgEnum('admin_otp_status', ['active', 'used', 'expired']);
+
+export const adminBreakGlassOtp = pgTable("admin_break_glass_otp", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  otpCode: varchar("otp_code", { length: 64 }).notNull().unique(), // SHA-256 = 64 chars
+  email: varchar("email").notNull(), // Email de l'admin qui peut l'utiliser
+  status: adminBreakGlassOtpStatusEnum("status").notNull().default('active'),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  usedAt: timestamp("used_at"),
+  usedBy: varchar("used_by"), // User ID qui a utilisé l'OTP
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+}, (table) => [
+  index("idx_admin_otp_status").on(table.status),
+  index("idx_admin_otp_expires").on(table.expiresAt),
+]);
+
 // ===== SCHÉMAS D'INSERTION PRO =====
 
 export const insertStripeEventsSchema = createInsertSchema(stripeEvents).omit({
@@ -2728,6 +2747,12 @@ export const insertGdprRequestsSchema = createInsertSchema(gdprRequests).omit({
   id: true,
   createdAt: true,
   completedAt: true,
+});
+
+export const insertAdminBreakGlassOtpSchema = createInsertSchema(adminBreakGlassOtp).omit({
+  id: true,
+  createdAt: true,
+  usedAt: true,
 });
 
 // ===== TYPES POUR PETITES ANNONCES =====
