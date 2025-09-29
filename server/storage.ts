@@ -73,6 +73,11 @@ import {
   pollVotes,
   engagementPoints,
   userBadges,
+  // Tables nouvelles pour modernisation PRO
+  stripeEvents,
+  securityAuditLog,
+  user2FA,
+  gdprRequests,
   livePredictions,
   predictionBets,
   type User,
@@ -206,7 +211,16 @@ import {
   type EngagementPoint,
   type UserBadge,
   type LivePrediction,
-  type PredictionBet
+  type PredictionBet,
+  // Types PRO modernisation
+  type StripeEvents,
+  type InsertStripeEvents,
+  type SecurityAuditLog,
+  type InsertSecurityAuditLog,
+  type User2FA,
+  type InsertUser2FA,
+  type GdprRequests,
+  type InsertGdprRequests
 } from "@shared/schema";
 import { 
   ESCROW_FEE_RATE, 
@@ -693,6 +707,29 @@ export interface IStorage {
   getAdCoverPhoto(adId: string): Promise<AdPhotos | undefined>;
   moderateAdPhoto(photoId: string, decision: 'pending' | 'approved' | 'rejected', moderatorId: string, reason?: string): Promise<AdPhotos>;
   getPendingPhotoModeration(): Promise<AdPhotos[]>;
+
+  // 2FA operations (nouvelles méthodes PRO)
+  upsertUser2FA(user2FA: InsertUser2FA): Promise<User2FA>;
+  getUser2FA(userId: string): Promise<User2FA | undefined>;
+  updateUser2FAStatus(userId: string, status: string): Promise<void>;
+  updateUser2FALastUsed(userId: string): Promise<void>;
+  updateUser2FABackupCodes(userId: string, backupCodes: string[]): Promise<void>;
+
+  // GDPR operations (nouvelles méthodes PRO)
+  createGdprRequest(request: InsertGdprRequests): Promise<GdprRequests>;
+  getGdprRequest(id: string): Promise<GdprRequests | undefined>;
+  updateGdprRequest(id: string, updates: Partial<GdprRequests>): Promise<GdprRequests>;
+  getUserGdprRequests(userId: string): Promise<GdprRequests[]>;
+  getPendingGdprRequests(): Promise<GdprRequests[]>;
+
+  // Security audit operations (nouvelles méthodes PRO)
+  createSecurityAuditLog(log: InsertSecurityAuditLog): Promise<SecurityAuditLog>;
+  getSecurityAuditLogs(limit?: number, offset?: number, actorId?: string): Promise<SecurityAuditLog[]>;
+
+  // Stripe webhook operations (nouvelles méthodes PRO)
+  upsertStripeEvent(event: InsertStripeEvents): Promise<StripeEvents>;
+  getStripeEvent(id: string): Promise<StripeEvents | undefined>;
+  markStripeEventProcessed(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4282,6 +4319,136 @@ export class DatabaseStorage implements IStorage {
       .from(adPhotos)
       .where(eq(adPhotos.moderationStatus, 'pending'))
       .orderBy(adPhotos.createdAt);
+  }
+
+  // ===== NOUVELLES IMPLÉMENTATIONS PRO =====
+
+  // 2FA operations
+  async upsertUser2FA(user2FAData: InsertUser2FA): Promise<User2FA> {
+    const [result] = await db
+      .insert(user2FA)
+      .values(user2FAData)
+      .onConflictDoUpdate({
+        target: user2FA.userId,
+        set: {
+          ...user2FAData,
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async getUser2FA(userId: string): Promise<User2FA | undefined> {
+    const [result] = await db.select().from(user2FA).where(eq(user2FA.userId, userId));
+    return result;
+  }
+
+  async updateUser2FAStatus(userId: string, status: string): Promise<void> {
+    await db
+      .update(user2FA)
+      .set({ status })
+      .where(eq(user2FA.userId, userId));
+  }
+
+  async updateUser2FALastUsed(userId: string): Promise<void> {
+    await db
+      .update(user2FA)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(user2FA.userId, userId));
+  }
+
+  async updateUser2FABackupCodes(userId: string, backupCodes: string[]): Promise<void> {
+    await db
+      .update(user2FA)
+      .set({ backupCodes })
+      .where(eq(user2FA.userId, userId));
+  }
+
+  // GDPR operations
+  async createGdprRequest(request: InsertGdprRequests): Promise<GdprRequests> {
+    const [newRequest] = await db.insert(gdprRequests).values(request).returning();
+    return newRequest;
+  }
+
+  async getGdprRequest(id: string): Promise<GdprRequests | undefined> {
+    const [request] = await db.select().from(gdprRequests).where(eq(gdprRequests.id, id));
+    return request;
+  }
+
+  async updateGdprRequest(id: string, updates: Partial<GdprRequests>): Promise<GdprRequests> {
+    const [updatedRequest] = await db
+      .update(gdprRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(gdprRequests.id, id))
+      .returning();
+    return updatedRequest;
+  }
+
+  async getUserGdprRequests(userId: string): Promise<GdprRequests[]> {
+    return await db
+      .select()
+      .from(gdprRequests)
+      .where(eq(gdprRequests.userId, userId))
+      .orderBy(desc(gdprRequests.createdAt));
+  }
+
+  async getPendingGdprRequests(): Promise<GdprRequests[]> {
+    return await db
+      .select()
+      .from(gdprRequests)
+      .where(eq(gdprRequests.status, 'pending'))
+      .orderBy(gdprRequests.createdAt);
+  }
+
+  // Security audit operations
+  async createSecurityAuditLog(log: InsertSecurityAuditLog): Promise<SecurityAuditLog> {
+    const [newLog] = await db.insert(securityAuditLog).values(log).returning();
+    return newLog;
+  }
+
+  async getSecurityAuditLogs(limit = 100, offset = 0, actorId?: string): Promise<SecurityAuditLog[]> {
+    const baseQuery = db.select().from(securityAuditLog);
+    
+    if (actorId) {
+      return await baseQuery
+        .where(eq(securityAuditLog.actorId, actorId))
+        .orderBy(desc(securityAuditLog.timestamp))
+        .limit(limit)
+        .offset(offset);
+    }
+    
+    return await baseQuery
+      .orderBy(desc(securityAuditLog.timestamp))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  // Stripe webhook operations
+  async upsertStripeEvent(event: InsertStripeEvents): Promise<StripeEvents> {
+    const [stripeEvent] = await db
+      .insert(stripeEvents)
+      .values(event)
+      .onConflictDoUpdate({
+        target: stripeEvents.id,
+        set: {
+          ...event,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return stripeEvent;
+  }
+
+  async getStripeEvent(id: string): Promise<StripeEvents | undefined> {
+    const [event] = await db.select().from(stripeEvents).where(eq(stripeEvents.id, id));
+    return event;
+  }
+
+  async markStripeEventProcessed(id: string): Promise<void> {
+    await db
+      .update(stripeEvents)
+      .set({ processed: true, updatedAt: new Date() })
+      .where(eq(stripeEvents.id, id));
   }
 }
 
