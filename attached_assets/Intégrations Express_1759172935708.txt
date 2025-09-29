@@ -1,0 +1,53 @@
+Intégration express
+
+FastAPI (main app)
+
+from fastapi import FastAPI
+from server.routes.health import router as health_router   # déjà livré dans le Lot 1
+from server.routes.auth_2fa import router as twofa_router
+from server.routes.gdpr import router as gdpr_router
+from server.routes.stripe_webhooks import router as stripe_router
+from server.middleware.rate_limit import init_rate_limit
+from server.observability.sentry_init import init_sentry
+
+app = FastAPI()
+init_sentry()
+limiter = init_rate_limit(app)
+
+app.include_router(health_router)       # /healthz /readyz /metrics
+app.include_router(twofa_router)        # /api/auth/2fa/*
+app.include_router(gdpr_router)         # /api/gdpr/*
+app.include_router(stripe_router)       # /webhooks/stripe
+
+
+Dépendances à ajouter
+server/requirements.txt :
+
+fastapi
+uvicorn[standard]
+pyotp
+prometheus-client
+slowapi
+asyncpg
+stripe
+sentry-sdk
+
+
+Secrets/ENV conseillés
+
+STRIPE_API_KEY=sk_live_XXXXXXXX
+STRIPE_WEBHOOK_SECRET=whsec_XXXXXXXX
+AUDIT_HMAC_KEY=change_me
+SENTRY_DSN=https://XXXXXXXX.ingest.sentry.io/XXXXXXX
+DB_DSN=postgresql://user:pass@host:5432/db
+GPG_PASSPHRASE=change_me
+VISUAL_ISSUER=VISUAL
+
+
+Front (PWA & i18n)
+
+Importe client/register-sw.ts dans ton bootstrap client.
+
+Serre les JSON i18n et branche ton provider i18n.
+
+Ajoute public/cmp/cmp_banner.js dans ton layout public (avant fermeture </body>).
