@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <!-- Projets publics - URLs dynamiques générées par la plateforme -->
+  <!-- Note: En production, ce sitemap sera généré dynamiquement -->
+  <!-- en fonction des projets réellement publiés et indexables -->
+  
+  <!-- Catégories de projets publiques -->
+  <url>
+    <loc>https://visual.replit.app/projects?category=courts-metrages</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://visual.replit.app/projects?category=clips-musicaux</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://visual.replit.app/projects?category=documentaires</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://visual.replit.app/projects?category=series-web</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://visual.replit.app/projects?category=animations</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://visual.replit.app/projects?category=voix-de-info</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Filtres populaires -->
+  <url>
+    <loc>https://visual.replit.app/projects?badge=trending</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://visual.replit.app/projects?badge=top10</loc>
+    <lastmod>2025-09-29T17:10:00Z</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- Note pour le développement futur: -->
+  <!-- Ce sitemap devra être généré dynamiquement via un endpoint /api/sitemaps/projects -->
+  <!-- qui listera les projets publics avec leurs URLs individuelles: -->
+  <!-- - https://visual.replit.app/projects/{projectId} -->
+  <!-- - Métadonnées: titre, description, image de couverture -->
+  <!-- - lastmod basé sur les mises à jour réelles des projets -->
+
+</urlset>
