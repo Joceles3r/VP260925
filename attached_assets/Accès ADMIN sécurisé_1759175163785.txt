@@ -1,0 +1,58 @@
+livré ici (FastAPI, CI/CD, sécurité), je n’ai pas mis en place de “mot de passe de référence” type 000000ABC***. Et à éviter absolument en prod : c’est une porte dérobée.
+
+Ce qu’il faut faire (tout de suite)
+
+S’assurer qu’aucun backdoor n’existe dans ton repo :
+
+Ligne de commande (à lancer à la racine) :
+
+rg -n -S "000000ABC|master[_-]?pass|reference.*password|backdoor|ADMIN_PASSWORD" .
+
+
+(ou grep -RInE si tu n’as pas ripgrep)
+
+Bloquer définitivement ce mécanisme côté code :
+
+Côté auth, aucune exception/contournement de vérif ne doit exister pour l’admin.
+
+2FA obligatoire + rate-limit + (optionnel) IP allowlist sur /admin.
+
+Mettre un garde-fou CI (empêche de re-commiter un mot de passe “magique”) :
+
+Ajoute un job GitHub Actions qui fail si une chaîne sensible est trouvée.
+
+Exemple : garde-fou CI (ajoute .github/workflows/forbid-backdoors.yml)
+name: forbid-backdoors
+on: [push, pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for forbidden patterns
+        run: |
+          set -e
+          PATTERN='000000ABC|master[_-]?pass|reference.*password|backdoor'
+          if grep -RInE "$PATTERN" . ; then
+            echo "❌ Forbidden backdoor-like pattern found."
+            exit 1
+          fi
+          echo "✅ No forbidden patterns."
+
+Comment sécuriser l’accès admin (modèle recommandé)
+
+2FA obligatoire (TOTP + codes de secours) — livré : server/routes/auth_2fa.py.
+
+Rate-limit sur endpoints sensibles — livré : server/middleware/rate_limit.py.
+
+Journal d’audit signé pour les actions d’admin — livré : server/audit/ledger.py.
+
+Sentry activé — livré : server/observability/sentry_init.py.
+
+“Break-glass” (si tu veux un secours… sans backdoor)
+
+Si tu tiens à un accès de secours, fais-le sans mot de passe statique :
+
+Génération d’un OTP à usage unique (TTL 5–10 min), déclenchée par l’ADMIN via la console (ou 2 approbateurs), journalisée et notifiée (email/Slack).
+
+Exemple d’idée : endpoint admin qui crée un code à usage unique stocké en DB (haché), autorisant une seule connexion administrateur, puis s’auto-détruit.

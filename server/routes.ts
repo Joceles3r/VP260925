@@ -73,6 +73,7 @@ import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenVal
 import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
 import { categoriesRouter } from "./categories/routes";
+import { setupAdminRoutes } from "./services/adminRoutes";
 import { generateReceiptPDF } from "./receipts/handlers";
 import agentRoutes from "./routes/agentRoutes";
 import { VISUPointsService } from "./services/visuPointsService.js";
@@ -5769,6 +5770,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // =======================
   // MISE À NIVEAU PRO - ENDPOINTS DE SANTÉ
+  // =======================
+  
+  // =======================
+  // ROUTES ADMIN SÉCURISÉES
+  // =======================
+  
+  // Configuration des routes admin avec sécurité renforcée
+  setupAdminRoutes(app);
+  console.log('✅ Routes admin sécurisées initialisées');
+
+  // =======================
+  // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
   
   // Imports pour les endpoints de santé
