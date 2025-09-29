@@ -5,23 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Brain, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  Zap, 
-  Shield, 
-  Activity,
-  TrendingUp,
-  Users,
-  FileText,
-  Settings,
-  StopCircle,
-  Play,
-  Pause
-} from 'lucide-react';
+import { Brain, CircleCheck as CheckCircle, Circle as XCircle, Clock, TriangleAlert as AlertTriangle, Zap, Shield, Activity, TrendingUp, Users, FileText, Settings, CircleStop as StopCircle, Play, Pause } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface AIDecision {
