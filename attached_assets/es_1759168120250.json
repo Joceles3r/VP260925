@@ -1,0 +1,12 @@
+{
+  "nav": {
+    "platform": "Plataforma",
+    "how": "Cómo funciona",
+    "projects": "Proyectos"
+  },
+  "cta": {
+    "buy": "Comprar",
+    "invest": "Invertir",
+    "watch": "Ver"
+  }
+}
