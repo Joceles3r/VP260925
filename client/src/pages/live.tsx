@@ -8,7 +8,7 @@ export default function Live() {
     refetchInterval: 5000, // Refresh every 5 seconds for live data
   });
 
-  const activeLiveShow = liveShows?.[0]; // Get the first active live show
+  const activeLiveShow = (liveShows as any[])?.[0]; // Get the first active live show
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid="live-page">

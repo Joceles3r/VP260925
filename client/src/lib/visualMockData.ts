@@ -1,4 +1,5 @@
 // Mock data pour l'interface VISUAL
+import { VISUAL_CONSTANTS } from '@shared/shared_visual_constants';
 
 export interface CategoryToggle {
   visible: boolean;
@@ -53,14 +54,12 @@ export const mockCategoryToggles: CategoryToggles = {
   petites_annonces: { visible: true, message: "" }
 };
 
-// Mapping des votes selon investissement
-export const votesMapping: Record<number, number> = {
-  2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 6, 10: 7, 12: 8, 15: 9, 20: 10
-};
+// Utiliser les constantes partagées pour les mappings
+export const votesMapping = VISUAL_CONSTANTS.votesMapping as Record<string, number>;
 
-// Micro-montants pour Voix de l'Info
+// Micro-montants pour Voix de l'Info - utilise les paliers définis dans les constantes partagées
 export const voixInfoMapping: Record<number, number> = {
-  0.2: 1, 0.5: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7
+  0.2: 1, 0.5: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7, 10: 8
 };
 
 // Fonction pour résoudre le nombre de votes selon le montant et la catégorie
