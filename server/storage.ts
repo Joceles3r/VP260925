@@ -229,7 +229,7 @@ import {
   ANNONCE_DEFAULT_DURATION_DAYS 
 } from "@shared/constants";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, sql, or, isNotNull } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, gt, lt, sql, or, isNotNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export interface IStorage {
