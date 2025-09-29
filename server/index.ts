@@ -333,4 +333,6 @@ const port = parseInt(process.env.PORT || '5000', 10);
 app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 VISUAL Platform server running on port ${port}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Access URL: http://localhost:${port}`);
+  console.log(`🎬 VISUAL Platform ready for visualization!`);
 });
