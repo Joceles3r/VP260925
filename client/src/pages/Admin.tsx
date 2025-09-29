@@ -5,6 +5,8 @@
  import { useAuth } from '@/hooks/useAuth';
 import AgentCoordinatorPanel from '@/components/admin/AgentCoordinatorPanel';
 +import VisualScoutPanel from '@/components/admin/VisualScoutPanel';
+import VisualAIPanel from '@/components/admin/VisualAIPanel';
+import VisualFinancePanel from '@/components/admin/VisualFinancePanel';
  
  interface AdminStats {
  }

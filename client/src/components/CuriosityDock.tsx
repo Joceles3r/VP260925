@@ -94,9 +94,9 @@ export default function CuriosityDock({
             variant="ghost"
             size="sm"
             onClick={handleGoLive}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-500/10 transition-all duration-200 text-white live-pulse"
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl hover:bg-red-500/10 transition-all duration-200 text-white live-pulse"
             >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <div className="relative">
                 <Radio className="h-4 w-4 text-red-500" />
                 <motion.div 
@@ -105,13 +105,11 @@ export default function CuriosityDock({
                   className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500"
                 />
               </div>
-              <span className="text-sm font-medium text-white">En direct</span>
+              <span className="text-xs font-medium text-white">LIVE</span>
             </div>
-            <div className="flex items-center gap-1 text-xs text-gray-400">
+            <div className="text-xs text-gray-400 text-center">
               <Users className="h-3 w-3" />
-              <span>{stats.liveViewers}</span>
-              <span>•</span>
-              <span>{stats.liveShows} lives</span>
+              <span>{stats.liveViewers} • {stats.liveShows} shows</span>
             </div>
             </Button>
           </motion.div>
@@ -123,18 +121,18 @@ export default function CuriosityDock({
             size="sm"
             onClick={handleTop10}
             disabled={!stats.topActive}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 ${
+            className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200 ${
               stats.topActive 
                 ? 'hover:bg-amber-500/10 text-white' 
                 : 'opacity-40 cursor-not-allowed'
             }`}
             >
-            <Trophy className="h-4 w-4 text-amber-500" />
-            <span className="text-sm font-medium text-white">TOP 10</span>
+            <div className="flex items-center gap-1">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <span className="text-xs font-medium text-white">TOP 10</span>
+            </div>
             {stats.topActive && (
-              <Badge variant="secondary" className="text-xs bg-amber-500/20 text-amber-300 border-amber-500/30">
-                <Zap className="h-3 w-3" />
-              </Badge>
+              <div className="text-xs text-amber-300">Gagnants</div>
             )}
             </Button>
           </motion.div>
@@ -145,14 +143,14 @@ export default function CuriosityDock({
             variant="ghost"
             size="sm"
             onClick={handleNew}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-blue-500/10 transition-all duration-200 text-white"
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl hover:bg-blue-500/10 transition-all duration-200 text-white"
             >
-            <Sparkles className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium text-white">Nouveau</span>
+            <div className="flex items-center gap-1">
+              <Sparkles className="h-4 w-4 text-blue-500" />
+              <span className="text-xs font-medium text-white">NOUVEAU</span>
+            </div>
             {stats.newCount > 0 && (
-              <Badge variant="secondary" className="text-xs bg-blue-500/20 text-blue-300 border-blue-500/30">
-                +{stats.newCount}
-              </Badge>
+              <div className="text-xs text-blue-300">+{stats.newCount}</div>
             )}
             </Button>
           </motion.div>

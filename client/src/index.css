@@ -24,6 +24,20 @@
   box-shadow: 0 0 12px rgba(0,209,255,0.35), 0 0 18px rgba(123,44,255,0.25), 0 0 26px rgba(255,60,172,0.18);
 }
 
+/* Pulse animation pour les éléments TOP 10 */
+@keyframes top10-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 8px rgba(255,193,7,0.4); 
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(255,193,7,0.7), 0 0 30px rgba(255,193,7,0.5); 
+  }
+}
+
+.top10-glow {
+  animation: top10-pulse 2s ease-in-out infinite;
+}
+
 /* Pulse animation pour les éléments live */
 @keyframes neon-pulse {
   0%, 100% { box-shadow: 0 0 5px rgba(0,209,255,0.3); }

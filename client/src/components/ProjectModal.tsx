@@ -180,19 +180,31 @@ export default function ProjectModal({ project, isOpen, onClose }: ProjectModalP
             <div>
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-white mb-3">Regarder en entier</h3>
+                <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Play className="h-4 w-4 text-blue-400" />
+                    <span className="text-sm font-semibold text-blue-300">Principe VISUAL</span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Payez {project.price}€ pour voir l'œuvre complète + soutenir le créateur
+                  </p>
+                </div>
                 <Button 
                   onClick={handleWatch}
                   className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 mb-2 hover:neon-glow"
                 >
                   <Play className="h-4 w-4 mr-2" />
-                  Regarder pour {project.price}€
+                  🎬 Regarder en entier • {project.price}€
                 </Button>
-                <p className="text-xs text-gray-500">Accès complet à l'œuvre</p>
+                <p className="text-xs text-gray-500">Accès complet + soutien au créateur</p>
               </div>
 
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold text-white">Investir</h3>
+                  <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/30">
+                    TOP 10 = Gains
+                  </Badge>
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -211,14 +223,19 @@ export default function ProjectModal({ project, isOpen, onClose }: ProjectModalP
                     exit={{ opacity: 0, height: 0 }}
                     className="bg-slate-900/50 rounded-lg p-3 mb-4 text-sm text-gray-400"
                   >
-                    <p className="mb-2">
-                      <strong>Règles de la catégorie :</strong>
-                    </p>
+                    <div className="mb-3">
+                      <p className="font-semibold text-white mb-2">🏆 Comment gagner :</p>
+                      <div className="bg-green-900/20 border border-green-500/30 rounded p-2 mb-2">
+                        <p className="text-xs text-green-300">
+                          <strong>Si ce projet finit dans le TOP 10</strong> → Vous gagnez selon votre investissement !
+                        </p>
+                      </div>
+                    </div>
                     <ul className="list-disc list-inside space-y-1 text-xs">
-                      <li>Investissement minimum : 2€, maximum : 20€</li>
-                      <li>Plus vous investissez, plus vous avez de votes</li>
-                      <li>Redistribution selon classement final</li>
-                      <li>Arrondis à l'euro inférieur</li>
+                      <li><strong>100 projets</strong> en compétition → <strong>10 gagnants</strong></li>
+                      <li><strong>Plus d'investissement = plus de votes</strong> pour influencer le classement</li>
+                      <li><strong>Redistribution automatique</strong> si votre choix gagne</li>
+                      <li><strong>Cycle de 168h</strong> puis nouveau classement</li>
                     </ul>
                   </motion.div>
                 )}

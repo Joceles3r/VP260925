@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Play, Search, ListFilter as Filter, TrendingUp, Star, Users, Eye, Heart, Share2, Euro, ChartBar as BarChart3, ChartPie as PieChart, Calendar, Clock } from 'lucide-react';
+import { Play, Search, ListFilter as Filter, TrendingUp, Star, Users, Eye, Heart, Share2, Euro, ChartBar as BarChart3, ChartPie as PieChart, Calendar, Clock, DollarSign, Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEmojiSystem } from '@/hooks/useEmojiSystem';
 import { useAuth } from '@/hooks/useAuth';
@@ -316,12 +316,42 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h1 className="text-4xl font-bold text-white mb-2">
-              Bienvenue {user?.firstName || 'sur VISUAL'} 👋
-            </h1>
-            <p className="text-gray-400 mb-6">
-              Découvrez et investissez dans les projets de contenu visuel qui vous passionnent
-            </p>
+            <div className="text-center mb-8">
+              <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                VISUAL
+              </h1>
+              <p className="text-2xl text-white mb-2 font-semibold">
+                « Regarde • Investit • Gagne »
+              </p>
+              <p className="text-gray-400 mb-6">
+                Bienvenue {user?.firstName || 'Investisseur'} ! Découvrez les {projectCount} projets en compétition
+              </p>
+              
+              {/* Principe explicatif rapide */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto mb-8">
+                <Card className="bg-blue-900/20 border-blue-500/30">
+                  <CardContent className="pt-4 pb-4">
+                    <Eye className="h-6 w-6 text-blue-400 mx-auto mb-2" />
+                    <p className="text-sm text-blue-300 font-semibold">REGARDE</p>
+                    <p className="text-xs text-gray-400">Extraits gratuits</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-purple-900/20 border-purple-500/30">
+                  <CardContent className="pt-4 pb-4">
+                    <DollarSign className="h-6 w-6 text-purple-400 mx-auto mb-2" />
+                    <p className="text-sm text-purple-300 font-semibold">INVESTIT</p>
+                    <p className="text-xs text-gray-400">2-20€ = votes</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-pink-900/20 border-pink-500/30">
+                  <CardContent className="pt-4 pb-4">
+                    <Trophy className="h-6 w-6 text-pink-400 mx-auto mb-2" />
+                    <p className="text-sm text-pink-300 font-semibold">GAGNE</p>
+                    <p className="text-xs text-gray-400">Si TOP 10</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </motion.div>
 
           {/* Stats rapides */}
