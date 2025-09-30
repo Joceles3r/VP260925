@@ -25,34 +25,34 @@ export default function Navigation() {
   ];
 
   return (
-    <nav className="bg-card border-b border-border sticky top-0 z-50">
+    <nav className="glass-card border-b border-border/30 sticky top-0 z-50 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Link href="/dashboard" className="flex items-center" data-testid="logo-link">
-                <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                  <Play className="h-6 w-6 text-primary-foreground" />
+              <Link href="/dashboard" className="flex items-center group" data-testid="logo-link">
+                <div className="w-10 h-10 bg-gradient-to-br from-[#00D1FF] to-[#7B2CFF] rounded-lg flex items-center justify-center neon-glow-blue smooth-transition group-hover:scale-110">
+                  <Play className="h-6 w-6 text-white" />
                 </div>
-                <span className="ml-3 text-xl font-bold text-foreground">VISUAL</span>
+                <span className="ml-3 text-xl font-bold visual-text-gradient">VISUAL</span>
               </Link>
             </div>
           </div>
 
           {/* Navigation Links */}
           <div className="hidden md:block">
-            <div className="ml-10 flex items-baseline space-x-4">
+            <div className="ml-10 flex items-baseline space-x-2">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   href={item.path}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                  className={`px-4 py-2 rounded-lg text-sm font-medium smooth-transition ${
                     location === item.path
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] text-white neon-glow-blue'
                       : item.highlight
-                      ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 border border-blue-400/20'
-                      : 'text-foreground hover:bg-muted'
+                      ? 'text-[#00D1FF] hover:text-white hover:bg-[#00D1FF]/10 border border-[#00D1FF]/30 hover:border-[#00D1FF]/50 neon-border'
+                      : 'text-foreground hover:bg-muted/50 hover:text-[#00D1FF]'
                   }`}
                   data-testid={`nav-${item.section}`}
                 >
@@ -64,27 +64,30 @@ export default function Navigation() {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-secondary text-secondary-foreground rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium" data-testid="user-avatar">
+            <div className="flex items-center space-x-3 px-3 py-1.5 rounded-lg glass-card">
+              <div className="w-9 h-9 bg-gradient-to-br from-[#7B2CFF] to-[#FF3CAC] rounded-full flex items-center justify-center neon-glow-violet smooth-transition hover:scale-110 cursor-pointer">
+                <span className="text-sm font-bold text-white" data-testid="user-avatar">
                   {user?.firstName?.[0] || user?.email?.[0] || 'U'}
                 </span>
               </div>
-              <span className="text-sm font-medium text-foreground" data-testid="user-name">
-                {user?.firstName || user?.email || 'User'}
-              </span>
-              {user?.kycVerified && (
-                <div className="text-xs bg-secondary/10 text-secondary px-2 py-1 rounded-full" data-testid="kyc-verified">
-                  ✓ KYC Vérifié
-                </div>
-              )}
+              <div className="hidden lg:block">
+                <span className="text-sm font-medium text-foreground block" data-testid="user-name">
+                  {user?.firstName || user?.email || 'User'}
+                </span>
+                {user?.kycVerified && (
+                  <div className="text-xs bg-gradient-to-r from-green-500/20 to-green-400/20 text-green-400 px-2 py-0.5 rounded-full inline-flex items-center mt-0.5" data-testid="kyc-verified">
+                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1 animate-pulse"></span>
+                    KYC Vérifié
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* Notifications */}
             <NotificationPanel />
             
             <button 
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="p-2 text-muted-foreground hover:text-[#7B2CFF] smooth-transition hover:bg-[#7B2CFF]/10 rounded-lg"
               data-testid="settings-button"
             >
               <Settings className="h-5 w-5" />
