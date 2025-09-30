@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "../layout/AdminLayout";
 import { CategoryTogglesCard } from "../ui/CategoryTogglesCard";
 import { ProfileModulesCard } from "../ui/ProfileModulesCard";
@@ -11,11 +13,53 @@ import { LogsAuditCard } from "../ui/LogsAuditCard";
 import { getJSON } from "../utils/api";
 
 export default function AdminDashboard() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const { toast } = useToast();
   const [overview, setOverview] = useState<any>(null);
   
   useEffect(() => {
-    getJSON("/api/admin/overview").then(setOverview).catch(() => {});
-  }, []);
+    if (!isLoading && !isAuthenticated) {
+      toast({
+        title: "Non autorisé",
+        description: "Vous devez être connecté pour accéder à cette page",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+      return;
+    }
+
+    if (!isLoading && isAuthenticated && user?.profileType !== 'admin') {
+      toast({
+        title: "Accès refusé",
+        description: "Privilèges administrateur requis",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 500);
+      return;
+    }
+  }, [isAuthenticated, isLoading, user, toast]);
+  
+  useEffect(() => {
+    if (isAuthenticated && user?.profileType === 'admin') {
+      getJSON("/api/admin/overview").then(setOverview).catch(() => {});
+    }
+  }, [isAuthenticated, user]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0b0f]">
+        <div className="animate-spin w-8 h-8 border-4 border-fuchsia-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || user?.profileType !== 'admin') {
+    return null;
+  }
 
   return (
     <AdminLayout>

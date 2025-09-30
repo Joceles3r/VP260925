@@ -1,6 +1,16 @@
 import { Router } from 'express';
+import { isAuthenticated } from '../replitAuth';
 
 const router = Router();
+
+// Middleware de sécurité admin pour toutes les routes
+router.use(isAuthenticated);
+router.use((req: any, res: any, next: any) => {
+  if (req.user?.claims?.profile_type !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+});
 
 // Vue d'ensemble
 router.get('/overview', async (req: any, res: any) => {
