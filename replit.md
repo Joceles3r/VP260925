@@ -28,6 +28,14 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
 - **Referral System**: Unique referral links with VISUpoints rewards for sponsors and referees, with monthly limitations.
 - **Visitor Activity**: Comprehensive logging of user and visitor interactions, awarding VISUpoints for various activities, and a "Visitor of the Month" leaderboard.
 - **Ebook Licensing**: Manages secure distribution of ebooks with JWT-signed downloads, download quotas, and an audit trail.
+- **Dark/Light Theme System**: User-customizable theme preferences with:
+  - **Global State Management**: Zustand store ensures all ThemeToggle instances stay synchronized
+  - **Persistence Priority**: Admin override > User DB preference > localStorage > System preference  
+  - **ThemeToggle Component**: Available in Navigation header and Profile page, shows current theme
+  - **Database Storage**: users.themePreference column, platformSettings table for admin overrides
+  - **Admin Override**: AdminThemeOverride component in admin dashboard for global theme forcing (e.g., dark mode during Live Shows)
+  - **Automatic Restoration**: When admin removes override, user preferences automatically restore from database
+  - **Comprehensive Logging**: Debug-ready with initialization and persistence flow logging
 
 ### System Design Choices
 - **Modularity**: Co-located components and organized imports for maintainable code.
@@ -36,6 +44,7 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
 - **Scalability**: Utilizes serverless PostgreSQL for database scalability and a clear separation of concerns between frontend and backend services.
 - **Security**: Focus on secure authentication, authorization, and content delivery (e.g., JWT for ebooks, no exposure of storage keys).
 - **AI Agents**: Strategic Autonomous Intelligence (VisualAI for orchestration, VisualFinanceAI for financial execution) for automated platform management, content moderation, financial rules, and economy management, with dedicated database tables for agent decisions, audit logs, and financial ledgers.
+- **Theme System**: Complete dark/light theme system with user preferences stored in localStorage and database, admin override capability for platform-wide theme forcing (e.g., during Live Shows), and synchronized state management across all UI components.
 
 ## External Dependencies
 

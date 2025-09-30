@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
-import { Play, Settings } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import NotificationPanel from './NotificationPanel';
+import { ThemeToggle } from './ThemeToggle';
 
 export default function Navigation() {
   const [location] = useLocation();
@@ -86,12 +87,8 @@ export default function Navigation() {
             {/* Notifications */}
             <NotificationPanel />
             
-            <button 
-              className="p-2 text-muted-foreground hover:text-[#7B2CFF] smooth-transition hover:bg-[#7B2CFF]/10 rounded-lg"
-              data-testid="settings-button"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
+            {/* Theme Toggle */}
+            <ThemeToggle showLabel={false} saveToServer={true} />
           </div>
         </div>
       </div>

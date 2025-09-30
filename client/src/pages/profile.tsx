@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { User, Mail, Briefcase, Wallet, TrendingUp, Award, Calendar, Check, X } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function ProfilePage() {
   const { user, isLoading } = useAuth();
@@ -113,6 +114,14 @@ export default function ProfilePage() {
                     KYC Non vérifié
                   </Badge>
                 )}
+              </div>
+            </div>
+            
+            {/* Theme Toggle */}
+            <div className="mt-4 pt-4 border-t border-[#00D1FF]/20">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Thème d'affichage</span>
+                <ThemeToggle showLabel={true} saveToServer={true} />
               </div>
             </div>
           </div>

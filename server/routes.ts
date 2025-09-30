@@ -1721,6 +1721,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Theme preference routes
+  app.patch('/api/user/theme', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { theme } = req.body;
+
+      if (!theme || !['light', 'dark'].includes(theme)) {
+        return res.status(400).json({ error: 'Invalid theme value' });
+      }
+
+      console.log(`[Theme] Updating theme for user ${userId} to ${theme}`);
+      await storage.updateUser(userId, { themePreference: theme });
+      console.log(`[Theme] Successfully updated theme for user ${userId}`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Theme update error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/platform/theme-override', async (req: any, res) => {
+    try {
+      const override = await storage.getPlatformSetting('theme_override');
+      res.json({ override: override || null });
+    } catch (error: any) {
+      console.error('Theme override fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/theme-override', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { theme } = req.body;
+
+      if (theme && !['light', 'dark', null].includes(theme)) {
+        return res.status(400).json({ error: 'Invalid theme value' });
+      }
+
+      console.log(`[Theme] Admin ${userId} setting global override to:`, theme);
+      await storage.setPlatformSetting('theme_override', theme, userId);
+      res.json({ success: true, override: theme });
+    } catch (error: any) {
+      console.error('Theme override error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.patch('/api/users/:id/role', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
