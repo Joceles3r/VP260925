@@ -18,7 +18,10 @@ export default function Navigation() {
     { path: '/social', label: 'Social', section: 'social' },
     { path: '/receipts', label: 'Reçus', section: 'receipts' },
     { path: '/info', label: 'Info', section: 'info' },
-    ...(user?.profileType === 'admin' ? [{ path: '/admin', label: 'Admin', section: 'admin' }] : []),
+    ...(user?.profileType === 'admin' ? [
+      { path: '/admin', label: 'Admin', section: 'admin' },
+      { path: '/admin/dashboard', label: '⚡ Dashboard', section: 'admin-dashboard', highlight: true },
+    ] : []),
   ];
 
   return (
