@@ -2793,6 +2793,8 @@ export const ebookDownloadAttempts = pgTable("ebook_download_attempts", {
   ebookId: varchar("ebook_id").notNull(), // Ebook (redondant pour perf)
   status: ebookDlAttemptStatusEnum("status").notNull().default('pending'),
   nonce: varchar("nonce", { length: 32 }).notNull().unique(), // Nonce pour URL signée
+  jwtToken: text("jwt_token").notNull(), // JWT RS256 pour vérification
+  jwtJti: varchar("jwt_jti", { length: 32 }).notNull().unique(), // JWT ID pour anti-replay
   // Tracking
   createdAt: timestamp("created_at").notNull().defaultNow(),
   expiresAt: timestamp("expires_at").notNull(), // Expiration tentative (2-5 min)
@@ -2880,6 +2882,7 @@ export type InsertStripeEvents = z.infer<typeof insertStripeEventsSchema>;
 export type InsertSecurityAuditLog = z.infer<typeof insertSecurityAuditLogSchema>;
 export type InsertUser2FA = z.infer<typeof insertUser2FASchema>;
 export type InsertGdprRequests = z.infer<typeof insertGdprRequestsSchema>;
+export type InsertAdminBreakGlassOtp = z.infer<typeof insertAdminBreakGlassOtpSchema>;
 
 // Types de sélection
 export type PetitesAnnonces = typeof petitesAnnonces.$inferSelect;
@@ -2894,3 +2897,4 @@ export type StripeEvents = typeof stripeEvents.$inferSelect;
 export type SecurityAuditLog = typeof securityAuditLog.$inferSelect;
 export type User2FA = typeof user2FA.$inferSelect;
 export type GdprRequests = typeof gdprRequests.$inferSelect;
+export type AdminBreakGlassOtp = typeof adminBreakGlassOtp.$inferSelect;
