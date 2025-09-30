@@ -15,11 +15,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <a href="#overview" className="block rounded-xl border border-fuchsia-500/30 p-3 hover:bg-fuchsia-500/10 transition-colors" data-testid="link-admin-overview">
             📊 Vue d'ensemble
           </a>
+          <a href="#users" className="block rounded-xl border border-cyan-500/30 p-3 hover:bg-cyan-500/10 transition-colors" data-testid="link-admin-users">
+            👥 Gestion utilisateurs
+          </a>
+          <a href="#projects" className="block rounded-xl border border-violet-500/30 p-3 hover:bg-violet-500/10 transition-colors" data-testid="link-admin-projects">
+            📁 Gestion projets
+          </a>
+          <a href="#broadcast" className="block rounded-xl border border-pink-500/30 p-3 hover:bg-pink-500/10 transition-colors" data-testid="link-admin-broadcast">
+            📢 Notifications broadcast
+          </a>
+          <a href="#config" className="block rounded-xl border border-emerald-500/30 p-3 hover:bg-emerald-500/10 transition-colors" data-testid="link-admin-config">
+            ⚙️ Configuration
+          </a>
           <a href="#toggles" className="block rounded-xl border border-fuchsia-500/30 p-3 hover:bg-fuchsia-500/10 transition-colors" data-testid="link-admin-toggles">
             🗂️ Catégories & Rubriques
           </a>
           <a href="#profiles" className="block rounded-xl border border-fuchsia-500/30 p-3 hover:bg-fuchsia-500/10 transition-colors" data-testid="link-admin-profiles">
-            👥 Modules par profil
+            📱 Modules par profil
           </a>
           <a href="#theme" className="block rounded-xl border border-fuchsia-500/30 p-3 hover:bg-fuchsia-500/10 transition-colors" data-testid="link-admin-theme">
             🎨 Thème & Interface

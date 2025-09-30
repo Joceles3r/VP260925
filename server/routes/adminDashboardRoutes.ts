@@ -233,4 +233,179 @@ router.get('/logs', async (req: any, res: any) => {
   }
 });
 
+// Users Management
+router.get('/users', async (req: any, res: any) => {
+  try {
+    const storage = req.app.locals.storage;
+    const users = await storage.getAllUsers();
+    
+    res.json({
+      users: users.map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName || '',
+        lastName: u.lastName || '',
+        profileType: u.profileType,
+        kycVerified: u.kycVerified || false,
+        balanceEUR: u.balanceEUR || '0',
+        totalInvested: u.totalInvested || '0',
+        createdAt: u.createdAt,
+      })),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/users/:id/ban', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const storage = req.app.locals.storage;
+    
+    await storage.updateUser(id, { profileType: 'banned' });
+    
+    res.json({ success: true, message: 'User banned successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/users/:id/kyc', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { verified } = req.body;
+    const storage = req.app.locals.storage;
+    
+    await storage.updateUser(id, { kycVerified: verified });
+    
+    res.json({ success: true, message: 'KYC status updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/users/:id/role', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { profileType } = req.body;
+    const storage = req.app.locals.storage;
+    
+    await storage.updateUser(id, { profileType });
+    
+    res.json({ success: true, message: 'User role updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Projects Management
+router.get('/projects', async (req: any, res: any) => {
+  try {
+    const storage = req.app.locals.storage;
+    const projects = await storage.getAllProjects();
+    
+    res.json({
+      projects: projects.map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        category: p.category,
+        creatorId: p.creatorId,
+        targetAmount: p.targetAmount,
+        currentAmount: p.currentAmount,
+        status: p.status,
+        mlScore: p.mlScore || 0,
+        roiEstimated: p.roiEstimated || '0',
+        investorCount: p.investorCount || 0,
+        createdAt: p.createdAt,
+      })),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/projects/:id/status', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const storage = req.app.locals.storage;
+    
+    await storage.updateProject(parseInt(id, 10), { status });
+    
+    res.json({ success: true, message: 'Project status updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Platform Configuration
+router.get('/config', async (req: any, res: any) => {
+  try {
+    res.json({
+      platformCommission: 5.0,
+      minInvestment: 2,
+      maxInvestment: 20,
+      maxProjectsPerCreator: 5,
+      kycRequired: true,
+      maintenanceMode: false,
+      registrationOpen: true,
+      withdrawalFee: 1.0,
+      referralBonus: 10,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/config', async (req: any, res: any) => {
+  try {
+    const config = req.body;
+    res.json({ success: true, config, message: 'Configuration updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Broadcast Notifications
+router.post('/broadcast', async (req: any, res: any) => {
+  try {
+    const { title, message, type, targetAudience } = req.body;
+    const storage = req.app.locals.storage;
+    const notificationService = req.app.locals.notificationService;
+    
+    let users = [];
+    
+    if (targetAudience === 'all') {
+      users = await storage.getAllUsers();
+    } else if (targetAudience === 'investors') {
+      users = await storage.getUsersByProfileType('investor');
+    } else if (targetAudience === 'creators') {
+      users = await storage.getUsersByProfileType('creator');
+    } else if (targetAudience === 'kyc_verified') {
+      const allUsers = await storage.getAllUsers();
+      users = allUsers.filter((u: any) => u.kycVerified);
+    }
+    
+    for (const user of users) {
+      if (notificationService) {
+        notificationService.sendToUser(user.id.toString(), {
+          type,
+          title,
+          message,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      sentCount: users.length,
+      message: 'Broadcast notification sent successfully' 
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

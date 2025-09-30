@@ -10,6 +10,10 @@ import { SecurityPanel } from "../ui/SecurityPanel";
 import { MaintenanceOpsCard } from "../ui/MaintenanceOpsCard";
 import { StripeMonitorCard } from "../ui/StripeMonitorCard";
 import { LogsAuditCard } from "../ui/LogsAuditCard";
+import { UsersManagementCard } from "../ui/UsersManagementCard";
+import { ProjectsManagementCard } from "../ui/ProjectsManagementCard";
+import { BroadcastNotificationsCard } from "../ui/BroadcastNotificationsCard";
+import { PlatformConfigCard } from "../ui/PlatformConfigCard";
 import { getJSON } from "../utils/api";
 
 export default function AdminDashboard() {
@@ -77,6 +81,11 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      <div id="users"><UsersManagementCard /></div>
+      <div id="projects"><ProjectsManagementCard /></div>
+      <div id="broadcast"><BroadcastNotificationsCard /></div>
+      <div id="config"><PlatformConfigCard /></div>
+      
       <div id="toggles"><CategoryTogglesCard /></div>
       <div id="profiles"><ProfileModulesCard /></div>
       <div id="theme"><ThemeDesignerCard /></div>
