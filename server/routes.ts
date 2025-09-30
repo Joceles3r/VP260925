@@ -112,6 +112,75 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Revenue Engine - Stripe Webhooks (MUST be BEFORE JSON middleware)
+  const { saleArticleSplit: saleArticleSplitEngine, categoryClosureSplit: categoryClosureSplitEngine } = await import('./revenue/revenueEngine');
+  const { isStripeEventProcessed: isEventProcessed, recordStripeEvent: recordEvent, persistPayoutPlan: persistPlan } = await import('./revenue/dbHelpers');
+  const { appendAudit: auditLog } = await import('./audit/ledger');
+  
+  app.post('/webhooks/stripe/revenue', express.raw({ type: 'application/json' }), async (req: any, res) => {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    
+    if (!webhookSecret) {
+      console.error('Missing STRIPE_WEBHOOK_SECRET for revenue webhook');
+      return res.status(500).json({ error: 'Webhook secret not configured' });
+    }
+    
+    let event;
+    try {
+      // Valider la signature Stripe (sécurité critique)
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err: any) {
+      console.error('Revenue webhook signature verification failed:', err.message);
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+    
+    const eventId = event.id;
+    const eventType = event.type;
+    
+    // Vérifier idempotence
+    if (await isEventProcessed(eventId)) {
+      console.log(`✅ Revenue event ${eventId} already processed (idempotent)`);
+      return res.json({ ok: true, duplicate: true });
+    }
+    
+    const data = event.data?.object as any || {};
+    const metadata = data.metadata || {};
+    
+    // Vente d'article (infoporteur)
+    if (eventType === 'checkout.session.completed' && metadata.kind === 'article_sale') {
+      const priceCents = parseInt(data.amount_total || '0');
+      const porterAccount = metadata.porter_account_id;
+      const visualAccount = metadata.visual_account_id || 'acc_visual';
+      
+      const plan = saleArticleSplitEngine(priceCents, porterAccount, visualAccount);
+      await persistPlan(eventId, 'article_sale', plan, event);
+      auditLog('stripe_sale_planned', 'system', { event: eventId, amount: priceCents });
+      
+      console.log(`✅ Article sale split planned: ${priceCents} cents`);
+    }
+    
+    // Clôture de catégorie
+    if (eventType === 'payment_intent.succeeded' && metadata.kind === 'category_closure') {
+      const SCents = parseInt(data.amount || '0');
+      const invTop10 = JSON.parse(metadata.investor_top10 || '[]');
+      const portTop10 = JSON.parse(metadata.porter_top10 || '[]');
+      const inv11_100 = JSON.parse(metadata.investor_11_100 || '[]');
+      const visualAccount = metadata.visual_account_id || 'acc_visual';
+      
+      const plan = categoryClosureSplitEngine(SCents, invTop10, portTop10, inv11_100, visualAccount);
+      await persistPlan(eventId, 'category_closure', plan, event);
+      auditLog('stripe_category_closure_planned', 'system', { event: eventId, amount: SCents });
+      
+      console.log(`✅ Category closure split planned: ${SCents} cents`);
+    }
+    
+    // Enregistrer l'événement comme traité
+    await recordEvent(eventId, eventType, event);
+    
+    res.json({ ok: true });
+  });
+  
   // Stripe Webhook - MUST be registered BEFORE any JSON parsing middleware
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: any, res) => {
     const sig = req.headers['stripe-signature'];
@@ -5789,6 +5858,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Configuration des routes admin avec sécurité renforcée
   setupAdminRoutes(app);
   console.log('✅ Routes admin sécurisées initialisées');
+
+  // =======================
+  // REVENUE ENGINE - ADMIN ENDPOINT
+  // =======================
+  
+  const { saleArticleSplit: saleArticleSplitAdmin, categoryClosureSplit: categoryClosureSplitAdmin, previewTotals } = await import('./revenue/revenueEngine');
+  
+  // Admin endpoint - Prévisualisation des splits
+  app.post('/api/admin/finance/preview-split', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const user = await storage.getUser(userId);
+      
+      // Vérifier que l'utilisateur est admin
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const { scenario } = req.body;
+      
+      if (scenario === 'article') {
+        const priceEur = parseFloat(req.body.price_eur);
+        const priceCents = Math.round(priceEur * 100);
+        const porterAccount = req.body.porter_account_id || 'acc_porter_1';
+        const visualAccount = req.body.visual_account_id || 'acc_visual';
+        
+        const plan = saleArticleSplitAdmin(priceCents, porterAccount, visualAccount);
+        const totals = previewTotals(plan);
+        
+        res.json({ plan, totals });
+      } else if (scenario === 'category') {
+        const potEur = parseFloat(req.body.pot_eur);
+        const SCents = Math.round(potEur * 100);
+        const invTop10 = req.body.investor_top10_accounts || [];
+        const portTop10 = req.body.porter_top10_accounts || [];
+        const inv11_100 = req.body.investor_ranks_11_100_accounts || [];
+        const visualAccount = req.body.visual_account_id || 'acc_visual';
+        
+        const plan = categoryClosureSplitAdmin(SCents, invTop10, portTop10, inv11_100, visualAccount);
+        const totals = previewTotals(plan);
+        
+        res.json({ plan, totals });
+      } else {
+        res.status(400).json({ error: 'scenario must be "article" or "category"' });
+      }
+    } catch (error: any) {
+      console.error('Preview split error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  console.log('✅ Revenue Engine endpoints initialisés (webhooks + admin)');
 
   // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME

@@ -14,6 +14,7 @@ import { UsersManagementCard } from "../ui/UsersManagementCard";
 import { ProjectsManagementCard } from "../ui/ProjectsManagementCard";
 import { BroadcastNotificationsCard } from "../ui/BroadcastNotificationsCard";
 import { PlatformConfigCard } from "../ui/PlatformConfigCard";
+import { FinancePreviewCard } from "@/components/admin/FinancePreviewCard";
 import { getJSON } from "../utils/api";
 
 export default function AdminDashboard() {
@@ -93,6 +94,7 @@ export default function AdminDashboard() {
       <div id="security"><SecurityPanel /></div>
       <div id="ops"><MaintenanceOpsCard /></div>
       <div id="stripe"><StripeMonitorCard /></div>
+      <div id="revenue"><FinancePreviewCard /></div>
       <div id="logs"><LogsAuditCard /></div>
     </AdminLayout>
   );
