@@ -34,56 +34,57 @@ export default function ProjectCard({ project, onInvest, onVideoDeposit, isCreat
 
   return (
     <div 
-      className="group bg-gradient-to-b from-card to-card/90 rounded-xl border border-border/50 overflow-hidden hover:shadow-2xl hover:border-border/80 transition-all duration-300 hover:scale-[1.02] cursor-pointer backdrop-blur-sm"
+      className="group glass-card rounded-2xl overflow-hidden smooth-transition hover:scale-[1.03] cursor-pointer neon-glow-blue relative"
       data-testid={`project-card-${project.id}`}
     >
+      <div className="absolute inset-0 bg-gradient-to-br from-[#00D1FF]/5 via-transparent to-[#7B2CFF]/5 opacity-0 group-hover:opacity-100 smooth-transition pointer-events-none"></div>
       {/* Project Image */}
       <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent z-10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent z-10" />
         <img 
           src={project.thumbnailUrl || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=240&fit=crop'} 
           alt={`${project.title} thumbnail`}
-          className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-48 object-cover group-hover:scale-110 smooth-transition duration-500"
           data-testid="project-thumbnail"
         />
         {project.mlScore && (
-          <div className="absolute top-3 right-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center space-x-1 z-20 shadow-lg">
-            <Star className="h-3 w-3" />
+          <div className="absolute top-3 right-3 glass-card bg-gradient-to-r from-[#7B2CFF] to-[#FF3CAC] text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center space-x-1 z-20 neon-glow-violet floating">
+            <Star className="h-3 w-3 fill-current" />
             <span>{parseFloat(project.mlScore).toFixed(1)}</span>
           </div>
         )}
         
         {/* Status badge */}
         <div className="absolute top-3 left-3 z-20">
-          <div className={`px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm ${
-            project.status === 'active' ? 'bg-green-500/20 text-green-100 border border-green-500/30' :
-            project.status === 'pending' ? 'bg-yellow-500/20 text-yellow-100 border border-yellow-500/30' :
-            'bg-red-500/20 text-red-100 border border-red-500/30'
+          <div className={`px-3 py-1.5 rounded-full text-xs font-semibold glass-card ${
+            project.status === 'active' ? 'bg-green-500/30 text-green-100 border border-green-400/50 neon-glow-blue' :
+            project.status === 'pending' ? 'bg-yellow-500/30 text-yellow-100 border border-yellow-400/50' :
+            'bg-red-500/30 text-red-100 border border-red-400/50'
           }`}>
-            {project.status === 'active' ? 'En cours' : 
-             project.status === 'pending' ? 'En attente' : 'Terminé'}
+            {project.status === 'active' ? '🔥 En cours' : 
+             project.status === 'pending' ? '⏳ En attente' : '✓ Terminé'}
           </div>
         </div>
       </div>
 
-      <div className="p-6 relative">
+      <div className="p-6 relative z-10">
         {/* Decorative gradient line */}
-        <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+        <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-[#00D1FF]/50 to-transparent" />
         
         <div className="flex items-center justify-between mb-3">
           <span 
-            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${getCategoryColor(project.category)} shadow-sm`}
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold ${getCategoryColor(project.category)} neon-border`}
             data-testid="project-category"
           >
             {project.category}
           </span>
-          <div className="flex items-center text-sm text-muted-foreground bg-muted/50 px-2 py-1 rounded-lg">
-            <Clock className="h-4 w-4 mr-1.5 text-orange-500" />
-            <span data-testid="time-remaining" className="font-medium">{getTimeRemaining()}</span>
+          <div className="flex items-center text-sm text-muted-foreground glass-card px-3 py-1.5 rounded-lg">
+            <Clock className="h-4 w-4 mr-1.5 text-[#FF3CAC]" />
+            <span data-testid="time-remaining" className="font-semibold">{getTimeRemaining()}</span>
           </div>
         </div>
 
-        <h3 className="text-xl font-bold text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors" data-testid="project-title">
+        <h3 className="text-xl font-bold text-foreground mb-2 line-clamp-2 group-hover:visual-text-gradient smooth-transition" data-testid="project-title">
           {project.title}
         </h3>
         
@@ -93,39 +94,39 @@ export default function ProjectCard({ project, onInvest, onVideoDeposit, isCreat
 
         <div className="space-y-4">
           {/* Progress Section */}
-          <div className="bg-muted/30 rounded-xl p-4 border border-border/50">
+          <div className="glass-card rounded-xl p-4 border border-[#00D1FF]/20">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-2">
-                <Target className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">Financement</span>
+                <Target className="h-4 w-4 text-[#00D1FF]" />
+                <span className="text-sm font-semibold text-foreground">Financement</span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {progressPercentage.toFixed(0)}% atteint
+              <span className="text-xs font-bold text-[#00D1FF] glass-card px-2 py-1 rounded-full">
+                {progressPercentage.toFixed(0)}%
               </span>
             </div>
             
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Collecté</span>
-                <span className="font-bold text-foreground" data-testid="current-amount">
+                <span className="text-muted-foreground font-medium">Collecté</span>
+                <span className="font-bold text-[#00D1FF]" data-testid="current-amount">
                   €{parseFloat(project.currentAmount || '0').toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Objectif</span>
-                <span className="font-medium text-muted-foreground" data-testid="target-amount">
+                <span className="text-muted-foreground font-medium">Objectif</span>
+                <span className="font-semibold text-muted-foreground" data-testid="target-amount">
                   €{parseFloat(project.targetAmount).toLocaleString()}
                 </span>
               </div>
             </div>
             
-            <div className="w-full bg-muted/60 rounded-full h-3 mt-3 overflow-hidden">
+            <div className="w-full bg-muted/60 rounded-full h-3 mt-3 overflow-hidden relative">
               <div 
-                className="bg-gradient-to-r from-primary to-secondary h-3 rounded-full transition-all duration-500 relative overflow-hidden"
+                className="bg-gradient-to-r from-[#00D1FF] via-[#7B2CFF] to-[#FF3CAC] h-3 rounded-full smooth-transition relative overflow-hidden gradient-animate"
                 style={{ width: `${Math.min(progressPercentage, 100)}%` }}
                 data-testid="progress-bar"
               >
-                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                <div className="absolute inset-0 shimmer" />
               </div>
             </div>
           </div>
@@ -158,14 +159,15 @@ export default function ProjectCard({ project, onInvest, onVideoDeposit, isCreat
 
         {project.status === 'active' && onInvest && (
           <Button 
-            className="w-full mt-6 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
+            className="w-full mt-6 bg-gradient-to-r from-[#00D1FF] via-[#7B2CFF] to-[#FF3CAC] hover:shadow-2xl text-white font-bold py-3.5 rounded-xl neon-glow-blue smooth-transition hover:scale-105 gradient-animate relative overflow-hidden"
             onClick={() => onInvest(project)}
             data-testid="invest-button"
           >
-            <div className="flex items-center justify-center space-x-2">
-              <TrendingUp className="h-4 w-4" />
+            <div className="flex items-center justify-center space-x-2 relative z-10">
+              <TrendingUp className="h-5 w-5" />
               <span>Investir maintenant</span>
             </div>
+            <div className="absolute inset-0 shimmer"></div>
           </Button>
         )}
         
