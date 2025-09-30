@@ -81,6 +81,10 @@ import {
   adminBreakGlassOtp,
   livePredictions,
   predictionBets,
+  // Tables ebooks avec licences JWT
+  ebooks,
+  ebookLicenses,
+  ebookDownloadAttempts,
   type User,
   type UpsertUser,
   type Project,
@@ -221,7 +225,16 @@ import {
   type User2FA,
   type InsertUser2FA,
   type GdprRequests,
-  type InsertGdprRequests
+  type InsertGdprRequests,
+  type AdminBreakGlassOtp,
+  type InsertAdminBreakGlassOtp,
+  // Types ebooks
+  type Ebook,
+  type EbookLicense,
+  type EbookDownloadAttempt,
+  type InsertEbook,
+  type InsertEbookLicense,
+  type InsertEbookDownloadAttempt
 } from "@shared/schema";
 import { 
   ESCROW_FEE_RATE, 
@@ -731,6 +744,38 @@ export interface IStorage {
   upsertStripeEvent(event: InsertStripeEvents): Promise<StripeEvents>;
   getStripeEvent(id: string): Promise<StripeEvents | undefined>;
   markStripeEventProcessed(id: string): Promise<void>;
+
+  // ===== EBOOKS AVEC LICENCES JWT ANTI-PIRATAGE =====
+  
+  // Ebook operations
+  createEbook(ebook: InsertEbook): Promise<Ebook>;
+  getEbook(id: string): Promise<Ebook | undefined>;
+  getEbooks(status?: string, limit?: number): Promise<Ebook[]>;
+  updateEbook(id: string, updates: Partial<Ebook>): Promise<Ebook>;
+  
+  // Ebook License operations (JWT-based)
+  createEbookLicense(license: InsertEbookLicense): Promise<EbookLicense>;
+  getEbookLicense(id: string): Promise<EbookLicense | undefined>;
+  getEbookLicenseByUserAndBook(userId: string, ebookId: string, orderId: string): Promise<EbookLicense | undefined>;
+  getUserEbookLicenses(userId: string): Promise<EbookLicense[]>;
+  incrementEbookLicenseJWT(licenseId: string): Promise<void>;
+  incrementEbookLicenseUsage(licenseId: string): Promise<void>;
+  resetEbookLicenseWindow(licenseId: string): Promise<void>;
+  revokeEbookLicense(licenseId: string, reason: string): Promise<void>;
+  
+  // Ebook Download Attempt operations (quota tracking + anti-abuse)
+  createEbookDownloadAttempt(attempt: InsertEbookDownloadAttempt): Promise<EbookDownloadAttempt>;
+  getEbookDownloadAttempt(id: string): Promise<EbookDownloadAttempt | undefined>;
+  getEbookDownloadAttemptByNonce(nonce: string): Promise<EbookDownloadAttempt | undefined>;
+  updateEbookDownloadAttempt(id: string, updates: Partial<EbookDownloadAttempt>): Promise<EbookDownloadAttempt>;
+  expireOldEbookDownloadAttempts(): Promise<number>;
+  
+  // Admin Break-Glass OTP operations
+  createAdminOtp(otp: InsertAdminBreakGlassOtp): Promise<AdminBreakGlassOtp>;
+  getActiveAdminOtp(otpCodeHash: string): Promise<AdminBreakGlassOtp | undefined>;
+  markAdminOtpUsed(id: string, usedBy: string, ipAddress?: string, userAgent?: string): Promise<void>;
+  expireOldAdminOtps(): Promise<number>;
+  getAdminOtpHistory(limit?: number): Promise<AdminBreakGlassOtp[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4504,6 +4549,178 @@ export class DatabaseStorage implements IStorage {
       .from(adminBreakGlassOtp)
       .orderBy(desc(adminBreakGlassOtp.createdAt))
       .limit(limit);
+  }
+
+  // ===== EBOOKS WITH JWT LICENSES IMPLEMENTATION =====
+  
+  async createEbook(ebook: InsertEbook): Promise<Ebook> {
+    const [result] = await db.insert(ebooks).values(ebook).returning();
+    return result;
+  }
+
+  async getEbook(id: string): Promise<Ebook | undefined> {
+    const [result] = await db.select().from(ebooks).where(eq(ebooks.id, id));
+    return result;
+  }
+
+  async getEbooks(status?: string, limit: number = 50): Promise<Ebook[]> {
+    if (status) {
+      return await db.select().from(ebooks).where(eq(ebooks.status, status as any)).limit(limit);
+    }
+    return await db.select().from(ebooks).limit(limit);
+  }
+
+  async updateEbook(id: string, updates: Partial<Ebook>): Promise<Ebook> {
+    const [result] = await db.update(ebooks).set({ ...updates, updatedAt: new Date() }).where(eq(ebooks.id, id)).returning();
+    return result;
+  }
+
+  async createEbookLicense(license: InsertEbookLicense): Promise<EbookLicense> {
+    const [result] = await db.insert(ebookLicenses).values(license).returning();
+    return result;
+  }
+
+  async getEbookLicense(id: string): Promise<EbookLicense | undefined> {
+    const [result] = await db.select().from(ebookLicenses).where(eq(ebookLicenses.id, id));
+    return result;
+  }
+
+  async getEbookLicenseByUserAndBook(userId: string, ebookId: string, orderId: string): Promise<EbookLicense | undefined> {
+    const [result] = await db
+      .select()
+      .from(ebookLicenses)
+      .where(
+        and(
+          eq(ebookLicenses.userId, userId),
+          eq(ebookLicenses.ebookId, ebookId),
+          eq(ebookLicenses.orderId, orderId)
+        )
+      );
+    return result;
+  }
+
+  async getUserEbookLicenses(userId: string): Promise<EbookLicense[]> {
+    return await db.select().from(ebookLicenses).where(eq(ebookLicenses.userId, userId));
+  }
+
+  async incrementEbookLicenseJWT(licenseId: string): Promise<void> {
+    await db
+      .update(ebookLicenses)
+      .set({
+        jwtIssued: sql`${ebookLicenses.jwtIssued} + 1`,
+        lastJwtAt: new Date(),
+      })
+      .where(eq(ebookLicenses.id, licenseId));
+  }
+
+  async incrementEbookLicenseUsage(licenseId: string): Promise<void> {
+    await db
+      .update(ebookLicenses)
+      .set({
+        dlUsed: sql`${ebookLicenses.dlUsed} + 1`,
+      })
+      .where(eq(ebookLicenses.id, licenseId));
+  }
+
+  async resetEbookLicenseWindow(licenseId: string): Promise<void> {
+    await db
+      .update(ebookLicenses)
+      .set({
+        dlUsed: 0,
+        windowStartAt: new Date(),
+      })
+      .where(eq(ebookLicenses.id, licenseId));
+  }
+
+  async revokeEbookLicense(licenseId: string, reason: string): Promise<void> {
+    await db
+      .update(ebookLicenses)
+      .set({
+        status: 'revoked',
+        revokedAt: new Date(),
+        revokedReason: reason,
+      })
+      .where(eq(ebookLicenses.id, licenseId));
+  }
+
+  async createEbookDownloadAttempt(attempt: InsertEbookDownloadAttempt): Promise<EbookDownloadAttempt> {
+    const [result] = await db.insert(ebookDownloadAttempts).values(attempt).returning();
+    return result;
+  }
+
+  async getEbookDownloadAttempt(id: string): Promise<EbookDownloadAttempt | undefined> {
+    const [result] = await db.select().from(ebookDownloadAttempts).where(eq(ebookDownloadAttempts.id, id));
+    return result;
+  }
+
+  async getEbookDownloadAttemptByNonce(nonce: string): Promise<EbookDownloadAttempt | undefined> {
+    const [result] = await db.select().from(ebookDownloadAttempts).where(eq(ebookDownloadAttempts.nonce, nonce));
+    return result;
+  }
+
+  async updateEbookDownloadAttempt(id: string, updates: Partial<EbookDownloadAttempt>): Promise<EbookDownloadAttempt> {
+    const [result] = await db.update(ebookDownloadAttempts).set(updates).where(eq(ebookDownloadAttempts.id, id)).returning();
+    return result;
+  }
+
+  async expireOldEbookDownloadAttempts(): Promise<number> {
+    const result = await db
+      .update(ebookDownloadAttempts)
+      .set({ status: 'expired' })
+      .where(
+        and(
+          eq(ebookDownloadAttempts.status, 'pending'),
+          lt(ebookDownloadAttempts.expiresAt, new Date())
+        )
+      )
+      .returning();
+    return result.length;
+  }
+
+  async createAdminOtp(otp: InsertAdminBreakGlassOtp): Promise<AdminBreakGlassOtp> {
+    const [result] = await db.insert(adminBreakGlassOtp).values(otp).returning();
+    return result;
+  }
+
+  async getActiveAdminOtp(otpCodeHash: string): Promise<AdminBreakGlassOtp | undefined> {
+    const [result] = await db
+      .select()
+      .from(adminBreakGlassOtp)
+      .where(
+        and(
+          eq(adminBreakGlassOtp.otpCode, otpCodeHash),
+          eq(adminBreakGlassOtp.status, 'active'),
+          gt(adminBreakGlassOtp.expiresAt, new Date())
+        )
+      );
+    return result;
+  }
+
+  async markAdminOtpUsed(id: string, usedBy: string, ipAddress?: string, userAgent?: string): Promise<void> {
+    await db
+      .update(adminBreakGlassOtp)
+      .set({
+        status: 'used',
+        usedAt: new Date(),
+        usedBy,
+        ipAddress,
+        userAgent,
+      })
+      .where(eq(adminBreakGlassOtp.id, id));
+  }
+
+  async expireOldAdminOtps(): Promise<number> {
+    const result = await db
+      .update(adminBreakGlassOtp)
+      .set({ status: 'expired' })
+      .where(
+        and(
+          eq(adminBreakGlassOtp.status, 'active'),
+          lt(adminBreakGlassOtp.expiresAt, new Date())
+        )
+      )
+      .returning();
+    return result.length;
   }
 }
 

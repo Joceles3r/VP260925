@@ -2727,6 +2727,116 @@ export const adminBreakGlassOtp = pgTable("admin_break_glass_otp", {
   index("idx_admin_otp_expires").on(table.expiresAt),
 ]);
 
+// ===== MODULE LIVRES NUMÉRIQUES (EBOOKS) AVEC LICENCES JWT ET ANTI-PIRATAGE =====
+
+// Enums pour le système de ebooks
+export const ebookStatusEnum = pgEnum('ebook_status', ['draft', 'published', 'archived']);
+export const ebookFormatEnum = pgEnum('ebook_format', ['pdf', 'epub', 'mobi']);
+export const ebookLicenseStatusEnum = pgEnum('ebook_license_status', ['active', 'revoked', 'expired']);
+export const ebookDlAttemptStatusEnum = pgEnum('ebook_dl_attempt_status', ['pending', 'success', 'expired', 'failed']);
+
+// Table des livres numériques (catalogue)
+export const ebooks = pgTable("ebooks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 255 }).notNull(),
+  author: varchar("author", { length: 255 }).notNull(),
+  description: text("description"),
+  coverImageUrl: text("cover_image_url"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(), // Prix en euros
+  format: ebookFormatEnum("format").notNull().default('pdf'),
+  fileSize: integer("file_size"), // Taille en octets
+  storageKey: text("storage_key").notNull(), // Clé dans le stockage objet (Bunny/S3)
+  status: ebookStatusEnum("status").notNull().default('draft'),
+  categoryId: varchar("category_id"), // Catégorie VISUAL (peut lier à projects)
+  isbn: varchar("isbn", { length: 20 }),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_ebooks_status").on(table.status),
+  index("idx_ebooks_category").on(table.categoryId),
+]);
+
+// Table des licences (JWT) - une par achat de ebook
+export const ebookLicenses = pgTable("ebook_licenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // Propriétaire de la licence
+  ebookId: varchar("ebook_id").notNull(), // Ebook acheté
+  orderId: varchar("order_id"), // Référence commande Stripe
+  status: ebookLicenseStatusEnum("status").notNull().default('active'),
+  // Quotas de téléchargement
+  dlLimit: integer("dl_limit").notNull().default(3), // Max téléchargements
+  dlUsed: integer("dl_used").notNull().default(0), // Téléchargements consommés
+  windowDays: integer("window_days").notNull().default(7), // Fenêtre de quota (jours)
+  windowStartAt: timestamp("window_start_at").notNull().defaultNow(),
+  // Watermark info (pour personnalisation)
+  watermarkData: jsonb("watermark_data"), // {email_hash, order_id, date}
+  // JWT tracking
+  jwtIssued: integer("jwt_issued").notNull().default(0), // Nombre de JWT émis
+  lastJwtAt: timestamp("last_jwt_at"), // Dernier JWT généré
+  // Métadonnées
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+}, (table) => [
+  index("idx_ebook_licenses_user").on(table.userId),
+  index("idx_ebook_licenses_ebook").on(table.ebookId),
+  index("idx_ebook_licenses_status").on(table.status),
+  unique("unique_user_ebook_order").on(table.userId, table.ebookId, table.orderId),
+]);
+
+// Table des tentatives de téléchargement (tracking + anti-abus)
+export const ebookDownloadAttempts = pgTable("ebook_download_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  licenseId: varchar("license_id").notNull(), // Licence utilisée
+  userId: varchar("user_id").notNull(), // Utilisateur (redondant pour perf)
+  ebookId: varchar("ebook_id").notNull(), // Ebook (redondant pour perf)
+  status: ebookDlAttemptStatusEnum("status").notNull().default('pending'),
+  nonce: varchar("nonce", { length: 32 }).notNull().unique(), // Nonce pour URL signée
+  // Tracking
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(), // Expiration tentative (2-5 min)
+  completedAt: timestamp("completed_at"), // Confirmation CDN/beacon
+  // Métadonnées audit
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  cdnResponse: integer("cdn_response"), // Code HTTP CDN (200, 404, etc.)
+  errorMessage: text("error_message"),
+}, (table) => [
+  index("idx_ebook_dl_attempts_license").on(table.licenseId),
+  index("idx_ebook_dl_attempts_status").on(table.status),
+  index("idx_ebook_dl_attempts_created").on(table.createdAt),
+  index("idx_ebook_dl_attempts_nonce").on(table.nonce),
+]);
+
+// Insert schemas
+export const insertEbookSchema = createInsertSchema(ebooks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEbookLicenseSchema = createInsertSchema(ebookLicenses).omit({
+  id: true,
+  createdAt: true,
+  revokedAt: true,
+});
+
+export const insertEbookDownloadAttemptSchema = createInsertSchema(ebookDownloadAttempts).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+// Types
+export type Ebook = typeof ebooks.$inferSelect;
+export type EbookLicense = typeof ebookLicenses.$inferSelect;
+export type EbookDownloadAttempt = typeof ebookDownloadAttempts.$inferSelect;
+
+export type InsertEbook = z.infer<typeof insertEbookSchema>;
+export type InsertEbookLicense = z.infer<typeof insertEbookLicenseSchema>;
+export type InsertEbookDownloadAttempt = z.infer<typeof insertEbookDownloadAttemptSchema>;
+
 // ===== SCHÉMAS D'INSERTION PRO =====
 
 export const insertStripeEventsSchema = createInsertSchema(stripeEvents).omit({
