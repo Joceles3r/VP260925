@@ -12,3 +12,7 @@ vite.config.ts.*
 *.env
 *.env.*
 .env
+-e 
+# Environment files
+*.env
+*.env.*
