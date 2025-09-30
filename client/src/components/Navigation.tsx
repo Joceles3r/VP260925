@@ -64,7 +64,7 @@ export default function Navigation() {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-3 px-3 py-1.5 rounded-lg glass-card">
+            <Link href="/profile" className="flex items-center space-x-3 px-3 py-1.5 rounded-lg glass-card smooth-transition hover:border-[#7B2CFF]/50 hover:neon-glow-violet" data-testid="user-menu">
               <div className="w-9 h-9 bg-gradient-to-br from-[#7B2CFF] to-[#FF3CAC] rounded-full flex items-center justify-center neon-glow-violet smooth-transition hover:scale-110 cursor-pointer">
                 <span className="text-sm font-bold text-white" data-testid="user-avatar">
                   {user?.firstName?.[0] || user?.email?.[0] || 'U'}
@@ -81,7 +81,7 @@ export default function Navigation() {
                   </div>
                 )}
               </div>
-            </div>
+            </Link>
             
             {/* Notifications */}
             <NotificationPanel />
