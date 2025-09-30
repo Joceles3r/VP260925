@@ -1,4 +1,5 @@
 import {
+  platformSettings,
   users,
   projects,
   investments,
@@ -249,6 +250,11 @@ export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<User>): Promise<User>;
+  
+  // Platform settings operations
+  getPlatformSetting(key: string): Promise<string | null>;
+  setPlatformSetting(key: string, value: string | null, updatedBy: string): Promise<void>;
   
   // Project operations
   getProjects(limit?: number, offset?: number, category?: string): Promise<Project[]>;
@@ -798,6 +804,38 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  // Platform settings operations
+  async getPlatformSetting(key: string): Promise<string | null> {
+    const [setting] = await db
+      .select()
+      .from(platformSettings)
+      .where(eq(platformSettings.key, key));
+    return setting?.value || null;
+  }
+
+  async setPlatformSetting(key: string, value: string | null, updatedBy: string): Promise<void> {
+    if (value === null) {
+      await db.delete(platformSettings).where(eq(platformSettings.key, key));
+    } else {
+      await db
+        .insert(platformSettings)
+        .values({ key, value, updatedBy })
+        .onConflictDoUpdate({
+          target: platformSettings.key,
+          set: { value, updatedBy, updatedAt: new Date() },
+        });
+    }
   }
 
   // Project operations

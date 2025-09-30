@@ -199,6 +199,18 @@ export const annonceSanctionEnum = pgEnum('annonce_sanction', [
   'permanent_ban'      // Bannissement définitif
 ]);
 
+// Platform settings table for admin overrides  
+export const platformSettings = pgTable("platform_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 100 }).unique().notNull(),
+  value: text("value"),
+  updatedBy: varchar("updated_by"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PlatformSetting = typeof platformSettings.$inferSelect;
+export type InsertPlatformSetting = typeof platformSettings.$inferInsert;
+
 // User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -215,6 +227,7 @@ export const users = pgTable("users", {
   totalInvested: decimal("total_invested", { precision: 10, scale: 2 }).default('0.00'),
   totalGains: decimal("total_gains", { precision: 10, scale: 2 }).default('0.00'),
   rankGlobal: integer("rank_global"),
+  themePreference: varchar("theme_preference", { length: 10 }).default('dark'),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

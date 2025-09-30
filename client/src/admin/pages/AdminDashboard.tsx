@@ -15,6 +15,7 @@ import { ProjectsManagementCard } from "../ui/ProjectsManagementCard";
 import { BroadcastNotificationsCard } from "../ui/BroadcastNotificationsCard";
 import { PlatformConfigCard } from "../ui/PlatformConfigCard";
 import { FinancePreviewCard } from "@/components/admin/FinancePreviewCard";
+import { AdminThemeOverride } from "@/components/admin/AdminThemeOverride";
 import { getJSON } from "../utils/api";
 
 export default function AdminDashboard() {
@@ -89,6 +90,7 @@ export default function AdminDashboard() {
       
       <div id="toggles"><CategoryTogglesCard /></div>
       <div id="profiles"><ProfileModulesCard /></div>
+      <div id="theme-override"><AdminThemeOverride /></div>
       <div id="theme"><ThemeDesignerCard /></div>
       <div id="agents"><AgentsControlCard /></div>
       <div id="security"><SecurityPanel /></div>
