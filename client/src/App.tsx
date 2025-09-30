@@ -25,6 +25,7 @@ import VisualPage from "@/pages/visual";
 import InfoPage from "@/pages/info";
 import AccessibilityPage from "@/pages/accessibility";
 import NotFound from "@/pages/not-found";
+import AdminDashboard from "@/admin/pages/AdminDashboard";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -68,6 +69,7 @@ function Router() {
             <Route path="/top10" component={Top10Page} />
             <Route path="/fidelity" component={FidelityPage} />
             <Route path="/admin" component={Admin} />
+            <Route path="/admin/dashboard" component={AdminDashboard} />
             <Route component={NotFound} />
           </>
         )}

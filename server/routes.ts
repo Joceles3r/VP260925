@@ -74,6 +74,7 @@ import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
 import { categoriesRouter } from "./categories/routes";
 import { setupAdminRoutes } from "./services/adminRoutes";
+import adminDashboardRoutes from "./routes/adminDashboardRoutes";
 import { generateReceiptPDF } from "./receipts/handlers";
 import agentRoutes from "./routes/agentRoutes";
 import ebookRoutes from "./routes/ebookRoutes";
@@ -2805,6 +2806,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE EBOOKS: LICENCES JWT ET TÉLÉCHARGEMENT SÉCURISÉ =====
   // Ebook licensing system with JWT tokens, download quotas, and anti-piracy
   app.use('/api/ebooks', ebookRoutes);
+
+  // ===== DASHBOARD ADMIN AMÉLIORÉ =====
+  // Enhanced admin dashboard with categories, profiles, theme, agents, security, maintenance
+  app.use('/api/admin', adminDashboardRoutes);
 
   // ===== MODULE 6: SEUILS DE RETRAIT PAR PROFIL =====
   // Withdrawal request management with profile-based minimum thresholds
