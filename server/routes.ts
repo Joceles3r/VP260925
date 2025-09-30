@@ -76,6 +76,7 @@ import { categoriesRouter } from "./categories/routes";
 import { setupAdminRoutes } from "./services/adminRoutes";
 import { generateReceiptPDF } from "./receipts/handlers";
 import agentRoutes from "./routes/agentRoutes";
+import ebookRoutes from "./routes/ebookRoutes";
 import { VISUPointsService } from "./services/visuPointsService.js";
 import { Top10Service } from "./services/top10Service.js";
 import { FidelityService } from "./services/fidelityService.js";
@@ -2800,6 +2801,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== AGENTS IA: ORCHESTRATION ET ADMINISTRATION =====
   // AI agents for platform automation and financial management
   app.use('/api/agents', agentRoutes);
+
+  // ===== MODULE EBOOKS: LICENCES JWT ET TÉLÉCHARGEMENT SÉCURISÉ =====
+  // Ebook licensing system with JWT tokens, download quotas, and anti-piracy
+  app.use('/api/ebooks', ebookRoutes);
 
   // ===== MODULE 6: SEUILS DE RETRAIT PAR PROFIL =====
   // Withdrawal request management with profile-based minimum thresholds

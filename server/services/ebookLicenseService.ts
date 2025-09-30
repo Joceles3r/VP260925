@@ -271,12 +271,14 @@ gJ1+XBzfsNGUTKhFlw93+ptKeq2HwKkL3WDLlcTzBpLkwQIDAQAB
   }
 
   /**
-   * Créer une tentative de téléchargement
+   * Créer une tentative de téléchargement avec JWT
    */
   async createDownloadAttempt(params: {
     licenseId: string;
     userId: string;
     ebookId: string;
+    jwtToken: string;
+    jwtJti: string;
     ipAddress?: string;
     userAgent?: string;
   }): Promise<{ attemptId: string; nonce: string; expiresAt: Date }> {
@@ -289,6 +291,8 @@ gJ1+XBzfsNGUTKhFlw93+ptKeq2HwKkL3WDLlcTzBpLkwQIDAQAB
       ebookId: params.ebookId,
       status: 'pending',
       nonce,
+      jwtToken: params.jwtToken,
+      jwtJti: params.jwtJti,
       expiresAt,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
@@ -374,6 +378,99 @@ gJ1+XBzfsNGUTKhFlw93+ptKeq2HwKkL3WDLlcTzBpLkwQIDAQAB
     const signature = crypto.createHmac('sha256', signKey).update(signData).digest('hex').substring(0, 32);
 
     return `${baseUrl}/${storageKey}?expires=${expires}&nonce=${nonce}&sig=${signature}`;
+  }
+
+  /**
+   * Vérifier quota de téléchargement d'une licence
+   */
+  checkQuota(license: any): { allowed: boolean; limit: number; used: number; windowDays: number; windowEnd: string; remaining: number } {
+    const now = new Date();
+    const windowStart = new Date(license.windowStartAt);
+    const windowEnd = new Date(windowStart.getTime() + license.windowDays * 24 * 60 * 60 * 1000);
+    
+    // Si fenêtre expirée, reset implicite (sera fait au prochain download)
+    const isWindowExpired = now > windowEnd;
+    const effectiveUsed = isWindowExpired ? 0 : license.dlUsed;
+    const remaining = license.dlLimit - effectiveUsed;
+
+    return {
+      allowed: license.status === 'active' && remaining > 0,
+      limit: license.dlLimit,
+      used: effectiveUsed,
+      windowDays: license.windowDays,
+      windowEnd: windowEnd.toISOString(),
+      remaining,
+    };
+  }
+
+  /**
+   * Demander un téléchargement (créer tentative + JWT)
+   */
+  async requestDownload(license: any, ebook: any, userId: string): Promise<{
+    nonce: string;
+    expiresAt: Date;
+    jwtToken: string;
+  }> {
+    // Vérifier et reset fenêtre si nécessaire
+    const now = new Date();
+    const windowStart = new Date(license.windowStartAt);
+    const windowEnd = new Date(windowStart.getTime() + license.windowDays * 24 * 60 * 60 * 1000);
+    
+    if (now > windowEnd) {
+      await storage.resetEbookLicenseWindow(license.id);
+      license.dlUsed = 0;
+      license.windowStartAt = now;
+    }
+
+    // Générer JWT
+    const jwtResult = await this.generateLicenseJWT(license.id, userId);
+    if (!jwtResult.success || !jwtResult.token) {
+      throw new Error(jwtResult.error || 'Failed to generate JWT');
+    }
+
+    // Extraire JTI depuis le JWT décodé (sans vérification car c'est nous qui venons de le créer)
+    const decoded = jwt.decode(jwtResult.token) as LicenseJWTPayload | null;
+    if (!decoded || !decoded.jti) {
+      throw new Error('Invalid JWT generated: missing jti');
+    }
+
+    // Créer tentative de téléchargement avec JWT stocké
+    const attempt = await this.createDownloadAttempt({
+      licenseId: license.id,
+      userId,
+      ebookId: ebook.id,
+      jwtToken: jwtResult.token,
+      jwtJti: decoded.jti,
+    });
+
+    return {
+      nonce: attempt.nonce,
+      expiresAt: attempt.expiresAt,
+      jwtToken: jwtResult.token,
+    };
+  }
+
+  /**
+   * Vérifier JWT d'une tentative de téléchargement
+   */
+  verifyJWT(jwtToken: string): { valid: boolean; watermark?: any; payload?: LicenseJWTPayload } | null {
+    try {
+      const publicKey = this.getPublicKey();
+      const decoded = jwt.verify(jwtToken, publicKey, {
+        algorithms: ['RS256'],
+        issuer: 'visual-platform',
+        audience: 'ebook-download',
+      }) as LicenseJWTPayload;
+
+      return {
+        valid: true,
+        watermark: decoded.watermark,
+        payload: decoded,
+      };
+    } catch (error) {
+      console.error('[Ebook] JWT verification failed:', error);
+      return null;
+    }
   }
 }
 
