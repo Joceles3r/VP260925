@@ -1,4 +1,4 @@
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,11 +215,11 @@ export default function ProfilePage() {
               <div>
                 <p className="text-sm text-muted-foreground">Membre depuis</p>
                 <p className="font-semibold" data-testid="created-at">
-                  {new Date(user.createdAt).toLocaleDateString('fr-FR', { 
+                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString('fr-FR', { 
                     year: 'numeric', 
                     month: 'long', 
                     day: 'numeric' 
-                  })}
+                  }) : 'Non disponible'}
                 </p>
               </div>
             </div>
