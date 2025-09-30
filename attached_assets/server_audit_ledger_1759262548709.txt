@@ -1,0 +1,15 @@
+import hmac, hashlib, time, os, json, threading
+LOCK = threading.Lock()
+KEY = (os.getenv("AUDIT_HMAC_KEY") or "dev-secret").encode()
+def _sign(payload: bytes) -> str:
+    return hmac.new(KEY, payload, hashlib.sha256).hexdigest()
+def append_audit(event_type: str, actor_id: str, data: dict, storage_path="var/audit.log"):
+    ts = int(time.time())
+    record = {"ts": ts, "type": event_type, "actor": actor_id, "data": data}
+    raw = json.dumps(record, separators=(",",":"), sort_keys=True).encode()
+    sig = _sign(raw)
+    line = json.dumps({"record": record, "sig": sig}) + "\n"
+    os.makedirs(os.path.dirname(storage_path), exist_ok=True)
+    with LOCK, open(storage_path, "a", encoding="utf-8") as f:
+        f.write(line)
+    return True

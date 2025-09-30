@@ -1,0 +1,82 @@
+
+---
+
+# 🧠 Code — Module “Revenue Engine” + API + Tests + UI
+
+> Colle chaque fichier dans ton repo aux **chemins indiqués**.
+
+## `server/revenue/engine.py`
+```python
+from dataclasses import dataclass
+from typing import List, Dict
+from math import floor
+
+INV_TOP10 = [13.66, 6.83, 4.55, 3.41, 2.73, 2.28, 1.95, 1.71, 1.52, 1.37]  # sum≈40
+PORT_TOP10 = [10.24, 5.12, 3.41, 2.56, 2.05, 1.71, 1.46, 1.28, 1.14, 1.02]  # sum≈30
+
+def euro_floor(cents: int) -> int:
+    return cents - (cents % 100)
+
+@dataclass
+class SplitItem:
+    account_id: str
+    role: str
+    amount_cents: int
+    note: str = ""
+
+def sale_article_split(price_cents: int, porter_account: str, visual_account: str) -> List[SplitItem]:
+    """70/30 avec arrondi à l'euro inf. côté porteur ; VISUAL capte le résiduel."""
+    porter_raw = int(round(0.70 * price_cents))
+    porter_pay = euro_floor(porter_raw)
+    visual_pay = price_cents - porter_pay  # ~30% + restes
+    return [
+        SplitItem(porter_account, "porter_sale", porter_pay, "70% sale (euro_floor)"),
+        SplitItem(visual_account, "visual_sale", visual_pay, "30% + rounding residual"),
+    ]
+
+def _weighted_split(total_cents: int, weights: List[float], weights_sum: float, accounts: List[str], role: str) -> List[SplitItem]:
+    out: List[SplitItem] = []
+    used = 0
+    for i, acc in enumerate(accounts[:10]):
+        w = weights[i] if i < len(weights) else 0.0
+        share = euro_floor(int((total_cents * (w / weights_sum))))
+        out.append(SplitItem(acc, role, share, f"rank#{i+1}"))
+        used += share
+    # résidu capté par VISUAL au total
+    return out
+
+def category_closure_split(
+    S_cents: int,
+    investor_top10_accounts: List[str],
+    porter_top10_accounts: List[str],
+    investor_ranks_11_100_accounts: List[str],
+    visual_account: str
+) -> List[SplitItem]:
+    out: List[SplitItem] = []
+    inv_total = int(floor(0.40 * S_cents))
+    port_total = int(floor(0.30 * S_cents))
+    eq_total  = int(floor(0.07 * S_cents))
+
+    # Top10
+    out += _weighted_split(inv_total, INV_TOP10, 40.0, investor_top10_accounts, "investor_top10")
+    out += _weighted_split(port_total, PORT_TOP10, 30.0, porter_top10_accounts, "porter_top10")
+
+    # 11-100 (uniques)
+    uniq = list(dict.fromkeys(investor_ranks_11_100_accounts))
+    if uniq:
+        per = euro_floor(eq_total // len(uniq))
+        for acc in uniq:
+            out.append(SplitItem(acc, "investor_11_100", per, "equipartition"))
+
+    # VISUAL = résiduel pour garantir somme exacte == S_cents
+    users_sum = sum(i.amount_cents for i in out)
+    visual_amount = S_cents - users_sum
+    out.append(SplitItem(visual_account, "visual_category", visual_amount, "23% base + rounding residuals"))
+    return out
+
+def preview_totals(items: List[SplitItem]) -> Dict[str, int]:
+    tot: Dict[str, int] = {}
+    for it in items:
+        tot[it.role] = tot.get(it.role, 0) + it.amount_cents
+    tot["ALL"] = sum(tot.values())
+    return tot
