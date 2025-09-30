@@ -24,6 +24,7 @@ import FidelityPage from "@/pages/fidelity";
 import VisualPage from "@/pages/visual";
 import InfoPage from "@/pages/info";
 import AccessibilityPage from "@/pages/accessibility";
+import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/admin/pages/AdminDashboard";
 
@@ -68,6 +69,7 @@ function Router() {
             <Route path="/receipts" component={ReceiptsPage} />
             <Route path="/top10" component={Top10Page} />
             <Route path="/fidelity" component={FidelityPage} />
+            <Route path="/profile" component={ProfilePage} />
             <Route path="/admin" component={Admin} />
             <Route path="/admin/dashboard" component={AdminDashboard} />
             <Route component={NotFound} />
