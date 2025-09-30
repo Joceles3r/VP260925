@@ -192,116 +192,126 @@ export default function Projects() {
   });
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid="projects-page">
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-2xl font-bold text-foreground" data-testid="projects-title">
-          Projets Audiovisuels
-        </h2>
-        
-        {/* Search and Filter Controls */}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Rechercher des projets..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 w-64"
-                data-testid="search-input"
-              />
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative" data-testid="projects-page">
+      {/* Background gradient effect */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#7B2CFF]/5 via-transparent to-[#FF3CAC]/5 pointer-events-none"></div>
+      
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-8 visual-fade-in">
+          <div>
+            <h2 className="text-4xl font-bold visual-text-gradient mb-2" data-testid="projects-title">
+              Projets Audiovisuels
+            </h2>
+            <p className="text-muted-foreground">Découvrez et investissez dans les projets créatifs</p>
+          </div>
+          
+          {/* Search and Filter Controls */}
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#00D1FF]" />
+                <Input
+                  type="text"
+                  placeholder="Rechercher des projets..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-72 border-[#00D1FF]/30"
+                  data-testid="search-input"
+                />
+              </div>
+              <Button variant="glass" size="sm" data-testid="search-button">
+                <Filter className="h-4 w-4" />
+              </Button>
             </div>
-            <Button variant="outline" size="sm" data-testid="search-button">
-              <Filter className="h-4 w-4" />
-            </Button>
           </div>
         </div>
-      </div>
 
-      {/* Filter Controls */}
-      <div className="flex flex-wrap gap-4 mb-6">
-        {/* Category Filter */}
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-4 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          data-testid="category-filter"
-        >
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.label}
-            </option>
-          ))}
-        </select>
-
-        {/* Sort Options */}
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="px-4 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          data-testid="sort-filter"
-        >
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="flex space-x-1 bg-muted rounded-lg p-1 mb-6 w-fit">
-        {categories.slice(0, 5).map((category) => (
-          <button
-            key={category.id}
-            onClick={() => setSelectedCategory(category.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              selectedCategory === category.id
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-background/50'
-            }`}
-            data-testid={`category-tab-${category.id || 'all'}`}
+        {/* Filter Controls */}
+        <div className="flex flex-wrap gap-4 mb-6 visual-fade-in visual-delay-100">
+          {/* Category Filter */}
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="px-4 py-2.5 border border-[#7B2CFF]/30 rounded-lg glass-card text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-[#7B2CFF] focus:border-[#7B2CFF] smooth-transition hover:border-[#7B2CFF]/50"
+            data-testid="category-filter"
           >
-            {category.label}
-          </button>
-        ))}
-      </div>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.label}
+              </option>
+            ))}
+          </select>
 
-      {/* Disabled Categories Info */}
-      {!isLoadingToggles && categoryMappings.some(mapping => {
-        const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
-        return !toggle?.isVisible;
-      }) && (
-        <div className="mb-6 p-4 bg-muted/30 rounded-lg border border-border">
-          <h4 className="text-sm font-medium text-foreground mb-2">Sections temporairement indisponibles:</h4>
-          <div className="flex flex-wrap gap-2">
-            {categoryMappings
-              .filter(mapping => {
-                const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
-                return !toggle?.isVisible;
-              })
-              .map(mapping => {
-                const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
-                const message = toggle?.hiddenMessageVariant === 'custom' 
-                  ? toggle.hiddenMessageCustom 
-                  : toggle?.hiddenMessageVariant === 'en_cours'
-                  ? 'En cours de développement'
-                  : 'En travaux, disponible bientôt';
-                
-                return (
-                  <span
-                    key={mapping.toggleKey}
-                    className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-muted text-muted-foreground"
-                    title={message || 'Temporairement indisponible'}
-                    data-testid={`disabled-category-${mapping.toggleKey}`}
-                  >
-                    {mapping.label}
-                  </span>
-                );
-              })}
-          </div>
+          {/* Sort Options */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-4 py-2.5 border border-[#FF3CAC]/30 rounded-lg glass-card text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-[#FF3CAC] focus:border-[#FF3CAC] smooth-transition hover:border-[#FF3CAC]/50"
+            data-testid="sort-filter"
+          >
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
+
+        {/* Filter Tabs */}
+        <div className="flex space-x-2 glass-card rounded-xl p-1.5 mb-6 w-fit visual-fade-in visual-delay-200">
+          {categories.slice(0, 5).map((category) => (
+            <button
+              key={category.id}
+              onClick={() => setSelectedCategory(category.id)}
+              className={`px-5 py-2.5 text-sm font-semibold rounded-lg smooth-transition ${
+                selectedCategory === category.id
+                  ? 'bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] text-white neon-glow-blue'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              }`}
+              data-testid={`category-tab-${category.id || 'all'}`}
+            >
+              {category.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Disabled Categories Info */}
+        {!isLoadingToggles && categoryMappings.some(mapping => {
+          const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+          return !toggle?.isVisible;
+        }) && (
+          <div className="mb-6 p-4 glass-card rounded-xl border border-yellow-500/20 visual-fade-in visual-delay-300">
+            <h4 className="text-sm font-bold text-foreground mb-3 flex items-center">
+              <span className="mr-2">⚠️</span>
+              Sections temporairement indisponibles
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {categoryMappings
+                .filter(mapping => {
+                  const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+                  return !toggle?.isVisible;
+                })
+                .map(mapping => {
+                  const toggle = categoryToggles.find(t => t.key === mapping.toggleKey);
+                  const message = toggle?.hiddenMessageVariant === 'custom' 
+                    ? toggle.hiddenMessageCustom 
+                    : toggle?.hiddenMessageVariant === 'en_cours'
+                    ? 'En cours de développement'
+                    : 'En travaux, disponible bientôt';
+                  
+                  return (
+                    <span
+                      key={mapping.toggleKey}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium glass-card border border-yellow-500/30 text-yellow-400"
+                      title={message || 'Temporairement indisponible'}
+                      data-testid={`disabled-category-${mapping.toggleKey}`}
+                    >
+                      {mapping.label}
+                    </span>
+                  );
+                })}
+            </div>
+          </div>
       )}
 
       {/* États de chargement et d'erreur */}
@@ -457,6 +467,7 @@ export default function Projects() {
           }}
         />
       )}
+      </div>
     </main>
   );
 }

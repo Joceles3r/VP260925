@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background smooth-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -18,11 +18,17 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        neon: "bg-gradient-to-r from-[#00D1FF] via-[#7B2CFF] to-[#FF3CAC] text-white font-bold neon-glow-blue hover:shadow-2xl gradient-animate relative overflow-hidden",
+        neonBlue: "bg-[#00D1FF] text-white font-bold neon-glow-blue hover:bg-[#00D1FF]/90 hover:scale-105",
+        neonViolet: "bg-[#7B2CFF] text-white font-bold neon-glow-violet hover:bg-[#7B2CFF]/90 hover:scale-105",
+        neonPink: "bg-[#FF3CAC] text-white font-bold neon-glow-pink hover:bg-[#FF3CAC]/90 hover:scale-105",
+        glass: "glass-card border border-border/50 hover:border-[#00D1FF]/50 hover:bg-[#00D1FF]/5 font-semibold",
+        neonOutline: "border-2 border-transparent bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] bg-clip-padding hover:shadow-lg neon-border font-semibold",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
+        lg: "h-12 rounded-xl px-8 text-base",
         icon: "h-10 w-10",
       },
     },
