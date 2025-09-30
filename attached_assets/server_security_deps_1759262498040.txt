@@ -1,0 +1,10 @@
+from fastapi import Depends, HTTPException, status
+def current_user():
+    return {"id":"admin-1","email":"admin@visual.example","role":"admin","twofa_verified":True}
+def require_admin(user=Depends(current_user), require_2fa:bool=True):
+    if user.get("role")!="admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    if require_2fa and not user.get("twofa_verified"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "2FA required")
+    return user
+
