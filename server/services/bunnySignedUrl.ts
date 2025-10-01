@@ -38,6 +38,10 @@ export function generateBunnySignedUrl(
     throw new Error("BUNNY_CDN_TOKEN_KEY not configured - CDN token authentication disabled");
   }
 
+  if (!BUNNY_PULL_ZONE || BUNNY_PULL_ZONE === "vz-xxxxx.b-cdn.net") {
+    throw new Error("BUNNY_PULL_ZONE not configured or using default placeholder");
+  }
+
   const expireTimestamp = Math.floor(Date.now() / 1000) + expiresInSeconds;
   const baseUrl = `https://${BUNNY_PULL_ZONE}`;
   
@@ -58,8 +62,13 @@ export function generateBunnySignedUrl(
     .replace(/\//g, '_')
     .replace(/=/g, '');
 
-  // Use path-based token for HLS compatibility (auto-propagates to segments)
-  const signedUrl = `${baseUrl}/bcdn_token=${token}&expires=${expireTimestamp}&token_path=${path}${path}`;
+  // Correct Bunny.net signed URL format: path?token=xxx&expires=xxx&token_path=xxx
+  let signedUrl = `${baseUrl}${path}?token=${token}&expires=${expireTimestamp}&token_path=${path}`;
+  
+  // Add IP restriction if provided
+  if (userIp) {
+    signedUrl += `&ip=${userIp}`;
+  }
   
   return signedUrl;
 }
@@ -91,10 +100,36 @@ export function validateBunnyTokenConfig(): {
   message: string;
   fallbackMode: boolean;
 } {
-  if (!BUNNY_CDN_TOKEN_KEY || !process.env.BUNNY_STREAM_API_KEY) {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // In production, enforce strict security requirements
+  if (isProduction) {
+    if (!BUNNY_CDN_TOKEN_KEY) {
+      throw new Error("FATAL: BUNNY_CDN_TOKEN_KEY required in production for HLS segment protection");
+    }
+    
+    if (!BUNNY_PULL_ZONE || BUNNY_PULL_ZONE === "vz-xxxxx.b-cdn.net") {
+      throw new Error("FATAL: BUNNY_PULL_ZONE not configured or using default placeholder");
+    }
+
+    if (process.env.VISUAL_PLAY_TOKEN_SECRET === "dev-secret-change-me") {
+      throw new Error("FATAL: VISUAL_PLAY_TOKEN_SECRET using insecure default value in production");
+    }
+  }
+
+  // Development mode warnings - only CDN token affects fallback mode
+  if (!BUNNY_CDN_TOKEN_KEY) {
     return {
       configured: false,
       message: "⚠️  BUNNY_CDN_TOKEN_KEY not set - Using fallback authentication (segments NOT protected)",
+      fallbackMode: true
+    };
+  }
+
+  if (!BUNNY_PULL_ZONE || BUNNY_PULL_ZONE === "vz-xxxxx.b-cdn.net") {
+    return {
+      configured: false,
+      message: "⚠️  BUNNY_PULL_ZONE not configured - CDN signed URLs will fail",
       fallbackMode: true
     };
   }
