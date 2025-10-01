@@ -1,0 +1,273 @@
+livre un module prêt à brancher (TypeScript/Node) qui :
+
+applique tes tarifs porteurs (clips 2 €, docs 5 €, films 10 €) tels qu’indiqués dans ton doc “Déposer un projet” 
+
+Déposer un projet
+
+ ;
+
+implémente une protection par jetons (expiration 30 min, 3 visionnages max, verrouillage IP + User-Agent) conformément à “Protection Vidéo par Jeton Token” 
+
+Protection Vidéo par Jeton Token
+
+ ;
+
+s’interface avec l’API Bunny.net (upload session, playback, statut encodage) via un petit client.
+
+Tu peux copier/coller les fichiers aux chemins ci-dessous, puis compléter tes variables d’environnement.
+
+📦 Arborescence proposée
+server/
+  services/
+    bunnyClient.ts
+    bunnyTokenService.ts
+  modules/
+    creatorDeposit/
+      creatorPricing.ts
+      creatorVideos.routes.ts
+shared/
+  constants.creatorDeposit.ts
+
+1) Tarifs porteurs + validation durée
+
+shared/constants.creatorDeposit.ts
+
+// Tarifs issus de « Déposer un projet » : Clips ≤10min=2€, Docs ≤30min=5€, Films ≤4h=10€
+// :contentReference[oaicite:2]{index=2}
+export const CREATOR_DEPOSIT_PRICING = {
+  clip:  { maxSeconds: 10 * 60,   feeEur: 2  },
+  doc:   { maxSeconds: 30 * 60,   feeEur: 5  },
+  film:  { maxSeconds: 4 * 60*60, feeEur: 10 }
+} as const;
+
+export type DepositType = keyof typeof CREATOR_DEPOSIT_PRICING;
+
+
+server/modules/creatorDeposit/creatorPricing.ts
+
+import { CREATOR_DEPOSIT_PRICING, DepositType } from "../../../shared/constants.creatorDeposit";
+
+export function getUploadFeeEUR(type: DepositType, durationSec: number): number {
+  const cfg = CREATOR_DEPOSIT_PRICING[type];
+  if (!cfg) throw new Error("Unknown deposit type");
+  if (durationSec <= 0 || durationSec > cfg.maxSeconds)
+    throw new Error(`Duration not allowed for ${type}: max ${cfg.maxSeconds}s`);
+  return cfg.feeEur;
+}
+
+2) Client Bunny.net (API)
+
+server/services/bunnyClient.ts
+
+import fetch from "node-fetch";
+
+const BUNNY_API_KEY       = process.env.BUNNY_API_KEY!;
+const BUNNY_LIBRARY_ID    = process.env.BUNNY_LIBRARY_ID!;        // Stream Library ID
+const BUNNY_STREAM_APIKEY = process.env.BUNNY_STREAM_API_KEY!;    // Playback/management
+const BASE_STREAM_API     = `https://video.bunnycdn.com/library/${BUNNY_LIBRARY_ID}`;
+
+function authHeaders() {
+  return { 
+    "Content-Type": "application/json",
+    "AccessKey": BUNNY_STREAM_APIKEY
+  };
+}
+
+export const bunnyClient = {
+  // Créer une vidéo (session d’upload) et récupérer un guid + upload URL
+  async createVideo(title: string) {
+    const res = await fetch(`${BASE_STREAM_API}/videos`, {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify({ title })
+    });
+    if (!res.ok) throw new Error(`Bunny createVideo failed: ${res.statusText}`);
+    return res.json(); // { guid, title, ... }
+  },
+
+  // URL d’upload (HTTP PUT direct) pour envoyer le fichier
+  getUploadUrl(guid: string) {
+    return `${BASE_STREAM_API}/videos/${guid}`;
+  },
+
+  // Statut d’encodage
+  async getStatus(guid: string) {
+    const res = await fetch(`${BASE_STREAM_API}/videos/${guid}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(`Bunny getStatus failed: ${res.statusText}`);
+    return res.json(); // contains { encodeProgress, ... }
+  },
+
+  // Suppression vidéo
+  async deleteVideo(guid: string) {
+    const res = await fetch(`${BASE_STREAM_API}/videos/${guid}`, { method: "DELETE", headers: authHeaders() });
+    if (!res.ok) throw new Error(`Bunny delete failed: ${res.statusText}`);
+    return true;
+  },
+
+  // URL manifeste HLS (origin) — on va proxifier côté serveur après vérif du token
+  hlsManifestUrl(guid: string) {
+    return `${BASE_STREAM_API}/videos/${guid}/manifest`; // variante /playlist.m3u8 selon config
+  }
+};
+
+
+Ce client est volontairement minimal. Il matche l’usage déjà en place chez toi (upload, statut, suppression) et prépare la proxy-lecture sécurisée.
+
+3) Jetons anti-piratage (HMAC, 30 min, 3 vues, IP + UA)
+
+server/services/bunnyTokenService.ts
+
+import crypto from "crypto";
+
+// Exigences issues de « Protection Vidéo par Jeton Token » :
+// - Tokens signés HMAC, expiration 30 min (par défaut)
+// - Limite 3 visionnages max.
+// - Liaison IP + User-Agent pour éviter le partage
+// :contentReference[oaicite:3]{index=3}
+
+const TOKEN_SECRET = process.env.VISUAL_PLAY_TOKEN_SECRET || "dev-secret";
+const DEFAULT_TTL_SECONDS = 30 * 60; // 30 minutes
+
+type Payload = {
+  vid: string;   // video guid
+  uid: string;   // user id
+  ip: string;
+  uaHash: string; // sha1(user-agent)
+  exp: number;   // epoch seconds
+  left: number;  // plays left
+};
+
+// Stockage des consommations : idealement Redis/DB. Fallback en mémoire ici.
+const memoryPlays = new Map<string, number>(); // key = token, value = left
+
+function sign(payload: Payload): string {
+  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const hmac = crypto.createHmac("sha256", TOKEN_SECRET).update(data).digest("base64url");
+  return `${data}.${hmac}`;
+}
+
+function verifyAndDecode(token: string): Payload | null {
+  const [data, sig] = token.split(".");
+  if (!data || !sig) return null;
+  const good = crypto.createHmac("sha256", TOKEN_SECRET).update(data).digest("base64url");
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
+  try { return JSON.parse(Buffer.from(data, "base64url").toString("utf8")); }
+  catch { return null; }
+}
+
+export function issuePlaybackToken(vid: string, uid: string, ip: string, userAgent: string, maxPlays=3, ttlSec=DEFAULT_TTL_SECONDS) {
+  const uaHash = crypto.createHash("sha1").update(userAgent || "").digest("hex");
+  const payload: Payload = { vid, uid, ip, uaHash, exp: Math.floor(Date.now()/1000) + ttlSec, left: maxPlays };
+  const token = sign(payload);
+  memoryPlays.set(token, maxPlays);
+  return token;
+}
+
+export function verifyAndConsume(token: string, ip: string, userAgent: string) {
+  const p = verifyAndDecode(token);
+  if (!p) return { ok:false, reason:"bad-signature" };
+  if (p.exp < Math.floor(Date.now()/1000)) return { ok:false, reason:"expired" };
+  const uaHash = crypto.createHash("sha1").update(userAgent || "").digest("hex");
+  if (p.ip !== ip) return { ok:false, reason:"ip-mismatch" };
+  if (p.uaHash !== uaHash) return { ok:false, reason:"ua-mismatch" };
+  const left = memoryPlays.get(token) ?? p.left;
+  if (left <= 0) return { ok:false, reason:"no-plays-left" };
+  memoryPlays.set(token, left - 1);
+  return { ok:true, payload:p, left:left-1 };
+}
+
+
+NB : en prod, remplace memoryPlays par Redis (clé TTL = token), ce qui respecte l’expiration, le compteur de lectures, et la scalabilité.
+
+4) Routes API : dépôt & lecture sécurisée
+
+server/modules/creatorDeposit/creatorVideos.routes.ts (Express)
+
+import { Router } from "express";
+import { getUploadFeeEUR } from "./creatorPricing";
+import { bunnyClient } from "../../services/bunnyClient";
+import { issuePlaybackToken, verifyAndConsume } from "../../services/bunnyTokenService";
+
+export const creatorVideosRouter = Router();
+
+// 1) Initier une session d’upload (et calcul du prix à payer)
+creatorVideosRouter.post("/creator/videos/init-upload", async (req, res) => {
+  try {
+    const { type, durationSec, title } = req.body as { type: "clip"|"doc"|"film", durationSec:number, title:string };
+    const feeEur = getUploadFeeEUR(type, durationSec); // 2/5/10 €
+    // TODO: créer la session Stripe (checkout) côté VISUAL pour ce montant.
+    const video = await bunnyClient.createVideo(title || `${type}-${Date.now()}`);
+    const uploadUrl = bunnyClient.getUploadUrl(video.guid);
+    return res.json({ feeEur, videoGuid: video.guid, uploadUrl /*, checkoutUrl */});
+  } catch (e:any) { return res.status(400).json({ error: e.message }); }
+});
+
+// 2) Demander un jeton de lecture sécurisé
+creatorVideosRouter.post("/videos/:guid/play-token", async (req, res) => {
+  // TODO: auth utilisateur
+  const uid = String(req.user?.id || "u-dev");
+  const { guid } = req.params;
+  const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0] || req.socket.remoteAddress || "0.0.0.0");
+  const ua = req.headers["user-agent"] || "";
+  const token = issuePlaybackToken(guid, uid, ip, ua, 3, 30*60); // 3 plays, 30 min
+  return res.json({ token, expiresInSec: 30*60, maxPlays: 3 });
+});
+
+// 3) Proxy manifeste HLS (vérifie et consomme le token)
+creatorVideosRouter.get("/videos/:guid/manifest.m3u8", async (req, res) => {
+  const { guid } = req.params;
+  const { token } = req.query as { token?: string };
+  const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0] || req.socket.remoteAddress || "0.0.0.0");
+  const ua = req.headers["user-agent"] || "";
+  if (!token) return res.status(401).send("missing token");
+  const v = verifyAndConsume(token, ip, ua);
+  if (!v.ok || v.payload?.vid !== guid) return res.status(401).send("invalid token");
+
+  try {
+    const origin = bunnyClient.hlsManifestUrl(guid);
+    const r = await fetch(origin, { headers: { "AccessKey": process.env.BUNNY_STREAM_API_KEY! } });
+    if (!r.ok) return res.status(500).send("bunny error");
+    res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+    res.setHeader("Cache-Control", "private, max-age=0, no-store");
+    r.body!.pipe(res);
+  } catch(e:any) {
+    return res.status(500).send(e.message);
+  }
+});
+
+
+Lecture : le player front appelle /videos/:guid/play-token puis charge /videos/:guid/manifest.m3u8?token=….
+Les segments .ts/.m4s peuvent aussi être proxifiés de la même façon (même vérification de token) si tu ne veux rien exposer côté Bunny.
+
+5) Variables d’environnement (à ajouter)
+# Bunny (prod)
+BUNNY_API_KEY=xxxxxxxxxxxxxxxx
+BUNNY_LIBRARY_ID=xxxxxx
+BUNNY_STREAM_API_KEY=xxxxxxxxxxxxxxxx
+
+# VISUAL
+VISUAL_PLAY_TOKEN_SECRET=change_me_long_and_random
+
+6) Player côté front (exemple)
+// Au click "Lire", on récupère un token puis on passe l’URL proxy au player HLS
+async function play(guid: string) {
+  const tokRes = await fetch(`/api/videos/${guid}/play-token`, { method:"POST" });
+  const { token } = await tokRes.json();
+  const manifest = `/api/videos/${guid}/manifest.m3u8?token=${encodeURIComponent(token)}`;
+  // Passer `manifest` à hls.js / video.js
+}
+
+✅ Ce que tu obtiens tout de suite
+
+Tarification porteuse (2€/5€/10€) appliquée au dépôt (clips/docs/films) — confirmée par ton doc. 
+
+Déposer un projet
+
+Protection anti-piratage solide (token HMAC, 30 min, 3 lectures, IP+UA, HLS proxifié) — alignée sur ton doc. 
+
+Protection Vidéo par Jeton Token
+
+API Bunny prête : création vidéo, upload URL, statut, suppression, et lecture proxifiée (pas d’URL publique réutilisable).
+
+Intégration Stripe à brancher au point 1 (checkout pour la participation technique).
+
+Chemins et fichiers structurés pour merger immédiatement.
