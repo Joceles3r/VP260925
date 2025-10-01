@@ -177,7 +177,7 @@ export class LiveShowOrchestrator {
     finalistId: string, 
     userId: string, 
     reason?: string
-  ): Promise<{ success: boolean; scenario?: ReplacementScenario | null; error?: string }> {
+  ): Promise<{ success: boolean; scenario?: { scenario: ReplacementScenario; targetSlot?: 'F1' | 'F2' } | null; error?: string }> {
     const finalist = await db
       .select()
       .from(liveShowFinalists)
@@ -231,7 +231,7 @@ export class LiveShowOrchestrator {
     return { success: true, scenario };
   }
 
-  async determineReplacementScenario(showId: string): Promise<ReplacementScenario | null> {
+  async determineReplacementScenario(showId: string): Promise<{ scenario: ReplacementScenario; targetSlot?: 'F1' | 'F2' } | null> {
     const lineup = await this.getLineupState(showId);
     
     const f1Status = lineup.F1?.status;
@@ -240,29 +240,37 @@ export class LiveShowOrchestrator {
     const hasA2 = !!lineup.A2;
 
     if (f1Status === 'cancelled' && f2Status === 'cancelled') {
-      if (hasA1 && hasA2) return 'S4';
-      if (hasA1 || hasA2) return 'S3';
+      if (hasA1 && hasA2) return { scenario: 'S4' };
+      if (hasA1 || hasA2) return { scenario: 'S3' };
       return null;
     }
 
-    if (f1Status === 'cancelled' || f2Status === 'cancelled') {
-      if (hasA1) return 'S1';
-      if (hasA2) return 'S2';
+    if (f1Status === 'cancelled') {
+      if (hasA1) return { scenario: 'S1', targetSlot: 'F1' };
+      if (hasA2) return { scenario: 'S2', targetSlot: 'F1' };
+    }
+
+    if (f2Status === 'cancelled') {
+      if (hasA1) return { scenario: 'S1', targetSlot: 'F2' };
+      if (hasA2) return { scenario: 'S2', targetSlot: 'F2' };
     }
 
     return null;
   }
 
-  async executeReplacementScenario(showId: string, scenario: ReplacementScenario): Promise<void> {
+  async executeReplacementScenario(showId: string, replacementInfo: { scenario: ReplacementScenario; targetSlot?: 'F1' | 'F2' }): Promise<void> {
     const lineup = await this.getLineupState(showId);
+    const { scenario, targetSlot } = replacementInfo;
     
     switch (scenario) {
       case 'S1':
-        await this.promoteAlternate(showId, lineup.A1!, 'F1');
+        if (!targetSlot || !lineup.A1) throw new Error('Invalid S1 scenario state');
+        await this.promoteAlternate(showId, lineup.A1, targetSlot);
         break;
       
       case 'S2':
-        await this.promoteAlternate(showId, lineup.A2!, 'F1');
+        if (!targetSlot || !lineup.A2) throw new Error('Invalid S2 scenario state');
+        await this.promoteAlternate(showId, lineup.A2, targetSlot);
         break;
       
       case 'S3':
@@ -271,8 +279,9 @@ export class LiveShowOrchestrator {
         break;
       
       case 'S4':
-        await this.promoteAlternate(showId, lineup.A1!, 'F1');
-        await this.promoteAlternate(showId, lineup.A2!, 'F2');
+        if (!lineup.A1 || !lineup.A2) throw new Error('Invalid S4 scenario state');
+        await this.promoteAlternate(showId, lineup.A1, 'F1');
+        await this.promoteAlternate(showId, lineup.A2, 'F2');
         break;
     }
 
@@ -282,7 +291,7 @@ export class LiveShowOrchestrator {
       'system', 
       'system', 
       null, 
-      `Scénario ${scenario} exécuté`
+      `Scénario ${scenario} exécuté${targetSlot ? ` vers ${targetSlot}` : ''}`
     );
   }
 

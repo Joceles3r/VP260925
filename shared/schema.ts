@@ -459,6 +459,7 @@ export const liveShowFinalists = pgTable("live_show_finalists", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
   uniqueShowUser: unique().on(table.liveShowId, table.userId),
+  uniqueShowRank: unique().on(table.liveShowId, table.rank), // Prevent duplicate ranks
 }));
 
 // Live Show Notifications table
@@ -1961,6 +1962,21 @@ export const insertLiveShowPenaltySchema = createInsertSchema(liveShowPenalties)
 export const insertLiveShowAuditSchema = createInsertSchema(liveShowAudit).omit({
   id: true,
   timestamp: true,
+});
+
+// Validation schema for designating finalists
+export const designateFinalistsSchema = z.object({
+  finalists: z.array(z.object({
+    userId: z.string().min(1, "User ID required"),
+    artistName: z.string().min(1, "Artist name required").max(255),
+    rank: z.number().int().min(1).max(4, "Rank must be between 1 and 4"),
+    role: z.enum(['finalist', 'alternate'], { required_error: "Role must be 'finalist' or 'alternate'" })
+  })).min(2, "At least 2 finalists required").max(4, "Maximum 4 finalists allowed")
+});
+
+// Validation schema for cancellation
+export const cancelParticipationSchema = z.object({
+  reason: z.string().optional()
 });
 
 export const insertLiveChatMessageSchema = createInsertSchema(liveChatMessages).omit({
