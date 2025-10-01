@@ -970,18 +970,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         videoUrl: req.file ? `/uploads/${req.file.filename}` : undefined,
       });
 
-      // Calculate ML score
-      const mlScore = await mlScoreProject(projectData);
-      projectData.mlScore = mlScore.toString();
+      // Calculate ML score with improved error handling
+      try {
+        const mlScore = await mlScoreProject(projectData);
+        projectData.mlScore = mlScore.toString();
+      } catch (mlError: any) {
+        console.error("ML scoring error:", mlError);
+        
+        // Handle simulation validation errors with specific messages
+        if (mlError.name === "SimulationValidationError") {
+          return res.status(400).json({ 
+            message: "Erreur de validation du projet",
+            details: mlError.message,
+            field: mlError.field,
+            retryable: true
+          });
+        }
+        
+        if (mlError.name === "MLScoringError") {
+          return res.status(500).json({ 
+            message: "Erreur lors du calcul du score ML",
+            details: mlError.message,
+            code: mlError.code,
+            retryable: true
+          });
+        }
+        
+        // Fallback to default score if ML scoring fails unexpectedly
+        console.warn("Using default ML score due to unexpected error");
+        projectData.mlScore = "5.0";
+      }
 
       const project = await storage.createProject(projectData);
       res.status(201).json(project);
     } catch (error) {
       console.error("Error creating project:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid project data", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Données de projet invalides", 
+          errors: error.errors,
+          retryable: false
+        });
       }
-      res.status(500).json({ message: "Failed to create project" });
+      res.status(500).json({ 
+        message: "Échec de création du projet",
+        retryable: true
+      });
     }
   });
 
