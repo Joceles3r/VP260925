@@ -89,6 +89,12 @@ import {
   // Tables Live Shows avancées
   liveShowFinalists,
   liveShowAudit,
+  // Tables Live Show Weekly System
+  liveShowEditions,
+  liveShowCandidates,
+  liveShowCommunityVotes,
+  liveShowBattleInvestments,
+  liveShowAds,
   type User,
   type UpsertUser,
   type Project,
@@ -97,6 +103,16 @@ import {
   type LiveShow,
   type LiveShowFinalist,
   type LiveShowAudit,
+  type LiveShowEdition,
+  type LiveShowCandidate,
+  type LiveShowCommunityVote,
+  type LiveShowBattleInvestment,
+  type LiveShowAd,
+  type InsertLiveShowEdition,
+  type InsertLiveShowCandidate,
+  type InsertLiveShowCommunityVote,
+  type InsertLiveShowBattleInvestment,
+  type InsertLiveShowAd,
   type ComplianceReport,
   type Notification,
   type NotificationPreference,
@@ -285,6 +301,33 @@ export interface IStorage {
   createLiveShow(data: { title: string; description?: string; artistA?: string; artistB?: string; viewerCount?: number }): Promise<LiveShow>;
   updateLiveShowInvestments(id: string, investmentA: string, investmentB: string): Promise<LiveShow>;
   getLiveShowAudit(showId: string, limit?: number): Promise<LiveShowAudit[]>;
+  updateLiveShow(id: string, updates: Partial<LiveShow>): Promise<LiveShow>;
+  
+  // Live Show Weekly Edition operations
+  createLiveShowEdition(data: InsertLiveShowEdition): Promise<LiveShowEdition>;
+  getLiveShowEdition(id: string): Promise<LiveShowEdition | undefined>;
+  updateLiveShowEdition(id: string, updates: Partial<LiveShowEdition>): Promise<LiveShowEdition>;
+  getCurrentWeekEdition(weekNumber: number, year: number): Promise<LiveShowEdition | undefined>;
+  
+  // Live Show Candidates operations
+  createLiveShowCandidate(data: InsertLiveShowCandidate): Promise<LiveShowCandidate>;
+  getLiveShowCandidate(id: string): Promise<LiveShowCandidate | undefined>;
+  updateLiveShowCandidate(id: string, updates: Partial<LiveShowCandidate>): Promise<LiveShowCandidate>;
+  getLiveShowCandidates(editionId: string, status?: string): Promise<LiveShowCandidate[]>;
+  
+  // Live Show Community Votes operations
+  createLiveShowCommunityVote(data: InsertLiveShowCommunityVote): Promise<LiveShowCommunityVote>;
+  getCommunityVotesForCandidate(candidateId: string): Promise<LiveShowCommunityVote[]>;
+  
+  // Live Show Battle Investments operations
+  createLiveShowBattleInvestment(data: InsertLiveShowBattleInvestment): Promise<LiveShowBattleInvestment>;
+  getLiveShowBattleInvestments(editionId: string): Promise<LiveShowBattleInvestment[]>;
+  updateLiveShowBattleInvestment(id: string, updates: Partial<LiveShowBattleInvestment>): Promise<LiveShowBattleInvestment>;
+  
+  // Live Show Ads operations
+  createLiveShowAd(data: InsertLiveShowAd): Promise<LiveShowAd>;
+  getLiveShowAds(editionId: string): Promise<LiveShowAd[]>;
+  updateLiveShowAd(id: string, updates: Partial<LiveShowAd>): Promise<LiveShowAd>;
   
   // Live chat messages operations
   createLiveChatMessage(data: { liveShowId: string; userId: string; content: string; messageType?: string; isModerated?: boolean; moderationReason?: string | null }): Promise<LiveChatMessage>;
@@ -1021,6 +1064,167 @@ export class DatabaseStorage implements IStorage {
       .where(eq(liveShowAudit.liveShowId, showId))
       .orderBy(desc(liveShowAudit.createdAt))
       .limit(limit);
+  }
+
+  async updateLiveShow(id: string, updates: Partial<LiveShow>): Promise<LiveShow> {
+    const [updated] = await db
+      .update(liveShows)
+      .set(updates)
+      .where(eq(liveShows.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Live Show Weekly Edition operations
+  async createLiveShowEdition(data: InsertLiveShowEdition): Promise<LiveShowEdition> {
+    const [edition] = await db
+      .insert(liveShowEditions)
+      .values(data)
+      .returning();
+    return edition;
+  }
+
+  async getLiveShowEdition(id: string): Promise<LiveShowEdition | undefined> {
+    const [edition] = await db
+      .select()
+      .from(liveShowEditions)
+      .where(eq(liveShowEditions.id, id))
+      .limit(1);
+    return edition;
+  }
+
+  async updateLiveShowEdition(id: string, updates: Partial<LiveShowEdition>): Promise<LiveShowEdition> {
+    const [updated] = await db
+      .update(liveShowEditions)
+      .set(updates)
+      .where(eq(liveShowEditions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getCurrentWeekEdition(weekNumber: number, year: number): Promise<LiveShowEdition | undefined> {
+    const [edition] = await db
+      .select()
+      .from(liveShowEditions)
+      .where(and(
+        eq(liveShowEditions.weekNumber, weekNumber),
+        eq(liveShowEditions.year, year)
+      ))
+      .limit(1);
+    return edition;
+  }
+
+  // Live Show Candidates operations
+  async createLiveShowCandidate(data: InsertLiveShowCandidate): Promise<LiveShowCandidate> {
+    const [candidate] = await db
+      .insert(liveShowCandidates)
+      .values(data)
+      .returning();
+    return candidate;
+  }
+
+  async getLiveShowCandidate(id: string): Promise<LiveShowCandidate | undefined> {
+    const [candidate] = await db
+      .select()
+      .from(liveShowCandidates)
+      .where(eq(liveShowCandidates.id, id))
+      .limit(1);
+    return candidate;
+  }
+
+  async updateLiveShowCandidate(id: string, updates: Partial<LiveShowCandidate>): Promise<LiveShowCandidate> {
+    const [updated] = await db
+      .update(liveShowCandidates)
+      .set(updates)
+      .where(eq(liveShowCandidates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getLiveShowCandidates(editionId: string, status?: string): Promise<LiveShowCandidate[]> {
+    if (status) {
+      return await db
+        .select()
+        .from(liveShowCandidates)
+        .where(and(
+          eq(liveShowCandidates.editionId, editionId),
+          eq(liveShowCandidates.status, status as any)
+        ))
+        .orderBy(desc(liveShowCandidates.totalScore));
+    }
+    return await db
+      .select()
+      .from(liveShowCandidates)
+      .where(eq(liveShowCandidates.editionId, editionId))
+      .orderBy(desc(liveShowCandidates.totalScore));
+  }
+
+  // Live Show Community Votes operations
+  async createLiveShowCommunityVote(data: InsertLiveShowCommunityVote): Promise<LiveShowCommunityVote> {
+    const [vote] = await db
+      .insert(liveShowCommunityVotes)
+      .values(data)
+      .returning();
+    return vote;
+  }
+
+  async getCommunityVotesForCandidate(candidateId: string): Promise<LiveShowCommunityVote[]> {
+    return await db
+      .select()
+      .from(liveShowCommunityVotes)
+      .where(eq(liveShowCommunityVotes.candidateId, candidateId));
+  }
+
+  // Live Show Battle Investments operations
+  async createLiveShowBattleInvestment(data: InsertLiveShowBattleInvestment): Promise<LiveShowBattleInvestment> {
+    const [investment] = await db
+      .insert(liveShowBattleInvestments)
+      .values(data)
+      .returning();
+    return investment;
+  }
+
+  async getLiveShowBattleInvestments(editionId: string): Promise<LiveShowBattleInvestment[]> {
+    return await db
+      .select()
+      .from(liveShowBattleInvestments)
+      .where(eq(liveShowBattleInvestments.editionId, editionId))
+      .orderBy(desc(liveShowBattleInvestments.createdAt));
+  }
+
+  async updateLiveShowBattleInvestment(id: string, updates: Partial<LiveShowBattleInvestment>): Promise<LiveShowBattleInvestment> {
+    const [updated] = await db
+      .update(liveShowBattleInvestments)
+      .set(updates)
+      .where(eq(liveShowBattleInvestments.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Live Show Ads operations
+  async createLiveShowAd(data: InsertLiveShowAd): Promise<LiveShowAd> {
+    const [ad] = await db
+      .insert(liveShowAds)
+      .values(data)
+      .returning();
+    return ad;
+  }
+
+  async getLiveShowAds(editionId: string): Promise<LiveShowAd[]> {
+    return await db
+      .select()
+      .from(liveShowAds)
+      .where(eq(liveShowAds.editionId, editionId))
+      .orderBy(asc(liveShowAds.slotNumber));
+  }
+
+  async updateLiveShowAd(id: string, updates: Partial<LiveShowAd>): Promise<LiveShowAd> {
+    const [updated] = await db
+      .update(liveShowAds)
+      .set(updates)
+      .where(eq(liveShowAds.id, id))
+      .returning();
+    return updated;
   }
 
   // Admin operations
