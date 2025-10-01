@@ -279,9 +279,38 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Live shows table
+// Live Show finalist status enum
+export const finalistStatusEnum = pgEnum('finalist_status', [
+  'selected',      // Désigné comme finaliste/remplaçant
+  'confirmed',     // A confirmé sa participation
+  'cancelled',     // S'est désisté
+  'promoted',      // Remplaçant promu en finaliste
+  'standby'        // En attente (remplaçant)
+]);
+
+// Live Show fallback mode enum
+export const showFallbackEnum = pgEnum('show_fallback_mode', [
+  'battle',        // Battle normale (2 artistes)
+  'showcase',      // Showcase spécial (1 artiste)
+  'report',        // Report à la semaine suivante
+  'cancelled'      // Annulé
+]);
+
+// Notification type for Live Show system
+export const liveShowNotificationTypeEnum = pgEnum('live_show_notification_type', [
+  'finalist_confirmation',    // Demande de confirmation finaliste
+  'alternate_standby',        // Alerte stand-by remplaçant
+  'lineup_update',            // Mise à jour line-up
+  'promotion',                // Promotion d'un remplaçant
+  'cancellation',             // Annulation
+  'final_reminder',           // Rappel final
+  'penalty_warning'           // Avertissement de pénalité
+]);
+
+// Live shows table (extended)
 export const liveShows = pgTable("live_shows", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekNumber: integer("week_number"), // Semaine de l'année
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   streamUrl: varchar("stream_url"),
@@ -289,9 +318,21 @@ export const liveShows = pgTable("live_shows", {
   viewerCount: integer("viewer_count").default(0),
   artistA: varchar("artist_a"),
   artistB: varchar("artist_b"),
+  artistAId: varchar("artist_a_id").references(() => users.id),
+  artistBId: varchar("artist_b_id").references(() => users.id),
   investmentA: decimal("investment_a", { precision: 10, scale: 2 }).default('0.00'),
   investmentB: decimal("investment_b", { precision: 10, scale: 2 }).default('0.00'),
+  votesA: integer("votes_a").default(0),
+  votesB: integer("votes_b").default(0),
+  scheduledStart: timestamp("scheduled_start"), // Vendredi 21:00 (optionnel pour compatibilité)
+  scheduledEnd: timestamp("scheduled_end"),     // Vendredi 00:00 (optionnel pour compatibilité)
+  lineupLocked: boolean("lineup_locked").default(false),
+  lineupLockedAt: timestamp("lineup_locked_at"),
+  fallbackMode: showFallbackEnum("fallback_mode").default('battle'),
+  fallbackReason: text("fallback_reason"),
+  penaltiesEnabled: boolean("penalties_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Live chat messages table
@@ -397,6 +438,71 @@ export const predictionBets = pgTable("prediction_bets", {
 }, (table) => ({
   uniqueUserPrediction: unique().on(table.userId, table.predictionId),
 }));
+
+// Live Show Finalists/Alternates table
+export const liveShowFinalists = pgTable("live_show_finalists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  artistName: varchar("artist_name", { length: 255 }).notNull(),
+  rank: integer("rank").notNull(), // 1=F1, 2=F2, 3=A1, 4=A2
+  role: varchar("role", { length: 20 }).notNull(), // 'finalist' or 'alternate'
+  status: finalistStatusEnum("status").default('selected'),
+  confirmationRequestedAt: timestamp("confirmation_requested_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancellationReason: text("cancellation_reason"),
+  promotedAt: timestamp("promoted_at"),
+  promotedFrom: varchar("promoted_from"), // ID du finaliste promu depuis remplaçant
+  availabilityConfirmed: boolean("availability_confirmed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniqueShowUser: unique().on(table.liveShowId, table.userId),
+}));
+
+// Live Show Notifications table
+export const liveShowNotifications = pgTable("live_show_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  recipientId: varchar("recipient_id").notNull().references(() => users.id),
+  notificationType: liveShowNotificationTypeEnum("notification_type").notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  actionUrl: varchar("action_url"),
+  isRead: boolean("is_read").default(false),
+  emailSent: boolean("email_sent").default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  metadata: jsonb("metadata"), // Données supplémentaires (deadline, etc.)
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Live Show Penalties table
+export const liveShowPenalties = pgTable("live_show_penalties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  liveShowId: varchar("live_show_id").references(() => liveShows.id, { onDelete: 'set null' }),
+  penaltyType: varchar("penalty_type", { length: 50 }).notNull(), // 'late_cancellation', 'no_show'
+  severity: varchar("severity", { length: 20 }).notNull(), // 'warning', 'temporary_ban', 'permanent_ban'
+  description: text("description").notNull(),
+  editionsAffected: integer("editions_affected"), // Nombre d'éditions de suspension
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Live Show Audit Log table
+export const liveShowAudit = pgTable("live_show_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").references(() => liveShows.id, { onDelete: 'set null' }),
+  actionType: varchar("action_type", { length: 100 }).notNull(), // 'finalist_confirmed', 'alternate_promoted', 'lineup_locked', 'fallback_activated', etc.
+  performedBy: varchar("performed_by").references(() => users.id), // User ID or 'system' or 'ai'
+  performedByType: varchar("performed_by_type", { length: 20 }).default('user'), // 'user', 'admin', 'system', 'ai'
+  targetUserId: varchar("target_user_id").references(() => users.id), // User affecté par l'action
+  description: text("description").notNull(),
+  metadata: jsonb("metadata"), // Données détaillées de l'action
+  timestamp: timestamp("timestamp").defaultNow(),
+});
 
 // Compliance reports table
 export const complianceReports = pgTable("compliance_reports", {
@@ -1833,6 +1939,28 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
 export const insertLiveShowSchema = createInsertSchema(liveShows).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLiveShowFinalistSchema = createInsertSchema(liveShowFinalists).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLiveShowNotificationSchema = createInsertSchema(liveShowNotifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLiveShowPenaltySchema = createInsertSchema(liveShowPenalties).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLiveShowAuditSchema = createInsertSchema(liveShowAudit).omit({
+  id: true,
+  timestamp: true,
 });
 
 export const insertLiveChatMessageSchema = createInsertSchema(liveChatMessages).omit({
