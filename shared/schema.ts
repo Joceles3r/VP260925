@@ -307,6 +307,41 @@ export const liveShowNotificationTypeEnum = pgEnum('live_show_notification_type'
   'penalty_warning'           // Avertissement de pénalité
 ]);
 
+// Live Show phase enum (weekly selection cycle)
+export const liveShowPhaseEnum = pgEnum('live_show_phase', [
+  'phase1',      // Dim 12:00 → Lun 00:00 (100 → 50 candidats)
+  'phase2',      // Lun 00:00 → Mar 00:00 (50 → 2 finalistes)
+  'phase3',      // Mar 00:00 → Ven 20:30 (préparation)
+  'live',        // Ven 21:00 → 00:00 (bataille)
+  'ended'        // Post-show
+]);
+
+// Live Show orchestrator state enum
+export const liveShowStateEnum = pgEnum('live_show_state', [
+  'planned',       // Show planifié
+  'pre_show',      // Préparation (Ven 20:30-21:00)
+  'live_running',  // En direct (21:00-23:45)
+  'votes_closed',  // Votes fermés (23:45)
+  'result_ready',  // Résultats calculés
+  'ended'          // Terminé
+]);
+
+// Candidate status enum for selection phases
+export const candidateStatusEnum = pgEnum('candidate_status', [
+  'submitted',     // Soumis (Phase 1)
+  'ai_selected',   // Sélectionné par IA (Phase 1 → Phase 2)
+  'finalist',      // Finaliste (Phase 2 → Phase 3)
+  'eliminated',    // Éliminé
+  'withdrawn'      // Retiré
+]);
+
+// Ad type enum for Live Show advertising
+export const adTypeEnum = pgEnum('ad_type', [
+  'standard',      // Pub standard
+  'premium',       // Pub premium
+  'interactive'    // Pub interactive avec CTA
+]);
+
 // Live shows table (extended)
 export const liveShows = pgTable("live_shows", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -503,6 +538,107 @@ export const liveShowAudit = pgTable("live_show_audit", {
   metadata: jsonb("metadata"), // Données détaillées de l'action
   timestamp: timestamp("timestamp").defaultNow(),
 });
+
+// ===== LIVE SHOW WEEKLY SYSTEM TABLES =====
+
+// Live Show Editions (weekly cycles with orchestrator state)
+export const liveShowEditions = pgTable("live_show_editions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  weekNumber: integer("week_number").notNull(), // ISO week number
+  year: integer("year").notNull(), // Year
+  currentPhase: liveShowPhaseEnum("current_phase").default('phase1'),
+  currentState: liveShowStateEnum("current_state").default('planned'),
+  phase1StartsAt: timestamp("phase1_starts_at").notNull(), // Dim 12:00
+  phase1EndsAt: timestamp("phase1_ends_at").notNull(), // Lun 00:00
+  phase2StartsAt: timestamp("phase2_starts_at").notNull(), // Lun 00:00
+  phase2EndsAt: timestamp("phase2_ends_at").notNull(), // Mar 00:00
+  phase3StartsAt: timestamp("phase3_starts_at").notNull(), // Mar 00:00
+  phase3EndsAt: timestamp("phase3_ends_at").notNull(), // Ven 20:30
+  liveStartsAt: timestamp("live_starts_at").notNull(), // Ven 21:00
+  liveEndsAt: timestamp("live_ends_at").notNull(), // Sam 00:00
+  votingOpensAt: timestamp("voting_opens_at").notNull(), // Ven 21:00
+  votingClosesAt: timestamp("voting_closes_at").notNull(), // Ven 23:45
+  totalCandidates: integer("total_candidates").default(0),
+  selectedCandidates: integer("selected_candidates").default(0),
+  finalistsSelected: boolean("finalists_selected").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniqueWeek: unique().on(table.year, table.weekNumber),
+}));
+
+// Live Show Candidates (for phases 1-3 selection)
+export const liveShowCandidates = pgTable("live_show_candidates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  editionId: varchar("edition_id").notNull().references(() => liveShowEditions.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  artistName: varchar("artist_name", { length: 255 }).notNull(),
+  videoUrl: varchar("video_url").notNull(), // 3min video
+  videoDuration: integer("video_duration"), // seconds
+  status: candidateStatusEnum("status").default('submitted'),
+  aiScore: decimal("ai_score", { precision: 3, scale: 2 }), // 0.00 to 1.00
+  activityScore: decimal("activity_score", { precision: 3, scale: 2 }),
+  qualityScore: decimal("quality_score", { precision: 3, scale: 2 }),
+  engagementScore: decimal("engagement_score", { precision: 3, scale: 2 }),
+  creativityScore: decimal("creativity_score", { precision: 3, scale: 2 }),
+  communityVotes: integer("community_votes").default(0),
+  totalScore: decimal("total_score", { precision: 5, scale: 2 }).default('0.00'), // aiScore + communityVotes
+  rank: integer("rank"), // Classement final dans la sélection
+  eliminatedAt: timestamp("eliminated_at"),
+  eliminatedInPhase: liveShowPhaseEnum("eliminated_in_phase"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniqueEditionUser: unique().on(table.editionId, table.userId),
+}));
+
+// Live Show Community Votes (during phases 1-2)
+export const liveShowCommunityVotes = pgTable("live_show_community_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidateId: varchar("candidate_id").notNull().references(() => liveShowCandidates.id, { onDelete: 'cascade' }),
+  voterId: varchar("voter_id").notNull().references(() => users.id),
+  phase: liveShowPhaseEnum("phase").notNull(), // 'phase1' or 'phase2'
+  voteWeight: decimal("vote_weight", { precision: 3, scale: 2 }).default('1.00'), // Pour votes pondérés
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueVoterCandidate: unique().on(table.voterId, table.candidateId),
+}));
+
+// Live Show Battle Investments (during Live 21:00-23:45)
+export const liveShowBattleInvestments = pgTable("live_show_battle_investments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  editionId: varchar("edition_id").notNull().references(() => liveShowEditions.id, { onDelete: 'cascade' }),
+  liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  finalist: varchar("finalist", { length: 1 }).notNull(), // 'A' or 'B'
+  amountEUR: decimal("amount_eur", { precision: 10, scale: 2 }).notNull(), // 2-20€ tranches
+  votes: integer("votes").notNull(), // 1-10 votes (converted from amount)
+  paymentIntentId: varchar("payment_intent_id"), // Stripe payment intent
+  paidAt: timestamp("paid_at"),
+  isWinner: boolean("is_winner"), // True si a investi sur le gagnant
+  payoutAmount: decimal("payout_amount", { precision: 10, scale: 2 }), // Gain distribué
+  payoutProcessed: boolean("payout_processed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Live Show Ads (scheduled advertising breaks)
+export const liveShowAds = pgTable("live_show_ads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  editionId: varchar("edition_id").notNull().references(() => liveShowEditions.id, { onDelete: 'cascade' }),
+  slotNumber: integer("slot_number").notNull(), // 1-6
+  scheduledAt: varchar("scheduled_at", { length: 10 }).notNull(), // "21:30", "22:00", etc.
+  durationMinutes: integer("duration_minutes").notNull(), // 2-5 min
+  adType: adTypeEnum("ad_type").default('standard'),
+  advertiserId: varchar("advertiser_id").references(() => users.id),
+  adContent: jsonb("ad_content"), // {title, description, videoUrl, ctaUrl, etc.}
+  isTriggered: boolean("is_triggered").default(false),
+  triggeredAt: timestamp("triggered_at"),
+  triggeredBy: varchar("triggered_by").references(() => users.id), // Admin qui a déclenché
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueEditionSlot: unique().on(table.editionId, table.slotNumber),
+}));
 
 // Compliance reports table
 export const complianceReports = pgTable("compliance_reports", {
@@ -1963,6 +2099,33 @@ export const insertLiveShowAuditSchema = createInsertSchema(liveShowAudit).omit(
   timestamp: true,
 });
 
+export const insertLiveShowEditionSchema = createInsertSchema(liveShowEditions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLiveShowCandidateSchema = createInsertSchema(liveShowCandidates).omit({
+  id: true,
+  submittedAt: true,
+  updatedAt: true,
+});
+
+export const insertLiveShowCommunityVoteSchema = createInsertSchema(liveShowCommunityVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLiveShowBattleInvestmentSchema = createInsertSchema(liveShowBattleInvestments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertLiveShowAdSchema = createInsertSchema(liveShowAds).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Validation schema for designating finalists
 export const designateFinalistsSchema = z.object({
   finalists: z.array(z.object({
@@ -2377,6 +2540,16 @@ export type LiveShowPenalty = typeof liveShowPenalties.$inferSelect;
 export type InsertLiveShowPenalty = z.infer<typeof insertLiveShowPenaltySchema>;
 export type LiveShowAudit = typeof liveShowAudit.$inferSelect;
 export type InsertLiveShowAudit = z.infer<typeof insertLiveShowAuditSchema>;
+export type LiveShowEdition = typeof liveShowEditions.$inferSelect;
+export type InsertLiveShowEdition = z.infer<typeof insertLiveShowEditionSchema>;
+export type LiveShowCandidate = typeof liveShowCandidates.$inferSelect;
+export type InsertLiveShowCandidate = z.infer<typeof insertLiveShowCandidateSchema>;
+export type LiveShowCommunityVote = typeof liveShowCommunityVotes.$inferSelect;
+export type InsertLiveShowCommunityVote = z.infer<typeof insertLiveShowCommunityVoteSchema>;
+export type LiveShowBattleInvestment = typeof liveShowBattleInvestments.$inferSelect;
+export type InsertLiveShowBattleInvestment = z.infer<typeof insertLiveShowBattleInvestmentSchema>;
+export type LiveShowAd = typeof liveShowAds.$inferSelect;
+export type InsertLiveShowAd = z.infer<typeof insertLiveShowAdSchema>;
 export type LiveChatMessage = typeof liveChatMessages.$inferSelect;
 export type MessageReaction = typeof messageReactions.$inferSelect;
 export type LivePoll = typeof livePolls.$inferSelect;
