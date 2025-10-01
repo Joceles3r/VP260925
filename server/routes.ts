@@ -4,6 +4,8 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { db } from "./db";
+import { liveShowFinalists, liveShowAudit } from "@shared/schema";
+import { eq, desc, and } from "drizzle-orm";
 import { setupAuth, isAuthenticated, getSession } from "./replitAuth";
 import { 
   insertProjectSchema, 
@@ -73,6 +75,7 @@ import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenVal
 import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
 import { categoriesRouter } from "./categories/routes";
+import { liveShowOrchestrator } from "./services/liveShowOrchestrator";
 import { setupAdminRoutes } from "./services/adminRoutes";
 import adminDashboardRoutes from "./routes/adminDashboardRoutes";
 import { generateReceiptPDF } from "./receipts/handlers";
@@ -1263,6 +1266,191 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing live show investment:", error);
       res.status(500).json({ message: "Failed to process investment" });
+    }
+  });
+
+  // ===== LIVE SHOW FINALIST MANAGEMENT ROUTES =====
+
+  // Get finalists for a specific show
+  app.get('/api/live-shows/:id/finalists', async (req, res) => {
+    try {
+      const showId = req.params.id;
+      const finalists = await db
+        .select()
+        .from(liveShowFinalists)
+        .where(eq(liveShowFinalists.liveShowId, showId))
+        .orderBy(liveShowFinalists.rank);
+      
+      res.json(finalists);
+    } catch (error) {
+      console.error("Error fetching finalists:", error);
+      res.status(500).json({ message: "Failed to fetch finalists" });
+    }
+  });
+
+  // Designate finalists (Admin only)
+  app.post('/api/live-shows/:id/finalists', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const showId = req.params.id;
+      const { finalists } = req.body;
+
+      if (!Array.isArray(finalists) || finalists.length < 2 || finalists.length > 4) {
+        return res.status(400).json({ 
+          message: "Must designate 2-4 finalists (F1, F2, A1 optional, A2 optional)" 
+        });
+      }
+
+      const result = await liveShowOrchestrator.designateFinalists(showId, finalists);
+      
+      res.json({ 
+        success: true, 
+        message: "Finalists designated successfully",
+        finalists: result 
+      });
+    } catch (error) {
+      console.error("Error designating finalists:", error);
+      res.status(500).json({ message: "Failed to designate finalists" });
+    }
+  });
+
+  // Request confirmations from finalists (Admin only)
+  app.post('/api/live-shows/:id/request-confirmations', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const showId = req.params.id;
+      await liveShowOrchestrator.requestConfirmations(showId);
+      
+      res.json({ 
+        success: true, 
+        message: "Confirmation requests sent to finalists" 
+      });
+    } catch (error) {
+      console.error("Error requesting confirmations:", error);
+      res.status(500).json({ message: "Failed to request confirmations" });
+    }
+  });
+
+  // Confirm participation (Finalist)
+  app.post('/api/live-shows/finalists/:id/confirm', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const finalistId = req.params.id;
+      
+      const result = await liveShowOrchestrator.confirmParticipation(finalistId, userId);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "Participation confirmée avec succès" 
+      });
+    } catch (error) {
+      console.error("Error confirming participation:", error);
+      res.status(500).json({ message: "Failed to confirm participation" });
+    }
+  });
+
+  // Cancel participation (Finalist)
+  app.post('/api/live-shows/finalists/:id/cancel', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const finalistId = req.params.id;
+      const { reason } = req.body;
+      
+      const result = await liveShowOrchestrator.cancelParticipation(finalistId, userId, reason);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "Participation annulée",
+        scenario: result.scenario,
+        scenarioExecuted: !!result.scenario
+      });
+    } catch (error) {
+      console.error("Error canceling participation:", error);
+      res.status(500).json({ message: "Failed to cancel participation" });
+    }
+  });
+
+  // Lock lineup (Admin only)
+  app.post('/api/live-shows/:id/lock-lineup', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const showId = req.params.id;
+      const result = await liveShowOrchestrator.lockLineup(showId, userId);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "Line-up verrouillé avec succès" 
+      });
+    } catch (error) {
+      console.error("Error locking lineup:", error);
+      res.status(500).json({ message: "Failed to lock lineup" });
+    }
+  });
+
+  // Get lineup state
+  app.get('/api/live-shows/:id/lineup', async (req, res) => {
+    try {
+      const showId = req.params.id;
+      const lineup = await liveShowOrchestrator.getLineupState(showId);
+      
+      res.json(lineup);
+    } catch (error) {
+      console.error("Error fetching lineup:", error);
+      res.status(500).json({ message: "Failed to fetch lineup" });
+    }
+  });
+
+  // Get Live Show audit log (Admin only)
+  app.get('/api/live-shows/:id/audit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const showId = req.params.id;
+      const auditLog = await db
+        .select()
+        .from(liveShowAudit)
+        .where(eq(liveShowAudit.liveShowId, showId))
+        .orderBy(desc(liveShowAudit.timestamp));
+      
+      res.json(auditLog);
+    } catch (error) {
+      console.error("Error fetching audit log:", error);
+      res.status(500).json({ message: "Failed to fetch audit log" });
     }
   });
 
