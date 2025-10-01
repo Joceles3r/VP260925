@@ -42,6 +42,14 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
   - **Admin Override**: AdminThemeOverride component in admin dashboard for global theme forcing (e.g., dark mode during Live Shows)
   - **Automatic Restoration**: When admin removes override, user preferences automatically restore from database
   - **Comprehensive Logging**: Debug-ready with initialization and persistence flow logging
+- **Live Show Finalist Management System**: Production-ready admin UI for managing weekly Live Shows with:
+  - **Automated Orchestration**: LiveShowOrchestrator service handles finalist/replacement scenarios (S1: A1→vacant, S2: A2→vacant)
+  - **Admin Dashboard**: LiveShowsAdminPanel component displays active shows, lineup state (F1/F2/A1/A2), lock/unlock controls
+  - **Database Schema**: liveShowFinalists (rank nullable), liveShowAlternates, liveShowNotifications, liveShowAudit for complete audit trail
+  - **API Routes**: GET active shows/lineup/audit, POST lock-lineup/unlock-lineup with admin authentication
+  - **Smart Cache Invalidation**: TanStack Query v5 with prefix invalidation ensures automatic UI refresh after operations
+  - **Replacement Logic**: Eligibility filtering (selected/confirmed/standby only), slot release before promotion, no unique constraint conflicts
+  - **OIDC Admin Auth**: Requires profile_type='admin' claim (underscore, not camelCase) in OIDC token for admin access
 
 ### System Design Choices
 - **Modularity**: Co-located components and organized imports for maintainable code.
