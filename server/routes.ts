@@ -36,7 +36,10 @@ import {
   insertFeatureToggleSchema,
   // Schémas petites annonces
   insertPetitesAnnoncesSchema,
-  insertAdPhotosSchema
+  insertAdPhotosSchema,
+  // Schémas Live Show
+  designateFinalistsSchema,
+  cancelParticipationSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount } from "@shared/utils";
 import { 
@@ -1299,14 +1302,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const showId = req.params.id;
-      const { finalists } = req.body;
-
-      if (!Array.isArray(finalists) || finalists.length < 2 || finalists.length > 4) {
+      
+      // Validate request body
+      const validation = designateFinalistsSchema.safeParse(req.body);
+      if (!validation.success) {
         return res.status(400).json({ 
-          message: "Must designate 2-4 finalists (F1, F2, A1 optional, A2 optional)" 
+          message: "Invalid request data",
+          errors: validation.error.errors 
         });
       }
 
+      const { finalists } = validation.data;
       const result = await liveShowOrchestrator.designateFinalists(showId, finalists);
       
       res.json({ 
@@ -1370,8 +1376,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const finalistId = req.params.id;
-      const { reason } = req.body;
       
+      // Validate request body
+      const validation = cancelParticipationSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data",
+          errors: validation.error.errors 
+        });
+      }
+
+      const { reason } = validation.data;
       const result = await liveShowOrchestrator.cancelParticipation(finalistId, userId, reason);
       
       if (!result.success) {
