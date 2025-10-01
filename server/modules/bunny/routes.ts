@@ -11,7 +11,7 @@ const bunnyConfig = validateBunnyTokenConfig();
 console.log(`[BUNNY] ${bunnyConfig.message}`);
 
 const router = Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-11-20.acacia" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-11-20" as any });
 const APP_BASE_URL = process.env.REPLIT_DEV_DOMAIN 
   ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
   : "http://localhost:5000";
