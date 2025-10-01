@@ -397,6 +397,26 @@ export class LiveShowOrchestrator {
     return { success: true };
   }
 
+  async unlockLineup(showId: string, adminId: string): Promise<{ success: boolean; error?: string }> {
+    await db.update(liveShows)
+      .set({ 
+        lineupLocked: false,
+        lineupLockedAt: null
+      })
+      .where(eq(liveShows.id, showId));
+
+    await this.auditLog(
+      showId, 
+      'lineup_unlocked', 
+      adminId, 
+      'admin', 
+      null, 
+      'Line-up déverrouillé par admin'
+    );
+
+    return { success: true };
+  }
+
   async getLineupState(showId: string): Promise<LineupState> {
     const show = await db.select().from(liveShows).where(eq(liveShows.id, showId)).limit(1);
     const finalists = await db

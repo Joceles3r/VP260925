@@ -8,6 +8,7 @@ import { useAdminStore } from '@/stores/adminStore';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import type { FeatureToggle } from '@shared/schema';
+import LiveShowsAdminPanel from '@/components/LiveShowsAdminPanel';
 
 interface AdminStatsProps {
   stats: any;
@@ -207,12 +208,13 @@ export default function AdminPanel() {
       <AdminStats stats={adminStats} />
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="users" data-testid="tab-users">Utilisateurs</TabsTrigger>
           <TabsTrigger value="projects" data-testid="tab-projects">Projets</TabsTrigger>
           <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
           <TabsTrigger value="compliance" data-testid="tab-compliance">Compliance</TabsTrigger>
           <TabsTrigger value="moderation" data-testid="tab-moderation">Modération</TabsTrigger>
+          <TabsTrigger value="liveshows" data-testid="tab-liveshows">Live Shows</TabsTrigger>
           <TabsTrigger value="toggles" data-testid="tab-toggles">Boutons ON/OFF</TabsTrigger>
         </TabsList>
 
@@ -652,6 +654,10 @@ export default function AdminPanel() {
               )}
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="liveshows" className="space-y-4">
+          <LiveShowsAdminPanel />
         </TabsContent>
 
         <TabsContent value="toggles" className="space-y-4">
