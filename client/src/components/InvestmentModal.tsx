@@ -83,10 +83,37 @@ export default function InvestmentModal({ isOpen, onClose, project, onSuccess }:
 
       onSuccess?.();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Investment error:", error);
+      
+      let errorTitle = "Erreur d'investissement";
+      let errorDescription = "Impossible de traiter l'investissement";
+      
+      // Handle specific error responses from backend
+      if (error?.message) {
+        if (error.message.includes("KYC")) {
+          errorTitle = "KYC requis";
+          errorDescription = error.details || "Vérification d'identité requise pour investir";
+        } else if (error.message.includes("caution") || error.message.includes("Caution")) {
+          errorTitle = "Caution insuffisante";
+          errorDescription = error.details || error.message;
+        } else if (error.message.includes("balance") || error.message.includes("Solde")) {
+          errorTitle = "Solde insuffisant";
+          errorDescription = "Votre solde est insuffisant pour cet investissement";
+        } else if (error.message.includes("amount") || error.message.includes("montant")) {
+          errorTitle = "Montant invalide";
+          errorDescription = error.details || error.message;
+        } else if (error.message.includes("simulation") || error.message.includes("validation")) {
+          errorTitle = "Erreur de validation";
+          errorDescription = error.details || error.message;
+        } else {
+          errorDescription = error.details || error.message;
+        }
+      }
+      
       toast({
-        title: "Erreur",
-        description: "Impossible de traiter l'investissement",
+        title: errorTitle,
+        description: errorDescription,
         variant: "destructive",
       });
     } finally {
