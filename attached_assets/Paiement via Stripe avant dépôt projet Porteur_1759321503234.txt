@@ -1,0 +1,418 @@
+’ajoute Stripe Checkout + webhook pour valider le dépôt avant l’upload, et je fournis le widget dashboard “Conso mensuelle estimée” (stockage/egress/encode) pour chaque porteur.
+
+Tu peux copier/coller ces fichiers tels quels (TypeScript/Express + React), puis compléter les variables d’environnement listées en bas.
+Ils s’intègrent avec ce que tu as déjà : bunnyVideoService.ts, bunnyTokenService.ts, etc.
+
+🔌 Backend (Express/Node)
+1) Store simple (à remplacer par ta DB)
+
+server/modules/creatorDeposit/depositStore.ts
+
+// TEMPORAIRE: remplace par ta DB (Postgres/Mongo). Ici, simple in-memory.
+export type DepositStatus = "PENDING" | "PAID" | "READY" | "CANCELLED" | "EXPIRED";
+export type DepositRecord = {
+  id: string;             // depositId
+  userId: string;         // porteur
+  type: "clip"|"doc"|"film";
+  durationSec: number;
+  feeEur: number;
+  stripeSessionId?: string;
+  status: DepositStatus;
+  videoGuid?: string;     // Bunny guid
+  uploadUrl?: string;     // Bunny upload URL
+  title?: string;
+  createdAt: number;
+};
+
+const mem = new Map<string, DepositRecord>();
+
+export const depositStore = {
+  create(r: DepositRecord){ mem.set(r.id, r); return r; },
+  get(id: string){ return mem.get(id) || null; },
+  update(id: string, patch: Partial<DepositRecord>){
+    const cur = mem.get(id); if(!cur) return null;
+    const next = { ...cur, ...patch }; mem.set(id, next); return next;
+  },
+  byStripeSession(sessionId: string){
+    for(const r of mem.values()){ if(r.stripeSessionId === sessionId) return r; }
+    return null;
+  }
+};
+
+2) Tarifs porteurs (issus de “Déposer un projet”)
+
+shared/constants.creatorDeposit.ts
+
+// Clips ≤10min=2€ ; Docs ≤30min=5€ ; Films ≤4h=10€ (cf. doc "Déposer un projet")
+export const CREATOR_DEPOSIT_PRICING = {
+  clip:  { maxSeconds: 10 * 60,   feeEur: 2  },
+  doc:   { maxSeconds: 30 * 60,   feeEur: 5  },
+  film:  { maxSeconds: 4 * 60*60, feeEur: 10 }
+} as const;
+export type DepositType = keyof typeof CREATOR_DEPOSIT_PRICING;
+
+
+server/modules/creatorDeposit/creatorPricing.ts
+
+import { CREATOR_DEPOSIT_PRICING, DepositType } from "../../../shared/constants.creatorDeposit";
+
+export function getUploadFeeEUR(type: DepositType, durationSec: number): number {
+  const cfg = CREATOR_DEPOSIT_PRICING[type];
+  if (!cfg) throw new Error("Unknown deposit type");
+  if (durationSec <= 0 || durationSec > cfg.maxSeconds)
+    throw new Error(`Durée non autorisée pour ${type} (max ${cfg.maxSeconds}s)`);
+  return cfg.feeEur;
+}
+
+3) Client Bunny.net (min) + tokens déjà en place
+
+(si tu as déjà bunnyVideoService.ts, garde-le — sinon voici un client minimal)
+
+server/services/bunnyClient.ts
+
+import fetch from "node-fetch";
+
+const BUNNY_LIBRARY_ID    = process.env.BUNNY_LIBRARY_ID!;
+const BUNNY_STREAM_APIKEY = process.env.BUNNY_STREAM_API_KEY!;
+const BASE_STREAM_API     = `https://video.bunnycdn.com/library/${BUNNY_LIBRARY_ID}`;
+
+function authHeaders() {
+  return { "Content-Type": "application/json", "AccessKey": BUNNY_STREAM_APIKEY };
+}
+
+export const bunnyClient = {
+  async createVideo(title: string) {
+    const res = await fetch(`${BASE_STREAM_API}/videos`, { method: "POST", headers: authHeaders(), body: JSON.stringify({ title }) });
+    if (!res.ok) throw new Error(`Bunny createVideo failed: ${res.status} ${await res.text()}`);
+    return res.json(); // { guid, title, ... }
+  },
+  getUploadUrl(guid: string) { return `${BASE_STREAM_API}/videos/${guid}`; },
+  async getStatus(guid: string) {
+    const res = await fetch(`${BASE_STREAM_API}/videos/${guid}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(`Bunny getStatus failed: ${res.status}`);
+    return res.json();
+  },
+  async deleteVideo(guid: string) {
+    const res = await fetch(`${BASE_STREAM_API}/videos/${guid}`, { method: "DELETE", headers: authHeaders() });
+    if (!res.ok) throw new Error(`Bunny delete failed: ${res.status}`);
+    return true;
+  },
+  hlsManifestUrl(guid: string) { return `${BASE_STREAM_API}/videos/${guid}/manifest`; }
+};
+
+
+(Ton module bunnyTokenService.ts anti-piratage reste inchangé.)
+
+4) Routes Stripe (Checkout + Webhook + délivrance upload)
+
+server/modules/creatorDeposit/creatorStripe.routes.ts
+
+import { Router } from "express";
+import Stripe from "stripe";
+import { randomUUID } from "crypto";
+import { getUploadFeeEUR } from "./creatorPricing";
+import { depositStore } from "./depositStore";
+import { bunnyClient } from "../../services/bunnyClient";
+
+const router = Router();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" });
+const APP_BASE_URL = process.env.APP_BASE_URL || "http://localhost:3000";
+
+// 1) Initier un Checkout Stripe pour un dépôt (calcul du prix)
+router.post("/creator/videos/init-checkout", async (req, res) => {
+  try {
+    // TODO: authentifier le porteur (req.user.id)
+    const userId = String((req as any).user?.id || "user-dev");
+    const { type, durationSec, title } = req.body as { type: "clip"|"doc"|"film", durationSec:number, title?:string };
+
+    const feeEur = getUploadFeeEUR(type, durationSec);
+    const depositId = randomUUID();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      currency: "eur",
+      line_items: [{
+        price_data: {
+          currency: "eur",
+          unit_amount: Math.round(feeEur * 100),
+          product_data: { name: `Dépôt vidéo (${type})` }
+        },
+        quantity: 1
+      }],
+      metadata: { kind: "creator_deposit", depositId, userId, type, durationSec: String(durationSec), title: title || "" },
+      success_url: `${APP_BASE_URL}/creator/deposit/success?depositId=${depositId}`,
+      cancel_url: `${APP_BASE_URL}/creator/deposit/cancel?depositId=${depositId}`
+    });
+
+    depositStore.create({
+      id: depositId, userId, type, durationSec, feeEur,
+      stripeSessionId: session.id, status: "PENDING", title: title || "", createdAt: Date.now()
+    });
+
+    return res.json({ checkoutUrl: session.url, depositId });
+  } catch (e:any) { return res.status(400).json({ error: e.message }); }
+});
+
+// 2) Poller le statut / récupérer l’upload URL quand payé + prêt
+router.get("/creator/videos/deposit/:id/status", async (req, res) => {
+  const dep = depositStore.get(req.params.id);
+  if (!dep) return res.status(404).json({ error: "deposit not found" });
+  return res.json({
+    status: dep.status,
+    videoGuid: dep.videoGuid || null,
+    uploadUrl: dep.uploadUrl || null,
+    title: dep.title
+  });
+});
+
+export default router;
+
+
+server/routes/stripeWebhooks.routes.ts
+
+import { Router } from "express";
+import Stripe from "stripe";
+import { depositStore } from "../modules/creatorDeposit/depositStore";
+import { bunnyClient } from "../services/bunnyClient";
+
+const router = Router();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" });
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+
+router.post("/webhooks/stripe", expressRawBody, async (req, res) => {
+  let event: Stripe.Event;
+
+  try {
+    if (endpointSecret) {
+      const sig = req.headers["stripe-signature"] as string;
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    } else {
+      event = req.body as Stripe.Event; // DEV only
+    }
+  } catch (err:any) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.metadata?.kind === "creator_deposit") {
+      const depositId = session.metadata.depositId!;
+      const dep = depositStore.get(depositId);
+      if (!dep) return res.json({ ok: true }); // rien à faire
+
+      // Marquer payé
+      depositStore.update(depositId, { status: "PAID" });
+
+      // Créer la vidéo Bunny maintenant (upload autorisé)
+      const title = session.metadata.title || `${dep.type}-${depositId}`;
+      const video = await bunnyClient.createVideo(title);
+      const uploadUrl = bunnyClient.getUploadUrl(video.guid);
+
+      depositStore.update(depositId, {
+        status: "READY",
+        videoGuid: video.guid,
+        uploadUrl
+      });
+    }
+  }
+
+  return res.json({ ok: true });
+});
+
+// Middleware pour lire raw body (signature Stripe)
+function expressRawBody(req:any, res:any, next:any){
+  if (req.headers["stripe-signature"]) {
+    let data = Buffer.alloc(0);
+    req.setEncoding("utf8");
+    req.on("data", (chunk:string)=>{ data = Buffer.concat([data, Buffer.from(chunk)]); });
+    req.on("end", ()=>{ req.body = data; next(); });
+  } else {
+    next();
+  }
+}
+
+export default router;
+
+
+Flux complet
+
+Front appelle POST /creator/videos/init-checkout → on reçoit checkoutUrl + depositId.
+
+Après paiement, Stripe appelle webhook → on marque PAID, on crée la vidéo Bunny, on passe READY et on stocke l’uploadUrl.
+
+Le front poll GET /creator/videos/deposit/:id/status → quand READY, on a uploadUrl et videoGuid → l’upload peut commencer.
+
+À la lecture, ton endpoint / token (déjà en place) s’applique (HMAC, 30 min, 3 vues, IP+UA).
+
+5) Conso mensuelle — endpoint d’estimation
+
+shared/constants.billing.ts
+
+export const BUNNY_TARIFFS = {
+  // Mettre à jour depuis Admin régulièrement (réalité Bunny)
+  storage_eur_per_gb: 0.01,      // EXEMPLE — à ajuster
+  egress_eur_per_gb:  0.01,      // EXEMPLE — à ajuster
+  encode_eur_per_min: 0.005      // EXEMPLE — à ajuster
+};
+export const CREATOR_CAP_EUR = 20;     // cap anti-surprise (configurable Admin)
+export const MIN_ACTIVATION_EUR = 1;   // ticket d’activation mensuel (configurable)
+
+
+server/modules/creatorDeposit/creatorUsage.routes.ts
+
+import { Router } from "express";
+import { BUNNY_TARIFFS, CREATOR_CAP_EUR, MIN_ACTIVATION_EUR } from "../../../shared/constants.billing";
+// Ici, remplace par une vraie agrégation : soit API Bunny, soit métriques internes.
+// Stub: valeurs "simulées" ou extraites de ton service existant.
+async function getMonthlyUsageForCreator(creatorId: string){
+  // TODO: brancher sur ton bunnyVideoService analytics par creatorId (métadonnées vidéo)
+  return { storage_gb: 12.3, egress_gb: 84.5, encode_min: 210 }; // EXEMPLE
+}
+
+export const creatorUsageRouter = Router();
+
+creatorUsageRouter.get("/creator/usage/estimate", async (req, res) => {
+  // TODO: authentifier porteur
+  const creatorId = String((req as any).user?.id || "user-dev");
+  const usage = await getMonthlyUsageForCreator(creatorId);
+
+  let variableCost =
+    usage.storage_gb * BUNNY_TARIFFS.storage_eur_per_gb +
+    usage.egress_gb  * BUNNY_TARIFFS.egress_eur_per_gb  +
+    usage.encode_min * BUNNY_TARIFFS.encode_eur_per_min;
+
+  variableCost = Math.max(variableCost, MIN_ACTIVATION_EUR);
+  variableCost = Math.min(variableCost, CREATOR_CAP_EUR);
+
+  res.json({
+    month: new Date().toISOString().slice(0,7),
+    usage,
+    tariffs: BUNNY_TARIFFS,
+    estimated_cost_eur: Number(variableCost.toFixed(2)),
+    cap_eur: CREATOR_CAP_EUR,
+    min_activation_eur: MIN_ACTIVATION_EUR
+  });
+});
+
+🖥️ Front (React) — widget “Conso & Estimation”
+
+client/creator/widgets/UsageEstimateCard.tsx
+
+"use client";
+import React, { useEffect, useState } from "react";
+
+type UsageResponse = {
+  month: string;
+  usage: { storage_gb: number; egress_gb: number; encode_min: number };
+  tariffs: { storage_eur_per_gb: number; egress_eur_per_gb: number; encode_eur_per_min: number };
+  estimated_cost_eur: number;
+  cap_eur: number;
+  min_activation_eur: number;
+};
+
+export function UsageEstimateCard(){
+  const [data, setData] = useState<UsageResponse| null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(()=>{
+    fetch("/api/creator/usage/estimate", { credentials:"include" })
+      .then(r=>r.json()).then(setData).finally(()=>setLoading(false));
+  },[]);
+
+  if(loading) return <div className="rounded-xl p-4 border border-fuchsia-500/30 bg-black/30">Calcul en cours…</div>;
+  if(!data) return <div className="rounded-xl p-4 border border-fuchsia-500/30 bg-black/30">Aucune donnée</div>;
+
+  const { usage, tariffs } = data;
+
+  return (
+    <div className="rounded-2xl border border-fuchsia-500/30 p-5 bg-gradient-to-b from-fuchsia-500/5 to-transparent">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-semibold">📊 Diffusion — Conso & Estimation</h3>
+        <div className="text-sm opacity-70">{data.month}</div>
+      </div>
+      <div className="grid md:grid-cols-3 gap-3">
+        <Stat label="Stockage (Go)" value={usage.storage_gb.toFixed(2)} />
+        <Stat label="Egress (Go)" value={usage.egress_gb.toFixed(2)} />
+        <Stat label="Encodage (min)" value={usage.encode_min.toFixed(0)} />
+      </div>
+      <div className="mt-4 grid md:grid-cols-3 gap-3 text-sm">
+        <Kvp k="Tarif stockage €/Go" v={tariffs.storage_eur_per_gb.toFixed(3)} />
+        <Kvp k="Tarif egress €/Go" v={tariffs.egress_eur_per_gb.toFixed(3)} />
+        <Kvp k="Tarif encodage €/min" v={tariffs.encode_eur_per_min.toFixed(3)} />
+      </div>
+      <div className="mt-4 rounded-xl border border-fuchsia-500/30 p-4 bg-black/40">
+        <div className="text-sm opacity-80 mb-1">Estimation mensuelle</div>
+        <div className="text-2xl font-bold">{data.estimated_cost_eur.toFixed(2)} €</div>
+        <div className="text-xs opacity-70 mt-1">Cap : {data.cap_eur} € · Activation min. : {data.min_activation_eur} €</div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({label, value}:{label:string; value:string}){
+  return (
+    <div className="rounded-xl border border-fuchsia-500/30 p-4 bg-black/40">
+      <div className="text-sm opacity-70">{label}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
+    </div>
+  );
+}
+function Kvp({k, v}:{k:string; v:string}){
+  return (
+    <div className="rounded-xl border border-fuchsia-500/30 p-3 bg-black/40 flex items-center justify-between">
+      <span className="opacity-70">{k}</span>
+      <code>{v}</code>
+    </div>
+  );
+}
+
+
+Place ce composant sur le Dashboard Porteur (zone “Diffusion”). Il consomme l’endpoint /api/creator/usage/estimate.
+
+🧩 Montage (routes Express)
+
+Dans ton server/index.ts (ou équivalent) :
+
+import express from "express";
+import bodyParser from "body-parser";
+import creatorStripeRouter from "./modules/creatorDeposit/creatorStripe.routes";
+import { creatorUsageRouter } from "./modules/creatorDeposit/creatorUsage.routes";
+import stripeWebhooksRouter from "./routes/stripeWebhooks.routes";
+
+const app = express();
+
+// Stripe webhook: besoin du raw body pour signature
+app.use("/webhooks/stripe", (req,res,next)=>next(), stripeWebhooksRouter);
+
+// Le reste en JSON standard
+app.use(bodyParser.json());
+
+// APIs créateurs
+app.use("/api", creatorStripeRouter);
+app.use("/api", creatorUsageRouter);
+
+// … (tes autres routes)
+app.listen(process.env.PORT || 4000, ()=>console.log("VISUAL API up"));
+
+🔐 Variables d’environnement (à ajouter)
+# Stripe
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+APP_BASE_URL=https://visual.example
+
+# Bunny (prod)
+BUNNY_LIBRARY_ID=xxxxxx
+BUNNY_STREAM_API_KEY=xxxxx
+
+# VISUAL (tokens de lecture)
+VISUAL_PLAY_TOKEN_SECRET=change_me_long_random
+
+✅ Ce que ça t’apporte immédiatement
+
+Paiement avant upload via Stripe Checkout (montant exact selon type/durée) ;
+
+Webhook Stripe qui, après paiement, crée la vidéo Bunny et délivre uploadUrl + videoGuid ;
+
+Widget Dashboard pour que chaque porteur visualise sa conso (stockage/egress/encodage) et l’estimation avec cap et minimum d’activation ;
+
+Le tout compatible avec ta protection anti-piratage actuelle (token HMAC, 30 min, 3 lectures, IP+UA).
