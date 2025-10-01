@@ -28,6 +28,12 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
 - **Referral System**: Unique referral links with VISUpoints rewards for sponsors and referees, with monthly limitations.
 - **Visitor Activity**: Comprehensive logging of user and visitor interactions, awarding VISUpoints for various activities, and a "Visitor of the Month" leaderboard.
 - **Ebook Licensing**: Manages secure distribution of ebooks with JWT-signed downloads, download quotas, and an audit trail.
+- **Bunny.net Video Hosting**: Secure video upload and streaming module with:
+  - **Pay-per-Upload Pricing**: Clips (2€), Documentaries (5€), Films (10€) with Stripe integration
+  - **Two-Tier Anti-Piracy**: TIER 1 (Bunny CDN signed URLs protecting all HLS segments) and TIER 2 (legacy HMAC tokens for manifest-only protection)
+  - **Real-time Usage Tracking**: Monthly consumption estimates (storage €0.01/GB, bandwidth €0.005/GB, encoding €0.005/min)
+  - **Production Security**: Enforced configuration validation preventing insecure deployments
+  - **Creator Dashboard**: `/creator/videos` page with upload form and usage analytics
 - **Dark/Light Theme System**: User-customizable theme preferences with:
   - **Global State Management**: Zustand store ensures all ThemeToggle instances stay synchronized
   - **Persistence Priority**: Admin override > User DB preference > localStorage > System preference  
@@ -58,5 +64,6 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
 - **TypeScript**: For static typing across the project.
 - **ESBuild**: For production bundling of server-side code.
 - **Stripe**: Payment processing integration.
+- **Bunny.net Stream API**: High-performance video hosting with CDN token authentication for anti-piracy protection.
 - **Multer**: Middleware for handling video and image uploads.
 - **connect-pg-simple**: PostgreSQL-backed session management for authentication.
