@@ -32,7 +32,8 @@ The platform uses a Neon Design System with a dark theme, signature colors (#00D
 - **Performance**: Client-side filtering and optimized sorting algorithms.
 - **Scalability**: Serverless PostgreSQL and clear separation of concerns.
 - **Security**: Secure authentication, authorization, content delivery (JWT for ebooks, no exposure of storage keys).
-- **AI Agents**: Strategic Autonomous Intelligence (VisualAI, VisualFinanceAI) for automated platform management, content moderation, financial rules, and economy management, with dedicated database tables for agent decisions and audit logs.
+- **AI Agents**: Strategic Autonomous Intelligence (VisualAI, VisualFinanceAI, VisualScoutAI) for automated platform management, content moderation, financial rules, economy management, and ethical audience prospecting, with dedicated database tables for agent decisions and audit logs.
+  - **VisualScoutAI**: Ethical prospection agent for detecting, scoring, and activating relevant audiences through official APIs only (Meta, TikTok, YouTube, X), strict GDPR/CCPA compliance, no unsolicited messages, opt-in only contacts, aggregated signals, interest scoring, campaign simulation, and emergency kill-switch.
 - **Theme System**: Complete dark/light theme system with user preferences stored in localStorage and database, admin override capability, and synchronized state management.
 
 ## External Dependencies

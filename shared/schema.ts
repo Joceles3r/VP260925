@@ -13,6 +13,8 @@ import {
   pgEnum,
   unique,
   check,
+  bigserial,
+  bigint,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -3236,3 +3238,190 @@ export type SecurityAuditLog = typeof securityAuditLog.$inferSelect;
 export type User2FA = typeof user2FA.$inferSelect;
 export type GdprRequests = typeof gdprRequests.$inferSelect;
 export type AdminBreakGlassOtp = typeof adminBreakGlassOtp.$inferSelect;
+
+// ===== SYSTÈME VISUALSCOUTAI - PROSPECTION ÉTHIQUE =====
+
+// Enums pour VisualScoutAI
+export const tcSegmentStatusEnum = pgEnum('tc_segment_status', ['active', 'paused']);
+export const tcCampaignChannelEnum = pgEnum('tc_campaign_channel', ['meta_ads', 'tiktok_ads', 'youtube_ads', 'x_ads', 'seo_content']);
+export const tcCampaignObjectiveEnum = pgEnum('tc_campaign_objective', ['traffic', 'video_views', 'leads']);
+export const tcCampaignStatusEnum = pgEnum('tc_campaign_status', ['draft', 'active', 'paused', 'stopped', 'archived']);
+export const tcCreativeStatusEnum = pgEnum('tc_creative_status', ['draft', 'approved', 'rejected', 'running']);
+export const tcConsentSourceEnum = pgEnum('tc_consent_source', ['form', 'lead_ads', 'import']);
+
+// Table des signaux agrégés des réseaux sociaux
+export const tcSignals = pgTable("tc_signals", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  platform: text("platform").notNull(), // meta, tiktok, youtube, x, reddit
+  keyword: text("keyword"),
+  hashtag: text("hashtag"),
+  lang: text("lang"), // fr, en, es
+  ts: timestamp("ts").notNull(),
+  engagementJson: jsonb("engagement_json").notNull(), // counts agrégés uniquement
+  sampleUrlHash: text("sample_url_hash"), // hash SHA-256, pas d'URL brute
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_tc_signals_platform_ts").on(table.platform, table.ts),
+  index("idx_tc_signals_keyword").on(table.keyword),
+  index("idx_tc_signals_lang").on(table.lang),
+]);
+
+// Table des segments d'audience
+export const tcSegments = pgTable("tc_segments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  rules: jsonb("rules").notNull(), // {keywords:[...], lang:["fr"], zones:[...]}
+  locale: text("locale").notNull(),
+  status: tcSegmentStatusEnum("status").notNull().default('active'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tc_segments_status").on(table.status),
+  index("idx_tc_segments_locale").on(table.locale),
+]);
+
+// Table des scores d'intérêt par segment
+export const tcScores = pgTable("tc_scores", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  segmentId: varchar("segment_id").references(() => tcSegments.id, { onDelete: 'cascade' }),
+  window: text("window").notNull(), // "last_7d"
+  interestScoreAvg: decimal("interest_score_avg", { precision: 5, scale: 2 }).notNull(),
+  ctrPred: decimal("ctr_pred", { precision: 5, scale: 2 }),
+  cvrPred: decimal("cvr_pred", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_tc_scores_segment").on(table.segmentId),
+  index("idx_tc_scores_created").on(table.createdAt),
+]);
+
+// Table des campagnes d'activation
+export const tcCampaigns = pgTable("tc_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channel: tcCampaignChannelEnum("channel").notNull(),
+  objective: tcCampaignObjectiveEnum("objective").notNull(),
+  budgetCents: bigint("budget_cents", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default('EUR'),
+  startAt: timestamp("start_at"),
+  endAt: timestamp("end_at"),
+  status: tcCampaignStatusEnum("status").notNull().default('draft'),
+  segmentId: varchar("segment_id").references(() => tcSegments.id, { onDelete: 'set null' }),
+  kpiJson: jsonb("kpi_json"), // KPIs actuels de la campagne
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tc_campaigns_status").on(table.status),
+  index("idx_tc_campaigns_channel").on(table.channel),
+  index("idx_tc_campaigns_segment").on(table.segmentId),
+]);
+
+// Table des créatifs pour campagnes
+export const tcCreatives = pgTable("tc_creatives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").references(() => tcCampaigns.id, { onDelete: 'cascade' }),
+  locale: text("locale").notNull(),
+  copy: text("copy").notNull(),
+  assetRef: text("asset_ref"), // Référence à l'asset (image/video)
+  kpiJson: jsonb("kpi_json"), // KPIs spécifiques au créatif
+  status: tcCreativeStatusEnum("status").notNull().default('draft'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_tc_creatives_campaign").on(table.campaignId),
+  index("idx_tc_creatives_status").on(table.status),
+]);
+
+// Table des leads opt-in avec consentement
+export const tcConsentLeads = pgTable("tc_consent_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: tcConsentSourceEnum("source").notNull(),
+  emailHash: text("email_hash").unique(), // SHA-256
+  consentTs: timestamp("consent_ts").notNull(),
+  locale: text("locale"),
+  topics: text("topics").array(), // Sujets d'intérêt
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_tc_consent_source").on(table.source),
+  index("idx_tc_consent_locale").on(table.locale),
+]);
+
+// ===== RELATIONS VISUALSCOUTAI =====
+
+export const tcSegmentsRelations = relations(tcSegments, ({ many }) => ({
+  scores: many(tcScores),
+  campaigns: many(tcCampaigns),
+}));
+
+export const tcScoresRelations = relations(tcScores, ({ one }) => ({
+  segment: one(tcSegments, {
+    fields: [tcScores.segmentId],
+    references: [tcSegments.id],
+  }),
+}));
+
+export const tcCampaignsRelations = relations(tcCampaigns, ({ one, many }) => ({
+  segment: one(tcSegments, {
+    fields: [tcCampaigns.segmentId],
+    references: [tcSegments.id],
+  }),
+  creatives: many(tcCreatives),
+}));
+
+export const tcCreativesRelations = relations(tcCreatives, ({ one }) => ({
+  campaign: one(tcCampaigns, {
+    fields: [tcCreatives.campaignId],
+    references: [tcCampaigns.id],
+  }),
+}));
+
+// ===== SCHÉMAS D'INSERTION VISUALSCOUTAI =====
+
+export const insertTcSignalSchema = createInsertSchema(tcSignals).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTcSegmentSchema = createInsertSchema(tcSegments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTcScoreSchema = createInsertSchema(tcScores).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTcCampaignSchema = createInsertSchema(tcCampaigns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTcCreativeSchema = createInsertSchema(tcCreatives).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTcConsentLeadSchema = createInsertSchema(tcConsentLeads).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ===== TYPES VISUALSCOUTAI =====
+
+// Types d'insertion
+export type InsertTcSignal = z.infer<typeof insertTcSignalSchema>;
+export type InsertTcSegment = z.infer<typeof insertTcSegmentSchema>;
+export type InsertTcScore = z.infer<typeof insertTcScoreSchema>;
+export type InsertTcCampaign = z.infer<typeof insertTcCampaignSchema>;
+export type InsertTcCreative = z.infer<typeof insertTcCreativeSchema>;
+export type InsertTcConsentLead = z.infer<typeof insertTcConsentLeadSchema>;
+
+// Types de sélection
+export type TcSignal = typeof tcSignals.$inferSelect;
+export type TcSegment = typeof tcSegments.$inferSelect;
+export type TcScore = typeof tcScores.$inferSelect;
+export type TcCampaign = typeof tcCampaigns.$inferSelect;
+export type TcCreative = typeof tcCreatives.$inferSelect;
+export type TcConsentLead = typeof tcConsentLeads.$inferSelect;

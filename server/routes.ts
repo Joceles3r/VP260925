@@ -6668,6 +6668,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ Revenue Engine endpoints initialisés (webhooks + admin)');
 
   // =======================
+  // VISUALSCOUTAI - PROSPECTION ÉTHIQUE
+  // =======================
+  
+  const { visualScoutAI } = await import('./services/visualScoutAI');
+  
+  // Créer un segment
+  app.post('/api/admin/tc/segments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const { name, rules, locale } = req.body;
+      
+      if (!name || !rules || !locale) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      
+      const segmentId = await visualScoutAI.createSegment({
+        name,
+        rules,
+        locale,
+        status: 'active',
+      });
+      
+      res.status(201).json({ id: segmentId });
+    } catch (error: any) {
+      console.error('Create segment error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Lister les segments
+  app.get('/api/admin/tc/segments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const segments = await visualScoutAI.getActiveSegments();
+      res.json(segments);
+    } catch (error: any) {
+      console.error('Get segments error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Simuler une campagne
+  app.post('/api/admin/tc/simulate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const { segment_id, budget } = req.body;
+      
+      if (!segment_id || !budget) {
+        return res.status(400).json({ error: 'Missing segment_id or budget' });
+      }
+      
+      const budgetCents = typeof budget === 'number' ? budget * 100 : Math.round(parseFloat(budget) * 100);
+      const simulation = await visualScoutAI.simulateCampaign(segment_id, budgetCents);
+      
+      res.json(simulation);
+    } catch (error: any) {
+      console.error('Simulate campaign error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Créer une campagne
+  app.post('/api/admin/tc/campaigns', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const { channel, objective, audience_ref, budget } = req.body;
+      
+      if (!channel || !objective || !budget) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      
+      const budgetCents = typeof budget === 'number' ? budget * 100 : Math.round(parseFloat(budget) * 100);
+      
+      const campaignId = await visualScoutAI.createCampaign({
+        channel,
+        objective,
+        budgetCents,
+        currency: 'EUR',
+        status: 'draft',
+        segmentId: audience_ref || null,
+      });
+      
+      res.status(201).json({ id: campaignId, status: 'draft' });
+    } catch (error: any) {
+      console.error('Create campaign error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Mettre à jour le statut d'une campagne
+  app.patch('/api/admin/tc/campaigns/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      if (!status) {
+        return res.status(400).json({ error: 'Missing status' });
+      }
+      
+      await visualScoutAI.updateCampaignStatus(id, status);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Update campaign error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Dashboard métriques
+  app.get('/api/admin/tc/dashboard', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const metrics = await visualScoutAI.getDashboardMetrics();
+      res.json(metrics);
+    } catch (error: any) {
+      console.error('Get dashboard error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Recommandations pour un segment
+  app.get('/api/admin/tc/recommendations/:segmentId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      const { segmentId } = req.params;
+      const recommendations = await visualScoutAI.getRecommendations(segmentId);
+      
+      res.json(recommendations);
+    } catch (error: any) {
+      console.error('Get recommendations error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Kill switch (arrêt d'urgence)
+  app.post('/api/admin/tc/kill', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      await visualScoutAI.killSwitch();
+      res.json({ success: true, message: 'VisualScoutAI stopped and all campaigns paused' });
+    } catch (error: any) {
+      console.error('Kill switch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  console.log('✅ VisualScoutAI endpoints initialisés');
+
+  // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
   
