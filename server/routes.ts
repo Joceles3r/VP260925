@@ -97,6 +97,14 @@ import { ObjectStorageService } from "./objectStorage";
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
+// Validate key format (never log secret value)
+const isTestKey = process.env.STRIPE_SECRET_KEY.startsWith('sk_test_');
+const isLiveKey = process.env.STRIPE_SECRET_KEY.startsWith('sk_live_');
+const isValidSecret = isTestKey || isLiveKey;
+if (!isValidSecret) {
+  console.warn('[Stripe] ⚠️ STRIPE_SECRET_KEY does not have valid format (sk_test_ or sk_live_). Payment operations may fail.');
+}
+console.log(`[Stripe] Initialized with ${isTestKey ? 'TEST' : isLiveKey ? 'LIVE' : 'UNKNOWN'} mode key`);
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: STRIPE_CONFIG.API_VERSION as any, // Configuration centralisée et configurable
 });
