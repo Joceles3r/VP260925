@@ -637,6 +637,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               return res.status(500).json({ error: 'Project extension processing failed' });
             }
+          } else if (type === 'live_show_weekly_battle') {
+            // Handle Live Show Weekly battle investment payment success
+            const editionId = paymentIntent.metadata.editionId;
+            const finalist = paymentIntent.metadata.finalist;
+            const votes = parseInt(paymentIntent.metadata.votes || '0');
+            
+            if (!editionId || !finalist) {
+              console.error('Missing live show weekly metadata:', paymentIntentId);
+              return res.status(400).json({ error: 'Invalid live show weekly metadata' });
+            }
+
+            try {
+              // 1. Find and update the investment record
+              const investments = await storage.getLiveShowBattleInvestments(editionId);
+              const investment = investments.find(inv => 
+                inv.paymentIntentId === paymentIntentId && inv.userId === userId
+              );
+
+              if (!investment) {
+                console.error('Investment not found for payment:', paymentIntentId);
+                return res.status(404).json({ error: 'Investment not found' });
+              }
+
+              // Mark investment as paid
+              await storage.updateLiveShowBattleInvestment(investment.id, {
+                paidAt: new Date()
+              });
+
+              // 2. Create transaction record
+              const transaction = await storage.createTransaction({
+                userId,
+                type: 'investment',
+                amount: depositAmount.toString(),
+                metadata: {
+                  type: 'live_show_weekly_battle',
+                  editionId,
+                  finalist,
+                  votes,
+                  paymentIntentId,
+                  simulationMode: false
+                }
+              });
+
+              // 3. Emit WebSocket score update
+              try {
+                const { getNotificationService } = await import('./websocket');
+                const wsService = getNotificationService();
+                
+                // Recalculate scoreboard
+                const allInvestments = await storage.getLiveShowBattleInvestments(editionId);
+                const paidInvestments = allInvestments.filter(inv => inv.paidAt);
+                
+                const scoreboard = paidInvestments.reduce((acc: any, inv) => {
+                  if (!acc[inv.finalist]) {
+                    acc[inv.finalist] = {
+                      finalist: inv.finalist,
+                      totalVotes: 0,
+                      totalAmount: 0,
+                      investorCount: 0
+                    };
+                  }
+                  acc[inv.finalist].totalVotes += inv.votes || 0;
+                  acc[inv.finalist].totalAmount += parseFloat(inv.amountEUR);
+                  acc[inv.finalist].investorCount += 1;
+                  return acc;
+                }, {});
+
+                wsService.emitLiveWeeklyScoreUpdate(editionId, {
+                  scoreboard: Object.values(scoreboard),
+                  latestPayment: {
+                    finalist: investment.finalist,
+                    amount: investment.amountEUR,
+                    votes: investment.votes
+                  }
+                });
+              } catch (wsError) {
+                console.error('Failed to emit WebSocket after payment:', wsError);
+              }
+
+              // 4. Send success notification
+              await notificationService.notifyUser(userId, {
+                type: 'investment_confirmed',
+                title: 'Investissement confirmé',
+                message: `Votre investissement de €${depositAmount} sur le finaliste ${finalist} a été confirmé.`,
+                priority: 'medium'
+              });
+
+              console.log(`Live Show Weekly investment confirmed for user ${userId}: ${finalist} - €${depositAmount} (${votes} votes)`);
+            } catch (atomicError) {
+              console.error('Atomic live show investment operation failed:', atomicError);
+              
+              await notificationService.notifyUser(userId, {
+                type: 'investment_failed',
+                title: 'Erreur d\'investissement',
+                message: 'Une erreur est survenue lors du traitement de votre investissement. Contactez le support.',
+                priority: 'high'
+              });
+
+              return res.status(500).json({ error: 'Live show investment processing failed' });
+            }
           }
           break;
         }
@@ -1803,6 +1903,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: 'eur',
         metadata: {
           type: 'live_show_weekly_battle',
+          depositAmount: amountEUR.toString(),
           finalist,
           editionId: edition.id,
           userId,
