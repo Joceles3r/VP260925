@@ -191,7 +191,7 @@ export default function LiveShowWeekly() {
   // Investment mutation
   const investMutation = useMutation({
     mutationFn: async ({ finalist, amount }: { finalist: 'A' | 'B'; amount: number }) => {
-      const response = await apiRequest('/api/live-weekly/invest', 'POST', {
+      const response = await apiRequest('POST', '/api/live-weekly/invest', {
         finalist,
         editionId: edition?.id,
         amountEUR: amount,

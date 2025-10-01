@@ -50,6 +50,14 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
   - **Smart Cache Invalidation**: TanStack Query v5 with prefix invalidation ensures automatic UI refresh after operations
   - **Replacement Logic**: Eligibility filtering (selected/confirmed/standby only), slot release before promotion, no unique constraint conflicts
   - **OIDC Admin Auth**: Requires profile_type='admin' claim (underscore, not camelCase) in OIDC token for admin access
+- **Live Show Weekly Battle System** (COMPLETED): Complete 3-phase candidate selection (100→50→2) with Friday live battles:
+  - **Phase System**: Phase 1 (Sun 12h-Mon 0h), Phase 2 (Mon 0h-Tue 0h), Phase 3 (Tue 0h-Fri 20h30), Live Battle (Fri 21h-Sat 0h)
+  - **Investment Tranches**: 2€=1 vote, 3€=1.5 votes, 5€=2.5 votes, 10€=5 votes, 20€=10 votes (defined in @shared/liveShowConstants)
+  - **Stripe Integration**: Secure payment with Elements, 3DS support (redirect: 'if_required'), webhook processing for live_show_weekly_battle
+  - **Real-time Scoreboard**: WebSocket emissions (live_weekly:score_update, votes_closed, winner_announced) with client-side filtering by editionId
+  - **Distribution Rules**: 40% winner artist, 30% winner investors, 20% loser artist, 10% loser investors
+  - **Security**: Only paid investments (paidAt !== null) count in scoreboard, webhook validates amount/currency, idempotency via paymentIntentId
+  - **⚠️ Configuration Required**: System requires valid Stripe test credentials to function. See "Required Environment Variables" section below.
 
 ### System Design Choices
 - **Modularity**: Co-located components and organized imports for maintainable code.
@@ -75,3 +83,34 @@ The platform features a Neon Design System with a dark theme, utilizing signatur
 - **Bunny.net Stream API**: High-performance video hosting with CDN token authentication for anti-piracy protection.
 - **Multer**: Middleware for handling video and image uploads.
 - **connect-pg-simple**: PostgreSQL-backed session management for authentication.
+
+## Required Environment Variables
+
+### Stripe Payment Integration
+The Live Show Weekly battle system and other payment features require valid Stripe API credentials:
+
+**Required Secrets:**
+- `STRIPE_SECRET_KEY`: Stripe secret API key (starts with `sk_test_` for test mode or `sk_live_` for production)
+  - **How to obtain**: Log into Stripe Dashboard → Developers → API keys → Secret key
+  - **⚠️ Current issue**: Contains invalid value (not a valid Stripe key format)
+  - **Impact**: Payment operations fail with "secret_key_required" error
+  
+- `VITE_STRIPE_PUBLIC_KEY`: Stripe publishable API key (starts with `pk_test_` or `pk_live_`)
+  - **How to obtain**: Log into Stripe Dashboard → Developers → API keys → Publishable key
+  - **Note**: Must match the mode (test/live) of STRIPE_SECRET_KEY
+  
+- `STRIPE_WEBHOOK_SECRET`: Stripe webhook signing secret (starts with `whsec_`)
+  - **How to obtain**: Stripe Dashboard → Developers → Webhooks → Add endpoint → Reveal signing secret
+  - **Webhook URL**: `https://your-domain.replit.app/webhooks/stripe`
+  - **Events to listen**: `payment_intent.succeeded`
+
+**Test Cards for Development:**
+- Regular card (no 3DS): `4242 4242 4242 4242`
+- 3DS authentication required: `4000 0025 0000 3155`
+- Expiry: Any future date (e.g., 12/34)
+- CVC: Any 3 digits (e.g., 123)
+
+**Security Notes:**
+- Server validates key format on startup (logs "TEST", "LIVE", or "UNKNOWN" mode)
+- Never commit real keys to version control
+- Use Replit Secrets for secure storage
