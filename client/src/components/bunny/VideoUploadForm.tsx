@@ -64,19 +64,8 @@ export function VideoUploadForm({ projects }: { projects: Project[] }) {
 
   const initCheckoutMutation = useMutation({
     mutationFn: async (data: FormData) => {
-      const response = await fetch("/api/bunny/videos/init-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Erreur lors de l'initialisation du paiement");
-      }
-      
-      return response.json() as Promise<{ checkoutUrl: string; sessionId: string; feeEur: number }>;
+      const res = await apiRequest("POST", "/api/bunny/videos/init-checkout", data);
+      return res.json() as Promise<{ checkoutUrl: string; sessionId: string; feeEur: number }>;
     },
     onSuccess: (data: any) => {
       if (data?.checkoutUrl) {

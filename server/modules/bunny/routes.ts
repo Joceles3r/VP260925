@@ -2,11 +2,16 @@ import { Router } from "express";
 import Stripe from "stripe";
 import { bunnyClient } from "../../services/bunnyClient";
 import { issuePlaybackToken, verifyAndConsume } from "../../services/bunnyTokenService";
+import { generateSignedHlsUrl, validateBunnyTokenConfig } from "../../services/bunnySignedUrl";
 import { getUploadFeeEUR, validateVideoType } from "./pricing";
 import { BUNNY_TARIFFS, CREATOR_CAP_EUR, MIN_ACTIVATION_EUR } from "../../../shared/constants/bunnyDeposit";
 
+// Validate Bunny.net configuration at module load
+const bunnyConfig = validateBunnyTokenConfig();
+console.log(`[BUNNY] ${bunnyConfig.message}`);
+
 const router = Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-08-27.basil" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-11-20.acacia" });
 const APP_BASE_URL = process.env.REPLIT_DEV_DOMAIN 
   ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
   : "http://localhost:5000";
@@ -99,12 +104,30 @@ router.post("/bunny/videos/:guid/play-token", isAuthenticated, async (req: any, 
     const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0] || req.socket.remoteAddress || "0.0.0.0");
     const ua = req.headers["user-agent"] || "";
     
+    // If Bunny CDN Token Authentication is configured, use native signed URLs
+    if (!bunnyConfig.fallbackMode) {
+      try {
+        const signedUrl = generateSignedHlsUrl(guid, 30 * 60, ip);
+        return res.json({
+          url: signedUrl,
+          type: "bunny_cdn_signed",
+          expiresInSec: 30 * 60,
+          securityNote: "All segments protected by Bunny.net CDN Token Authentication"
+        });
+      } catch (e: any) {
+        console.error("[Bunny] Signed URL generation failed, falling back:", e);
+      }
+    }
+    
+    // Fallback: Use legacy token system (manifest-only protection)
     const token = issuePlaybackToken(guid, userId, ip, ua, 3, 30 * 60);
     
     return res.json({
       token,
+      type: "legacy_token",
       expiresInSec: 30 * 60,
-      maxPlays: 3
+      maxPlays: 3,
+      warningManifestOnlyProtection: "Segments not protected. Enable CDN Token Authentication in Bunny.net for full security."
     });
   } catch (e: any) {
     console.error("[Bunny] Play token error:", e);
