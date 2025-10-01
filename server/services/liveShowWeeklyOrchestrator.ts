@@ -260,6 +260,22 @@ export class LiveShowWeeklyOrchestrator {
       investmentB: amountB.toFixed(2)
     });
 
+    // Emit votes_closed event via WebSocket
+    try {
+      const { getNotificationService } = await import('../websocket');
+      const wsService = getNotificationService();
+      
+      wsService.emitLiveWeeklyVotesClosed(editionId, {
+        finalScores: {
+          A: { votes: votesA, amount: amountA },
+          B: { votes: votesB, amount: amountB }
+        },
+        totalPot
+      });
+    } catch (wsError) {
+      console.error('Failed to emit WebSocket votes_closed event:', wsError);
+    }
+
     console.log(`[LiveShowOrchestrator] Winner: ${winner} (${votesA} vs ${votesB} votes, ${amountA}€ vs ${amountB}€)`);
 
     return {
@@ -312,6 +328,24 @@ export class LiveShowWeeklyOrchestrator {
           payoutAmount: payout.payout.toFixed(2)
         });
       }
+    }
+
+    // Emit winner_announced event via WebSocket
+    try {
+      const { getNotificationService } = await import('../websocket');
+      const wsService = getNotificationService();
+      
+      wsService.emitLiveWeeklyWinnerAnnounced(editionId, {
+        winner,
+        distribution: {
+          totalDistributed: distribution.totalDistributed,
+          winnerPayouts: distribution.winnerPayouts.length,
+          loserPayouts: distribution.loserPayouts.length,
+          artistPayouts: distribution.artistPayouts
+        }
+      });
+    } catch (wsError) {
+      console.error('Failed to emit WebSocket winner_announced event:', wsError);
     }
 
     console.log(`[LiveShowOrchestrator] Distributed ${distribution.totalDistributed}€ to ${distribution.winnerPayouts.length + distribution.loserPayouts.length} investors`);
