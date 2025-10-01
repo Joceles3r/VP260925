@@ -4,7 +4,8 @@
 VISUAL is a web application designed for investing in visual content projects (2–20 € per category) and influencing project rankings via a voting system. It supports traditional project investments, live shows/battles, and offers a comprehensive portfolio management dashboard. The platform aims to provide a modern, full-stack investment experience for visual content creators and investors, built with React, Express, TypeScript, and PostgreSQL. The business vision is to democratize investment in creative content, offering a transparent and engaging platform for small-scale investments with significant market potential in the creator economy.
 
 ## User Preferences
-Preferred communication style: Simple, everyday language.
+- Preferred communication style: Simple, everyday language.
+- **IMPORTANT REMINDER**: Rappeler à l'utilisateur de fournir les identifiants Stripe (STRIPE_SECRET_KEY, VITE_STRIPE_PUBLIC_KEY, STRIPE_WEBHOOK_SECRET) avant ou au déploiement de l'application.
 
 ## System Architecture
 
