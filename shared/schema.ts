@@ -602,7 +602,7 @@ export const liveShowCommunityVotes = pgTable("live_show_community_votes", {
   voteWeight: decimal("vote_weight", { precision: 3, scale: 2 }).default('1.00'), // Pour votes pondérés
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
-  uniqueVoterCandidate: unique().on(table.voterId, table.candidateId),
+  uniqueVoterCandidatePhase: unique().on(table.voterId, table.candidateId, table.phase),
 }));
 
 // Live Show Battle Investments (during Live 21:00-23:45)
