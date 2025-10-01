@@ -203,13 +203,19 @@ export class LiveShowOrchestrator {
       return { success: false, error: 'Line-up verrouillé - annulation impossible' };
     }
 
+    // Capture target slot before releasing rank
+    const originalRank = f.rank;
+    const targetSlot: 'F1' | 'F2' | null = originalRank === 1 ? 'F1' : originalRank === 2 ? 'F2' : null;
+
     const now = new Date();
     
+    // Release slot and mark as cancelled
     await db.update(liveShowFinalists)
       .set({ 
         status: 'cancelled',
         cancelledAt: now,
-        cancellationReason: reason || 'Non spécifié'
+        cancellationReason: reason || 'Non spécifié',
+        rank: null // Release the slot to avoid unique constraint conflicts
       })
       .where(eq(liveShowFinalists.id, finalistId));
 
@@ -222,13 +228,26 @@ export class LiveShowOrchestrator {
       `${f.artistName} s'est désisté: ${reason || 'Non spécifié'}`
     );
 
-    const scenario = await this.determineReplacementScenario(f.liveShowId);
+    // Determine replacement scenario based on target slot and available alternates
+    const scenario = targetSlot ? await this.determineReplacementForSlot(f.liveShowId, targetSlot) : null;
     
     if (scenario) {
       await this.executeReplacementScenario(f.liveShowId, scenario);
     }
 
     return { success: true, scenario };
+  }
+
+  async determineReplacementForSlot(showId: string, targetSlot: 'F1' | 'F2'): Promise<{ scenario: ReplacementScenario; targetSlot: 'F1' | 'F2' } | null> {
+    const lineup = await this.getLineupState(showId);
+    
+    const hasA1 = !!lineup.A1;
+    const hasA2 = !!lineup.A2;
+
+    if (hasA1) return { scenario: 'S1', targetSlot };
+    if (hasA2) return { scenario: 'S2', targetSlot };
+    
+    return null; // No alternates available
   }
 
   async determineReplacementScenario(showId: string): Promise<{ scenario: ReplacementScenario; targetSlot?: 'F1' | 'F2' } | null> {
@@ -391,11 +410,14 @@ export class LiveShowOrchestrator {
       fallbackMode: (show[0]?.fallbackMode as ShowFallbackMode) || 'battle'
     };
 
+    // Only include eligible alternates (not cancelled, not already promoted)
+    const eligibleStatuses: FinalistStatus[] = ['selected', 'confirmed', 'standby'];
+
     for (const f of finalists) {
       if (f.rank === 1) lineup.F1 = f;
       else if (f.rank === 2) lineup.F2 = f;
-      else if (f.rank === 3) lineup.A1 = f;
-      else if (f.rank === 4) lineup.A2 = f;
+      else if (f.rank === 3 && eligibleStatuses.includes(f.status as FinalistStatus)) lineup.A1 = f;
+      else if (f.rank === 4 && eligibleStatuses.includes(f.status as FinalistStatus)) lineup.A2 = f;
     }
 
     return lineup;

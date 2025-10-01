@@ -445,7 +445,7 @@ export const liveShowFinalists = pgTable("live_show_finalists", {
   liveShowId: varchar("live_show_id").notNull().references(() => liveShows.id, { onDelete: 'cascade' }),
   userId: varchar("user_id").notNull().references(() => users.id),
   artistName: varchar("artist_name", { length: 255 }).notNull(),
-  rank: integer("rank").notNull(), // 1=F1, 2=F2, 3=A1, 4=A2
+  rank: integer("rank"), // 1=F1, 2=F2, 3=A1, 4=A2 (nullable to allow slot release on cancellation)
   role: varchar("role", { length: 20 }).notNull(), // 'finalist' or 'alternate'
   status: finalistStatusEnum("status").default('selected'),
   confirmationRequestedAt: timestamp("confirmation_requested_at"),
@@ -459,7 +459,6 @@ export const liveShowFinalists = pgTable("live_show_finalists", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
   uniqueShowUser: unique().on(table.liveShowId, table.userId),
-  uniqueShowRank: unique().on(table.liveShowId, table.rank), // Prevent duplicate ranks
 }));
 
 // Live Show Notifications table
