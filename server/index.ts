@@ -1,8 +1,17 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { validateSecrets } from "./config/secretsValidator";
+import { setupCORS } from "./config/corsConfig";
+
+// 🔒 SECURITY: Validate all critical secrets before starting server
+// In production, this will block startup if default/insecure secrets are detected
+validateSecrets(false); // Set to true to enforce strict validation in development too
 
 const app = express();
+
+// 🌍 CORS: Enable Cross-Origin Resource Sharing with environment-aware settings
+app.use(setupCORS());
 
 // Note: Do NOT add express.json() here - it must be added after Stripe webhook
 // to ensure webhook receives raw body for signature verification
