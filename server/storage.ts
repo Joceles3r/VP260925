@@ -86,12 +86,17 @@ import {
   ebooks,
   ebookLicenses,
   ebookDownloadAttempts,
+  // Tables Live Shows avancées
+  liveShowFinalists,
+  liveShowAudit,
   type User,
   type UpsertUser,
   type Project,
   type Investment,
   type Transaction,
   type LiveShow,
+  type LiveShowFinalist,
+  type LiveShowAudit,
   type ComplianceReport,
   type Notification,
   type NotificationPreference,
@@ -279,6 +284,7 @@ export interface IStorage {
   getActiveLiveShows(): Promise<LiveShow[]>;
   createLiveShow(data: { title: string; description?: string; artistA?: string; artistB?: string; viewerCount?: number }): Promise<LiveShow>;
   updateLiveShowInvestments(id: string, investmentA: string, investmentB: string): Promise<LiveShow>;
+  getLiveShowAudit(showId: string, limit?: number): Promise<LiveShowAudit[]>;
   
   // Live chat messages operations
   createLiveChatMessage(data: { liveShowId: string; userId: string; content: string; messageType?: string; isModerated?: boolean; moderationReason?: string | null }): Promise<LiveChatMessage>;
@@ -1006,6 +1012,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(liveShows.id, id))
       .returning();
     return updatedShow;
+  }
+
+  async getLiveShowAudit(showId: string, limit = 50): Promise<LiveShowAudit[]> {
+    return await db
+      .select()
+      .from(liveShowAudit)
+      .where(eq(liveShowAudit.liveShowId, showId))
+      .orderBy(desc(liveShowAudit.createdAt))
+      .limit(limit);
   }
 
   // Admin operations

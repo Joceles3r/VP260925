@@ -1588,6 +1588,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Live Shows Admin routes
+  app.get('/api/admin/live-shows/active', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const activeShows = await storage.getActiveLiveShows();
+      res.json(activeShows);
+    } catch (error) {
+      console.error("Error fetching active live shows:", error);
+      res.status(500).json({ message: "Failed to fetch active live shows" });
+    }
+  });
+
+  app.get('/api/admin/live-shows/:showId/lineup', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { showId } = req.params;
+      const lineup = await liveShowOrchestrator.getLineupState(showId);
+      res.json(lineup);
+    } catch (error) {
+      console.error("Error fetching lineup:", error);
+      res.status(500).json({ message: "Failed to fetch lineup" });
+    }
+  });
+
+  app.get('/api/admin/live-shows/:showId/audit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { showId } = req.params;
+      const auditLog = await storage.getLiveShowAudit(showId);
+      res.json(auditLog);
+    } catch (error) {
+      console.error("Error fetching audit log:", error);
+      res.status(500).json({ message: "Failed to fetch audit log" });
+    }
+  });
+
+  app.post('/api/admin/live-shows/:showId/lock-lineup', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { showId } = req.params;
+      const result = await liveShowOrchestrator.lockLineup(showId, userId);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error locking lineup:", error);
+      res.status(500).json({ message: "Failed to lock lineup" });
+    }
+  });
+
+  app.post('/api/admin/live-shows/:showId/unlock-lineup', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { showId } = req.params;
+      const result = await liveShowOrchestrator.unlockLineup(showId, userId);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unlocking lineup:", error);
+      res.status(500).json({ message: "Failed to unlock lineup" });
+    }
+  });
+
   // Compliance routes
   app.post('/api/compliance/report', isAuthenticated, async (req: any, res) => {
     try {
