@@ -315,6 +315,33 @@ class NotificationWebSocketService {
   public getIO(): SocketIOServer {
     return this.io;
   }
+
+  // Live Show Weekly - Emit scoreboard update
+  public emitLiveWeeklyScoreUpdate(editionId: string, scoreData: any) {
+    this.io.emit('live_weekly:score_update', {
+      editionId,
+      ...scoreData
+    });
+    console.log(`[WebSocket] Live Weekly score update emitted for edition ${editionId}`);
+  }
+
+  // Live Show Weekly - Emit votes closed
+  public emitLiveWeeklyVotesClosed(editionId: string, data: any) {
+    this.io.emit('votes_closed', {
+      editionId,
+      ...data
+    });
+    console.log(`[WebSocket] Live Weekly votes closed emitted for edition ${editionId}`);
+  }
+
+  // Live Show Weekly - Emit winner announcement
+  public emitLiveWeeklyWinnerAnnounced(editionId: string, winnerData: any) {
+    this.io.emit('winner_announced', {
+      editionId,
+      ...winnerData
+    });
+    console.log(`[WebSocket] Live Weekly winner announced for edition ${editionId}`);
+  }
 }
 
 // Singleton instance

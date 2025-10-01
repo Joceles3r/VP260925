@@ -1821,6 +1821,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentIntentId: paymentIntent.id
       });
 
+      // Emit score update via WebSocket
+      try {
+        const { getNotificationService } = await import('./websocket');
+        const wsService = getNotificationService();
+        
+        // Get updated scoreboard
+        const investments = await storage.getLiveShowBattleInvestments(edition.id);
+        const scoreboard = investments.reduce((acc: any, inv) => {
+          if (!acc[inv.finalist]) {
+            acc[inv.finalist] = {
+              finalist: inv.finalist,
+              totalVotes: 0,
+              totalAmount: 0,
+              investorCount: 0
+            };
+          }
+          acc[inv.finalist].totalVotes += inv.votes;
+          acc[inv.finalist].totalAmount += parseFloat(inv.amountEUR);
+          acc[inv.finalist].investorCount += 1;
+          return acc;
+        }, {});
+
+        wsService.emitLiveWeeklyScoreUpdate(edition.id, {
+          scoreboard: Object.values(scoreboard),
+          latestInvestment: {
+            finalist: investment.finalist,
+            amount: investment.amountEUR,
+            votes: investment.votes
+          }
+        });
+      } catch (wsError) {
+        console.error('Failed to emit WebSocket score update:', wsError);
+      }
+
       res.json({
         success: true,
         investment,
