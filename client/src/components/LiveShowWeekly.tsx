@@ -2,25 +2,133 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Users, DollarSign, Trophy, TrendingUp } from 'lucide-react';
+import { Users, DollarSign, Trophy, TrendingUp, CreditCard } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { getSocket } from '@/lib/socket';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { loadStripe } from '@stripe/stripe-js';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 const INVEST_TRANCHES = [2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
+
+// Payment Form Component
+function PaymentForm({ onSuccess, amount }: { onSuccess: () => void; amount: number }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!stripe || !elements) return;
+
+    setIsProcessing(true);
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/live`,
+      },
+      redirect: 'if_required', // Avoid full page redirect when possible
+    });
+
+    if (error) {
+      toast({
+        title: "Échec du paiement",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+      toast({
+        title: "Paiement confirmé!",
+        description: `Votre investissement de ${amount}€ a été traité avec succès.`,
+      });
+      onSuccess();
+    } else {
+      // Payment requires additional action (will redirect)
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <PaymentElement />
+      <Button 
+        type="submit" 
+        disabled={!stripe || isProcessing} 
+        className="w-full"
+        data-testid="confirm-payment-button"
+      >
+        {isProcessing ? (
+          <>
+            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+            Traitement en cours...
+          </>
+        ) : (
+          <>
+            <CreditCard className="w-4 h-4 mr-2" />
+            Confirmer €{amount}
+          </>
+        )}
+      </Button>
+    </form>
+  );
+}
 
 export default function LiveShowWeekly() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedAmount, setSelectedAmount] = useState(5);
   const [selectedFinalist, setSelectedFinalist] = useState<'A' | 'B' | null>(null);
+  const [paymentClientSecret, setPaymentClientSecret] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Fetch current edition
   const { data: edition, isLoading: editionLoading } = useQuery<any>({
     queryKey: ['/api/live-weekly/current'],
     refetchInterval: 10000, // Refresh every 10 seconds
   });
+
+  // Handle return from 3DS redirect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const clientSecret = urlParams.get('payment_intent_client_secret');
+    
+    if (clientSecret && stripePromise) {
+      stripePromise.then(async (stripe) => {
+        if (!stripe) return;
+        
+        const { paymentIntent, error } = await stripe.retrievePaymentIntent(clientSecret);
+        
+        if (error) {
+          toast({
+            title: "Erreur de paiement",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+          toast({
+            title: "Paiement confirmé!",
+            description: "Votre investissement a été traité avec succès.",
+          });
+          
+          // Clean URL
+          window.history.replaceState({}, '', '/live');
+          
+          // Refresh scoreboard
+          if (edition?.id) {
+            queryClient.invalidateQueries({ queryKey: ['/api/live-weekly/scoreboard', edition.id] });
+          }
+        }
+      });
+    }
+  }, [edition?.id, toast]);
 
   // Fetch candidates (finalists)
   const { data: candidates } = useQuery<any[]>({
@@ -91,16 +199,15 @@ export default function LiveShowWeekly() {
       return response as any;
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Investissement réussi!",
-        description: `Vous avez investi ${selectedAmount}€ sur le finaliste ${selectedFinalist}`,
-      });
-      setSelectedFinalist(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/live-weekly/scoreboard', edition?.id] });
-      
-      // Handle Stripe payment if needed
+      // Handle Stripe payment
       if (data.clientSecret) {
-        // TODO: Integrate Stripe Elements for payment
+        setPaymentClientSecret(data.clientSecret);
+        setShowPaymentModal(true);
+      } else {
+        toast({
+          title: "Investissement créé!",
+          description: `Investissement de ${selectedAmount}€ en attente de paiement`,
+        });
       }
     },
     onError: (error: any) => {
@@ -111,6 +218,18 @@ export default function LiveShowWeekly() {
       });
     },
   });
+
+  const handlePaymentSuccess = () => {
+    setShowPaymentModal(false);
+    setPaymentClientSecret(null);
+    setSelectedFinalist(null);
+    queryClient.invalidateQueries({ queryKey: ['/api/live-weekly/scoreboard', edition?.id] });
+    
+    toast({
+      title: "Paiement confirmé!",
+      description: `Votre investissement de ${selectedAmount}€ a été confirmé`,
+    });
+  };
 
   const handleInvest = () => {
     if (!user) {
@@ -322,6 +441,21 @@ export default function LiveShowWeekly() {
           </div>
         </div>
       </Card>
+
+      {/* Payment Modal */}
+      <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+        <DialogContent className="max-w-md" data-testid="payment-modal">
+          <DialogHeader>
+            <DialogTitle>Confirmer votre investissement</DialogTitle>
+          </DialogHeader>
+          
+          {paymentClientSecret && (
+            <Elements stripe={stripePromise} options={{ clientSecret: paymentClientSecret }}>
+              <PaymentForm onSuccess={handlePaymentSuccess} amount={selectedAmount} />
+            </Elements>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
