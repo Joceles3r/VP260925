@@ -1688,6 +1688,221 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== LIVE SHOW WEEKLY SYSTEM ROUTES =====
+  
+  // Get current week edition
+  app.get('/api/live-weekly/current', async (req, res) => {
+    try {
+      const now = new Date();
+      const weekNumber = Math.ceil((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+      const year = now.getFullYear();
+      
+      const edition = await storage.getCurrentWeekEdition(weekNumber, year);
+      
+      if (!edition) {
+        return res.status(404).json({ message: "No current edition found" });
+      }
+
+      res.json(edition);
+    } catch (error) {
+      console.error("Error fetching current edition:", error);
+      res.status(500).json({ message: "Failed to fetch current edition" });
+    }
+  });
+
+  // Get edition candidates
+  app.get('/api/live-weekly/candidates/:editionId', async (req, res) => {
+    try {
+      const { editionId } = req.params;
+      const candidates = await storage.getLiveShowCandidates(editionId);
+      
+      res.json(candidates);
+    } catch (error) {
+      console.error("Error fetching candidates:", error);
+      res.status(500).json({ message: "Failed to fetch candidates" });
+    }
+  });
+
+  // Submit community vote (Phase 1 & 2)
+  app.post('/api/live-weekly/vote', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { candidateId } = req.body;
+
+      if (!candidateId) {
+        return res.status(400).json({ message: "Candidate ID required" });
+      }
+
+      const candidate = await storage.getLiveShowCandidate(candidateId);
+      if (!candidate) {
+        return res.status(404).json({ message: "Candidate not found" });
+      }
+
+      const edition = await storage.getLiveShowEdition(candidate.editionId);
+      if (!edition) {
+        return res.status(404).json({ message: "Edition not found" });
+      }
+
+      // Check if voting is allowed (phase 1 or 2)
+      if (edition.currentPhase !== 'phase1' && edition.currentPhase !== 'phase2') {
+        return res.status(400).json({ message: "Voting not allowed in current phase" });
+      }
+
+      const vote = await storage.createLiveShowCommunityVote({
+        candidateId,
+        voterId: userId,
+        phase: edition.currentPhase
+      });
+
+      res.json({ success: true, vote });
+    } catch (error) {
+      console.error("Error submitting vote:", error);
+      res.status(500).json({ message: "Failed to submit vote" });
+    }
+  });
+
+  // Battle investment (Live phase only)
+  app.post('/api/live-weekly/invest', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { finalist, editionId, amountEUR } = req.body;
+
+      if (!finalist || !editionId || !amountEUR) {
+        return res.status(400).json({ message: "Finalist (A/B), edition ID, and amount required" });
+      }
+
+      if (finalist !== 'A' && finalist !== 'B') {
+        return res.status(400).json({ message: "Finalist must be 'A' or 'B'" });
+      }
+
+      const edition = await storage.getLiveShowEdition(editionId);
+      if (!edition) {
+        return res.status(404).json({ message: "Edition not found" });
+      }
+
+      // Check if battle is running
+      if (edition.currentPhase !== 'live') {
+        return res.status(400).json({ message: "Investments only allowed during Live Show" });
+      }
+
+      if (edition.currentState !== 'live_running') {
+        return res.status(400).json({ message: "Battle not currently running" });
+      }
+
+      // Validate investment amount
+      const { INVEST_TRANCHES_EUR, votesForAmount } = await import('@shared/liveShowConstants');
+      if (!INVEST_TRANCHES_EUR.includes(amountEUR)) {
+        return res.status(400).json({ message: "Invalid investment amount" });
+      }
+
+      const votes = votesForAmount(amountEUR);
+
+      // Create Stripe payment intent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amountEUR * 100),
+        currency: 'eur',
+        metadata: {
+          type: 'live_show_weekly_battle',
+          finalist,
+          editionId: edition.id,
+          userId,
+          votes: votes.toString()
+        }
+      });
+
+      // Create investment record (pending until payment confirmed)
+      const investment = await storage.createLiveShowBattleInvestment({
+        editionId: edition.id,
+        liveShowId: edition.liveShowId,
+        userId,
+        finalist,
+        amountEUR: amountEUR.toString(),
+        votes,
+        paymentIntentId: paymentIntent.id
+      });
+
+      res.json({
+        success: true,
+        investment,
+        clientSecret: paymentIntent.client_secret
+      });
+    } catch (error) {
+      console.error("Error processing investment:", error);
+      res.status(500).json({ message: "Failed to process investment" });
+    }
+  });
+
+  // Get scoreboard
+  app.get('/api/live-weekly/scoreboard/:editionId', async (req, res) => {
+    try {
+      const { editionId } = req.params;
+      const investments = await storage.getLiveShowBattleInvestments(editionId);
+      
+      // Aggregate by finalist
+      const scoreboard = investments.reduce((acc: any, inv) => {
+        if (!acc[inv.finalist]) {
+          acc[inv.finalist] = {
+            finalist: inv.finalist,
+            totalVotes: 0,
+            totalAmount: 0,
+            investorCount: 0
+          };
+        }
+        
+        acc[inv.finalist].totalVotes += inv.votes;
+        acc[inv.finalist].totalAmount += parseFloat(inv.amountEUR);
+        acc[inv.finalist].investorCount += 1;
+        
+        return acc;
+      }, {});
+
+      res.json(Object.values(scoreboard));
+    } catch (error) {
+      console.error("Error fetching scoreboard:", error);
+      res.status(500).json({ message: "Failed to fetch scoreboard" });
+    }
+  });
+
+  // Admin middleware
+  const isAdmin = async (req: any, res: any, next: any) => {
+    try {
+      if (!req.user?.claims?.sub) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      next();
+    } catch (error) {
+      console.error("Admin check error:", error);
+      res.status(500).json({ message: "Authorization failed" });
+    }
+  };
+
+  // Admin: Create weekly edition
+  app.post('/api/admin/live-weekly/create-edition', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { liveShowId, weekNumber, year } = req.body;
+      
+      if (!liveShowId || !weekNumber || !year) {
+        return res.status(400).json({ message: "Live Show ID, week number, and year required" });
+      }
+
+      const { LiveShowWeeklyOrchestrator } = await import('./services/liveShowWeeklyOrchestrator');
+      const orchestrator = new LiveShowWeeklyOrchestrator();
+      
+      const edition = await orchestrator.createWeeklyEdition(liveShowId, weekNumber, year);
+      
+      res.json({ success: true, edition });
+    } catch (error) {
+      console.error("Error creating edition:", error);
+      res.status(500).json({ message: "Failed to create edition" });
+    }
+  });
+
   // Compliance routes
   app.post('/api/compliance/report', isAuthenticated, async (req: any, res) => {
     try {
