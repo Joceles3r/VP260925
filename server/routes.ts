@@ -78,6 +78,8 @@ import adminDashboardRoutes from "./routes/adminDashboardRoutes";
 import { generateReceiptPDF } from "./receipts/handlers";
 import agentRoutes from "./routes/agentRoutes";
 import ebookRoutes from "./routes/ebookRoutes";
+import bunnyRoutes from "./modules/bunny/routes";
+import bunnyWebhook from "./modules/bunny/webhook";
 import { VISUPointsService } from "./services/visuPointsService.js";
 import { Top10Service } from "./services/top10Service.js";
 import { FidelityService } from "./services/fidelityService.js";
@@ -2929,6 +2931,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== MODULE EBOOKS: LICENCES JWT ET TÉLÉCHARGEMENT SÉCURISÉ =====
   // Ebook licensing system with JWT tokens, download quotas, and anti-piracy
   app.use('/api/ebooks', ebookRoutes);
+
+  // ===== MODULE BUNNY.NET: DÉPÔT VIDÉO SÉCURISÉ =====
+  // Bunny.net video deposit with Stripe payment, token-based anti-piracy, and HLS streaming
+  app.use('/api', bunnyRoutes);
+  app.use('/api', bunnyWebhook);
 
   // ===== DASHBOARD ADMIN AMÉLIORÉ =====
   // Enhanced admin dashboard with categories, profiles, theme, agents, security, maintenance
