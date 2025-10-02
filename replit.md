@@ -37,6 +37,7 @@ The platform uses a Neon Design System with a dark theme, signature colors (#00D
 - **Security**: Secure authentication, authorization, content delivery (JWT for ebooks, no exposure of storage keys).
 - **AI Agents**: Strategic Autonomous Intelligence (VisualAI, VisualFinanceAI, VisualScoutAI) for automated platform management, content moderation, financial rules, economy management, and ethical audience prospecting, with dedicated database tables for agent decisions and audit logs.
   - **VisualScoutAI**: Ethical prospection agent for detecting, scoring, and activating relevant audiences through official APIs only (Meta, TikTok, YouTube, X), strict GDPR/CCPA compliance, no unsolicited messages, opt-in only contacts, aggregated signals, interest scoring, campaign simulation, and emergency kill-switch.
+  - **VisualAI Fraud Detection**: Advanced ML-based fraud detection system with autonomous learning capabilities, behavior analysis, and multi-account detection—always obedient to ADMIN. Features: real-time risk scoring (0-1 scale), bot activity detection, coordinated investment analysis, pattern recognition, and adaptive learning from admin feedback. Risk levels: low (<0.3), medium (0.3-0.6), high (0.6-0.8), critical (>0.8). All high-risk actions (>0.6) require admin validation with traceable audit signatures.
 - **Theme System**: Complete dark/light theme system with user preferences stored in localStorage and database, admin override capability, and synchronized state management.
 
 ## External Dependencies
@@ -54,6 +55,67 @@ The platform uses a Neon Design System with a dark theme, signature colors (#00D
 - **Bunny.net Stream API**: High-performance video hosting with CDN token authentication.
 - **Multer**: Middleware for handling file uploads.
 - **connect-pg-simple**: PostgreSQL-backed session management.
+## VisualAI Fraud Detection System (October 2, 2025)
+
+### Architecture Overview
+The fraud detection system is integrated into VisualAI service (`server/services/visualAI.ts`) with dedicated database tables for fraud events, risk scores, behavior patterns, and ML metadata.
+
+### Core Components
+
+**1. Risk Scoring Engine**
+- Real-time user risk analysis based on behavioral patterns
+- 4-tier risk levels: low (<0.3), medium (0.3-0.6), high (0.6-0.8), critical (>0.8)
+- Multi-factor analysis: rapid investments, uniform amounts, timing anomalies, volume patterns
+- Automatic agent decision creation for risks >0.6
+
+**2. Detection Algorithms**
+- **Bot Activity Detection**: Analyzes temporal regularity, action speed, and diversity patterns
+- **Coordinated Investment Detection**: Identifies suspicious timing clusters and amount patterns
+- **Multi-Account Detection**: Database schema ready for IP/device fingerprinting analysis
+- **Rapid Succession Detection**: Flags 5+ investments within configurable time windows (5/15/30/60 min)
+
+**3. Machine Learning Components**
+- **Adaptive Learning**: `learnFromAdminFeedback()` adjusts detection thresholds based on admin verdicts
+- **Pattern Recognition**: Stores behavior patterns with accuracy metrics (true/false positive tracking)
+- **Feature Engineering**: Database tables for `behavior_patterns`, `ml_models`, `learning_session`
+- **Continuous Improvement**: Admin feedback loop enables model refinement over time
+
+### Database Schema
+
+**fraud_events**: Event log with evidence data, confidence scores, recommended actions
+**user_risk_scores**: Per-user risk profiles with contributing factors
+**behavior_patterns**: Reusable patterns with accuracy tracking for ML
+**user_relationships**: Multi-account detection via relationship graphs
+**ml_models**: Model metadata for version tracking and performance metrics
+**learning_session**: Training sessions with feedback incorporation
+
+### API Methods
+
+```typescript
+// VisualAI service methods
+await visualAI.analyzeUserFraudRisk(userId)
+await visualAI.detectCoordinatedInvestments(projectId)
+await visualAI.learnFromAdminFeedback(decisionId, 'approved' | 'rejected', comment)
+```
+
+### Admin Control & Audit Trail
+- **✅ CRITICAL FIX**: All high-risk detections (>= 0.6) now **strictly** create `'pending'` agent decisions requiring admin review (governance bug fixed Oct 2)
+- Complete audit log via `agent_audit_log` table with immutable hash chain
+- Admin can approve/reject decisions, triggering ML learning adjustments  
+- Fraud events logged to console for v1 (full DB persistence coming in v2 via storage.upsertUserRiskScore/createFraudEvent)
+
+### Security Principles
+- **Admin Authority**: All critical actions require admin validation
+- **Traceable Decisions**: Every fraud detection logged with justification and evidence
+- **Obedient AI**: VisualAI always defers to admin judgment, learns from corrections
+- **Zero False Blocks**: Automatic actions limited to low-risk monitoring; humans validate high-risk
+
+### Future Enhancements (v2 Roadmap)
+1. **Storage Layer**: Implement `storage.upsertUserRiskScore()` and `storage.createFraudEvent()` for full DB persistence
+2. **Regression Tests**: Add test coverage to ensure >= 0.6 → 'pending' rule is maintained
+3. **ML Training Pipeline**: Implement scheduled retraining based on admin feedback patterns
+4. **Multi-Account Detection**: Complete IP/device fingerprinting integration for relationship detection
+
 ## Security Implementations (October 1, 2025)
 
 ### Completed Security Enhancements

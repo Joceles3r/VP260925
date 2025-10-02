@@ -2776,6 +2776,185 @@ export const agentParameters = pgTable("agent_parameters", {
   index("idx_parameters_modifiable").on(table.modifiableByAdmin)
 ]);
 
+// ===== SYSTÈME DE DÉTECTION DE FRAUDE ET MACHINE LEARNING =====
+
+// Énums pour le système de fraude
+export const riskLevelEnum = pgEnum("risk_level", ["low", "medium", "high", "critical"]);
+export const fraudTypeEnum = pgEnum("fraud_type", [
+  "multi_account", "coordinated_investment", "bot_activity", "financial_fraud", 
+  "vote_manipulation", "identity_theft", "suspicious_pattern", "chargeback_fraud"
+]);
+export const fraudActionEnum = pgEnum("fraud_action", [
+  "monitor", "restrict", "suspend", "block", "investigate"
+]);
+
+// Scores de risque utilisateur - Mis à jour en temps réel par VisualAI
+export const userRiskScores = pgTable("user_risk_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  riskScore: decimal("risk_score", { precision: 5, scale: 4 }).notNull(), // 0.0000 à 1.0000
+  riskLevel: riskLevelEnum("risk_level").notNull(),
+  contributingFactors: jsonb("contributing_factors").notNull(), // Détails des facteurs de risque
+  lastIncidentDate: timestamp("last_incident_date"),
+  incidentCount: integer("incident_count").notNull().default(0),
+  falsePositiveCount: integer("false_positive_count").notNull().default(0), // Pour l'apprentissage
+  adminOverride: boolean("admin_override").default(false),
+  adminNotes: text("admin_notes"),
+  calculatedAt: timestamp("calculated_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  unique("unique_user_risk").on(table.userId),
+  index("idx_risk_level").on(table.riskLevel),
+  index("idx_risk_score").on(table.riskScore),
+  index("idx_risk_updated").on(table.updatedAt)
+]);
+
+// Événements de fraude détectés
+export const fraudEvents = pgTable("fraud_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventType: fraudTypeEnum("event_type").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  relatedUserIds: text("related_user_ids").array(), // IDs des comptes liés détectés
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: 'set null' }),
+  transactionId: varchar("transaction_id"),
+  
+  severityScore: decimal("severity_score", { precision: 5, scale: 4 }).notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(), // Confiance de la détection
+  
+  evidenceData: jsonb("evidence_data").notNull(), // Preuves techniques
+  detectionMethod: varchar("detection_method").notNull(), // 'rule_based', 'ml_model', 'pattern_analysis'
+  modelVersion: varchar("model_version"), // Version du modèle ML utilisé
+  
+  recommendedAction: fraudActionEnum("recommended_action").notNull(),
+  actionTaken: fraudActionEnum("action_taken"),
+  actionTakenBy: varchar("action_taken_by"), // 'visualai' ou 'admin:{userId}'
+  actionTakenAt: timestamp("action_taken_at"),
+  
+  adminReviewed: boolean("admin_reviewed").default(false),
+  adminVerdict: varchar("admin_verdict"), // 'confirmed', 'false_positive', 'insufficient_evidence'
+  adminComment: text("admin_comment"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp("reviewed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("idx_fraud_user").on(table.userId),
+  index("idx_fraud_type").on(table.eventType),
+  index("idx_fraud_severity").on(table.severityScore),
+  index("idx_fraud_reviewed").on(table.adminReviewed),
+  index("idx_fraud_created").on(table.createdAt)
+]);
+
+// Patterns comportementaux appris - Système d'apprentissage
+export const behaviorPatterns = pgTable("behavior_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  patternType: varchar("pattern_type").notNull(), // 'investment', 'voting', 'timing', 'network'
+  patternSignature: text("pattern_signature").notNull(), // Signature unique du pattern
+  
+  isAnomaly: boolean("is_anomaly").notNull(), // true = suspect, false = normal
+  riskWeight: decimal("risk_weight", { precision: 5, scale: 4 }).notNull(), // Poids dans le calcul de risque
+  
+  featureVector: jsonb("feature_vector").notNull(), // Caractéristiques du pattern
+  exampleInstances: jsonb("example_instances"), // Exemples de ce pattern
+  
+  detectionCount: integer("detection_count").notNull().default(0),
+  truePositiveCount: integer("true_positive_count").notNull().default(0),
+  falsePositiveCount: integer("false_positive_count").notNull().default(0),
+  
+  accuracy: decimal("accuracy", { precision: 5, scale: 4 }), // Précision du pattern
+  lastSeenAt: timestamp("last_seen_at"),
+  
+  learnedFrom: varchar("learned_from"), // 'supervised', 'unsupervised', 'admin_feedback'
+  modelVersion: varchar("model_version").notNull(),
+  
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+}, (table) => [
+  unique("unique_pattern_signature").on(table.patternSignature),
+  index("idx_pattern_type_active").on(table.patternType, table.isActive),
+  index("idx_pattern_anomaly").on(table.isAnomaly),
+  index("idx_pattern_accuracy").on(table.accuracy)
+]);
+
+// Graphe de relations entre utilisateurs (détection multi-comptes)
+export const userRelationships = pgTable("user_relationships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId1: varchar("user_id1").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId2: varchar("user_id2").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  
+  relationshipType: varchar("relationship_type").notNull(), // 'ip_match', 'device_match', 'timing_correlation', 'investment_pattern'
+  relationshipStrength: decimal("relationship_strength", { precision: 5, scale: 4 }).notNull(), // 0-1
+  
+  evidenceData: jsonb("evidence_data").notNull(),
+  firstDetectedAt: timestamp("first_detected_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+  occurrenceCount: integer("occurrence_count").notNull().default(1),
+  
+  isSuspicious: boolean("is_suspicious").notNull().default(false),
+  adminVerified: boolean("admin_verified").default(false),
+  adminNotes: text("admin_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  index("idx_relationship_user1").on(table.userId1),
+  index("idx_relationship_user2").on(table.userId2),
+  index("idx_relationship_suspicious").on(table.isSuspicious),
+  index("idx_relationship_strength").on(table.relationshipStrength)
+]);
+
+// Métadonnées des modèles ML
+export const mlModels = pgTable("ml_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelName: varchar("model_name").notNull(),
+  modelVersion: varchar("model_version").notNull(),
+  modelType: varchar("model_type").notNull(), // 'fraud_detection', 'risk_scoring', 'pattern_recognition'
+  
+  trainingDataSize: integer("training_data_size"),
+  trainingDate: timestamp("training_date"),
+  
+  performance: jsonb("performance").notNull(), // Métriques: accuracy, precision, recall, F1
+  hyperparameters: jsonb("hyperparameters"),
+  
+  isActive: boolean("is_active").notNull().default(false),
+  activatedBy: varchar("activated_by"), // 'visualai' ou 'admin:{userId}'
+  activatedAt: timestamp("activated_at"),
+  
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow()
+}, (table) => [
+  unique("unique_model_version").on(table.modelName, table.modelVersion),
+  index("idx_model_active").on(table.isActive),
+  index("idx_model_type").on(table.modelType)
+]);
+
+// Sessions d'apprentissage
+export const learningSession = pgTable("learning_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionType: varchar("session_type").notNull(), // 'supervised', 'unsupervised', 'reinforcement'
+  modelId: varchar("model_id").references(() => mlModels.id, { onDelete: 'cascade' }),
+  
+  dataSourceQuery: text("data_source_query"), // Requête SQL pour les données d'entraînement
+  dataCount: integer("data_count"),
+  
+  learningMetrics: jsonb("learning_metrics").notNull(), // Métriques de la session
+  patternsDiscovered: integer("patterns_discovered").default(0),
+  patternsUpdated: integer("patterns_updated").default(0),
+  
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+  
+  status: varchar("status").notNull().default('running'), // 'running', 'completed', 'failed'
+  errorMessage: text("error_message"),
+  
+  triggeredBy: varchar("triggered_by").notNull(), // 'schedule', 'manual', 'auto'
+  notes: text("notes")
+}, (table) => [
+  index("idx_learning_status").on(table.status),
+  index("idx_learning_completed").on(table.completedAt)
+]);
+
 // Feature toggles pour visibilité des catégories et rubriques
 export const featureToggles = pgTable("feature_toggles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2858,6 +3037,58 @@ export type PayoutRecipe = typeof payoutRecipes.$inferSelect;
 
 export type InsertAgentParameter = z.infer<typeof insertAgentParameterSchema>;
 export type AgentParameter = typeof agentParameters.$inferSelect;
+
+// Schémas d'insertion pour système de détection de fraude et ML
+export const insertUserRiskScoreSchema = createInsertSchema(userRiskScores).omit({
+  id: true,
+  calculatedAt: true,
+  updatedAt: true
+});
+
+export const insertFraudEventSchema = createInsertSchema(fraudEvents).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertBehaviorPatternSchema = createInsertSchema(behaviorPatterns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertUserRelationshipSchema = createInsertSchema(userRelationships).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertMlModelSchema = createInsertSchema(mlModels).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertLearningSessionSchema = createInsertSchema(learningSession).omit({
+  id: true,
+  startedAt: true
+});
+
+// Types d'insertion et de sélection pour système de fraude et ML
+export type InsertUserRiskScore = z.infer<typeof insertUserRiskScoreSchema>;
+export type UserRiskScore = typeof userRiskScores.$inferSelect;
+
+export type InsertFraudEvent = z.infer<typeof insertFraudEventSchema>;
+export type FraudEvent = typeof fraudEvents.$inferSelect;
+
+export type InsertBehaviorPattern = z.infer<typeof insertBehaviorPatternSchema>;
+export type BehaviorPattern = typeof behaviorPatterns.$inferSelect;
+
+export type InsertUserRelationship = z.infer<typeof insertUserRelationshipSchema>;
+export type UserRelationship = typeof userRelationships.$inferSelect;
+
+export type InsertMlModel = z.infer<typeof insertMlModelSchema>;
+export type MlModel = typeof mlModels.$inferSelect;
+
+export type InsertLearningSession = z.infer<typeof insertLearningSessionSchema>;
+export type LearningSession = typeof learningSession.$inferSelect;
 
 // Schéma d'insertion pour quêtes quotidiennes
 export const insertDailyQuestSchema = createInsertSchema(dailyQuests).omit({

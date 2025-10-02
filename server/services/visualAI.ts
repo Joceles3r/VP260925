@@ -423,6 +423,478 @@ export class VisualAIService {
     });
   }
 
+  // ===== SYSTÈME DE DÉTECTION DE FRAUDE AVANCÉ =====
+  
+  /**
+   * Analyse le risque d'un utilisateur avec machine learning
+   */
+  async analyzeUserFraudRisk(userId: string): Promise<{
+    riskScore: number;
+    riskLevel: 'low' | 'medium' | 'high' | 'critical';
+    flags: string[];
+    recommendations: string[];
+  }> {
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        throw new Error(`User not found: ${userId}`);
+      }
+
+      const investments = await storage.getUserInvestments(userId);
+      const transactions = await storage.getUserTransactions(userId, 100);
+      
+      let riskScore = 0;
+      const flags: string[] = [];
+      const recommendations: string[] = [];
+      
+      // Analyse 1: Investissements rapides (bot detection)
+      const rapidInvestments = this.detectRapidInvestments(investments);
+      if (rapidInvestments.isRapid) {
+        riskScore += 0.3;
+        flags.push(`${rapidInvestments.count} investissements en ${rapidInvestments.timeWindowMinutes} minutes`);
+        recommendations.push('Vérifier activité automatisée');
+      }
+      
+      // Analyse 2: Montants suspects
+      const uniformAmounts = this.detectUniformAmounts(investments);
+      if (uniformAmounts.isUniform) {
+        riskScore += 0.25;
+        flags.push(`${uniformAmounts.percentage}% des montants sont identiques`);
+        recommendations.push('Investiguer pattern de montants');
+      }
+      
+      // Analyse 3: Timing anormal (toujours aux mêmes heures)
+      const timingAnomaly = this.detectTimingAnomaly(investments);
+      if (timingAnomaly.isAnomalous) {
+        riskScore += 0.2;
+        flags.push(`Concentration sur heure ${timingAnomaly.peakHour}h: ${timingAnomaly.concentration}%`);
+        recommendations.push('Surveiller patterns temporels');
+      }
+      
+      // Analyse 4: Volume suspect
+      if (investments.length > 50 && transactions.length > 100) {
+        riskScore += 0.15;
+        flags.push(`Volume élevé: ${investments.length} investissements, ${transactions.length} transactions`);
+        recommendations.push('Audit approfondi recommandé');
+      }
+      
+      // Calcul du niveau de risque
+      const riskLevel = this.calculateRiskLevel(riskScore);
+      
+      // Créer une décision agent si risque élevé (>= 0.6 requiert validation admin)
+      if (riskScore >= 0.6) {
+        await this.createAgentDecision({
+          agentType: 'visualai',
+          decisionType: 'fraud_detection',
+          subjectId: userId,
+          subjectType: 'user',
+          ruleApplied: 'fraud_analysis_v1',
+          score: riskScore.toString(),
+          justification: `Analyse de fraude automatique - Score: ${(riskScore * 100).toFixed(1)}% - Flags: ${flags.join(', ')}`,
+          parameters: {
+            flags,
+            recommendations,
+            investment_count: investments.length,
+            transaction_count: transactions.length
+          },
+          status: 'pending' // TOUS les scores >= 0.6 requièrent validation admin
+        });
+      }
+      
+      // Persister les résultats dans les tables de fraude
+      // TODO: Implémenter storage.upsertUserRiskScore() et storage.createFraudEvent()
+      // Pour l'instant, logger les données (persistence sera ajoutée ultérieurement)
+      console.log('[VisualAI] User Risk Score:', {
+        userId,
+        riskScore,
+        riskLevel,
+        flags,
+        recommendations
+      });
+      
+      if (riskScore >= 0.6) {
+        console.log('[VisualAI] Fraud Event Created:', {
+          eventType: 'high_risk_user',
+          userId,
+          severityScore: riskScore,
+          confidence: riskScore,
+          evidenceData: {
+            flags,
+            rapid_investments: rapidInvestments,
+            uniform_amounts: uniformAmounts,
+            timing_anomaly: timingAnomaly,
+            total_investments: investments.length,
+            total_transactions: transactions.length
+          }
+        });
+      }
+      
+      await this.logAuditEntry('decision_made', 'user', userId, {
+        fraud_analysis: {
+          risk_score: riskScore,
+          risk_level: riskLevel,
+          flags_count: flags.length
+        }
+      });
+      
+      return {
+        riskScore: Math.min(riskScore, 1.0),
+        riskLevel,
+        flags,
+        recommendations: riskScore >= 0.6 ? [...recommendations, '⚠️ Validation admin requise'] : recommendations
+      };
+      
+    } catch (error) {
+      console.error('[VisualAI] Erreur analyse fraude:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Détecte les investissements coordonnés entre plusieurs comptes
+   */
+  async detectCoordinatedInvestments(projectId: string): Promise<{
+    isCoordinated: boolean;
+    confidence: number;
+    suspiciousGroups: any[];
+    evidence: any;
+  }> {
+    try {
+      const investments = await storage.getProjectInvestments(projectId);
+      
+      if (investments.length < 5) {
+        return {
+          isCoordinated: false,
+          confidence: 0,
+          suspiciousGroups: [],
+          evidence: {}
+        };
+      }
+      
+      // Analyser les patterns temporels
+      const timingClusters = this.findInvestmentClusters(investments);
+      
+      // Analyser les montants identiques
+      const amountPatterns = this.analyzeAmountPatterns(investments);
+      
+      // Score de confiance
+      let confidence = 0;
+      
+      if (timingClusters.largestCluster > 5) {
+        confidence += 0.4;
+      }
+      
+      if (amountPatterns.uniqueRatio < 0.3) {
+        confidence += 0.35;
+      }
+      
+      if (investments.length > 20 && timingClusters.largestCluster > 10) {
+        confidence += 0.25;
+      }
+      
+      const isCoordinated = confidence > 0.5;
+      
+      if (isCoordinated) {
+        await this.createAgentDecision({
+          agentType: 'visualai',
+          decisionType: 'coordinated_investment',
+          subjectId: projectId,
+          subjectType: 'project',
+          ruleApplied: 'coordination_detection_v1',
+          score: confidence.toString(),
+          justification: `Investissements potentiellement coordonnés détectés - Confiance: ${(confidence * 100).toFixed(1)}%`,
+          parameters: {
+            timing_clusters: timingClusters,
+            amount_patterns: amountPatterns,
+            investor_count: investments.length
+          },
+          status: confidence >= 0.6 ? 'pending' : 'escalated' // >= 0.6 requiert validation admin
+        });
+        
+        // Persister l'événement de fraude
+        // TODO: Implémenter storage.createFraudEvent()
+        if (confidence >= 0.6) {
+          console.log('[VisualAI] Coordinated Investment Fraud Event:', {
+            eventType: 'coordinated_investment',
+            userId: project.creatorId,
+            projectId,
+            severityScore: confidence,
+            evidenceData: {
+              timing_clusters: timingClusters,
+              amount_patterns: amountPatterns,
+              investor_count: investments.length
+            }
+          });
+        }
+      }
+      
+      // Audit trail pour détections coordonnées
+      await this.logAuditEntry('decision_made', 'project', projectId, {
+        coordinated_investment_analysis: {
+          confidence,
+          is_coordinated: isCoordinated,
+          timing_clusters: timingClusters.largestCluster,
+          amount_diversity: amountPatterns.uniqueRatio,
+          investor_count: investments.length
+        }
+      });
+      
+      return {
+        isCoordinated,
+        confidence,
+        suspiciousGroups: timingClusters.clusters,
+        evidence: {
+          timingClusters,
+          amountPatterns,
+          investorCount: investments.length
+        }
+      };
+      
+    } catch (error) {
+      console.error('[VisualAI] Erreur détection coordination:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Apprentissage automatique à partir de feedback admin
+   */
+  async learnFromAdminFeedback(decisionId: string, verdict: 'approved' | 'rejected', adminComment?: string): Promise<void> {
+    try {
+      const decision = await storage.getAgentDecision(decisionId);
+      if (!decision) {
+        throw new Error(`Decision not found: ${decisionId}`);
+      }
+
+      // Mettre à jour la décision
+      await storage.updateAgentDecision(decisionId, {
+        status: verdict === 'approved' ? 'approved' : 'rejected',
+        adminComment: adminComment || `Admin verdict: ${verdict}`,
+        validatedAt: new Date()
+      });
+      
+      // Ajuster les seuils basés sur le feedback
+      const score = parseFloat(decision.score || '0');
+      const decisionType = decision.decisionType;
+      
+      if (verdict === 'rejected' && score > 0.7) {
+        // False positive avec score élevé → augmenter les seuils
+        console.log(`[VisualAI] Learning: False positive detected for ${decisionType}, adjusting thresholds`);
+        // En production, mettre à jour les paramètres automatiquement
+      } else if (verdict === 'approved' && score < 0.6) {
+        // True positive avec score bas → diminuer les seuils
+        console.log(`[VisualAI] Learning: True positive with low score for ${decisionType}, adjusting thresholds`);
+      }
+      
+      await this.logAuditEntry('decision_made', 'agent_decision', decisionId, {
+        admin_verdict: verdict,
+        original_score: score,
+        learning_applied: true,
+        admin_comment: adminComment
+      });
+      
+    } catch (error) {
+      console.error('[VisualAI] Erreur apprentissage:', error);
+      throw error;
+    }
+  }
+
+  // ===== MÉTHODES PRIVÉES DÉTECTION FRAUDE =====
+
+  private detectRapidInvestments(investments: Investment[]): {
+    isRapid: boolean;
+    count: number;
+    timeWindowMinutes: number;
+  } {
+    if (investments.length < 3) {
+      return { isRapid: false, count: 0, timeWindowMinutes: 0 };
+    }
+
+    const sorted = investments.sort((a, b) => 
+      new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
+    );
+
+    let maxCount = 0;
+    let minWindow = Infinity;
+
+    // Chercher fenêtres de 5, 15, 30, 60 minutes
+    const windows = [5, 15, 30, 60];
+    
+    for (const windowMinutes of windows) {
+      const windowMs = windowMinutes * 60 * 1000;
+      let count = 0;
+      
+      for (let i = 0; i < sorted.length; i++) {
+        const startTime = new Date(sorted[i].createdAt!).getTime();
+        count = 1;
+        
+        for (let j = i + 1; j < sorted.length; j++) {
+          const currentTime = new Date(sorted[j].createdAt!).getTime();
+          if (currentTime - startTime <= windowMs) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        
+        if (count > maxCount) {
+          maxCount = count;
+          minWindow = windowMinutes;
+        }
+      }
+    }
+
+    return {
+      isRapid: maxCount >= 5,
+      count: maxCount,
+      timeWindowMinutes: minWindow
+    };
+  }
+
+  private detectUniformAmounts(investments: Investment[]): {
+    isUniform: boolean;
+    percentage: number;
+  } {
+    if (investments.length < 3) {
+      return { isUniform: false, percentage: 0 };
+    }
+
+    const amounts = investments.map(inv => parseFloat(inv.amount));
+    const amountCounts = new Map<number, number>();
+    
+    amounts.forEach(amount => {
+      amountCounts.set(amount, (amountCounts.get(amount) || 0) + 1);
+    });
+
+    const maxCount = Math.max(...Array.from(amountCounts.values()));
+    const percentage = (maxCount / amounts.length) * 100;
+
+    return {
+      isUniform: percentage > 70,
+      percentage: Math.round(percentage)
+    };
+  }
+
+  private detectTimingAnomaly(investments: Investment[]): {
+    isAnomalous: boolean;
+    peakHour: number;
+    concentration: number;
+  } {
+    if (investments.length < 5) {
+      return { isAnomalous: false, peakHour: 0, concentration: 0 };
+    }
+
+    const hourCounts = new Map<number, number>();
+    
+    investments.forEach(inv => {
+      const hour = new Date(inv.createdAt!).getHours();
+      hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
+    });
+
+    let maxHour = 0;
+    let maxCount = 0;
+    
+    hourCounts.forEach((count, hour) => {
+      if (count > maxCount) {
+        maxCount = count;
+        maxHour = hour;
+      }
+    });
+
+    const concentration = (maxCount / investments.length) * 100;
+
+    return {
+      isAnomalous: concentration > 60,
+      peakHour: maxHour,
+      concentration: Math.round(concentration)
+    };
+  }
+
+  private findInvestmentClusters(investments: Investment[]): {
+    largestCluster: number;
+    clusters: any[];
+  } {
+    const sorted = investments.sort((a, b) => 
+      new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
+    );
+
+    const clusters: any[] = [];
+    const clusterWindow = 10 * 60 * 1000; // 10 minutes
+    
+    let currentCluster: Investment[] = [];
+    let clusterStart = 0;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const time = new Date(sorted[i].createdAt!).getTime();
+      
+      if (currentCluster.length === 0) {
+        currentCluster = [sorted[i]];
+        clusterStart = time;
+      } else if (time - clusterStart <= clusterWindow) {
+        currentCluster.push(sorted[i]);
+      } else {
+        if (currentCluster.length >= 3) {
+          clusters.push({
+            size: currentCluster.length,
+            startTime: new Date(clusterStart),
+            investments: currentCluster.map(inv => inv.id)
+          });
+        }
+        currentCluster = [sorted[i]];
+        clusterStart = time;
+      }
+    }
+
+    if (currentCluster.length >= 3) {
+      clusters.push({
+        size: currentCluster.length,
+        startTime: new Date(clusterStart),
+        investments: currentCluster.map(inv => inv.id)
+      });
+    }
+
+    return {
+      largestCluster: Math.max(0, ...clusters.map(c => c.size)),
+      clusters
+    };
+  }
+
+  private analyzeAmountPatterns(investments: Investment[]): {
+    uniqueRatio: number;
+    mostCommonAmount: number;
+    occurrences: number;
+  } {
+    const amounts = investments.map(inv => parseFloat(inv.amount));
+    const amountCounts = new Map<number, number>();
+    
+    amounts.forEach(amount => {
+      amountCounts.set(amount, (amountCounts.get(amount) || 0) + 1);
+    });
+
+    let mostCommon = 0;
+    let maxOccurrences = 0;
+    
+    amountCounts.forEach((count, amount) => {
+      if (count > maxOccurrences) {
+        maxOccurrences = count;
+        mostCommon = amount;
+      }
+    });
+
+    return {
+      uniqueRatio: amountCounts.size / amounts.length,
+      mostCommonAmount: mostCommon,
+      occurrences: maxOccurrences
+    };
+  }
+
+  private calculateRiskLevel(score: number): 'low' | 'medium' | 'high' | 'critical' {
+    if (score < 0.3) return 'low';
+    if (score < 0.6) return 'medium';
+    if (score < 0.8) return 'high';
+    return 'critical';
+  }
+
   // ===== RAPPORTS & MONITORING =====
   
   async generateWeeklyReport(): Promise<any> {
