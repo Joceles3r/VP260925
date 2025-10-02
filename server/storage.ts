@@ -1237,6 +1237,14 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
   }
 
+  async getUsersByRole(role: 'admin' | 'investor' | 'creator' | 'invested_reader' | 'infoporteur'): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .where(eq(users.profileType, role))
+      .orderBy(desc(users.createdAt));
+  }
+
   async getUserStats(): Promise<{ totalUsers: number; activeUsers: number; kycPending: number }> {
     const [totalResult] = await db
       .select({ count: sql<number>`count(*)` })

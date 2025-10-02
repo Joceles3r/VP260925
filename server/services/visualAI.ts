@@ -966,6 +966,9 @@ export class VisualAIService {
           action: 'permanent_exclusion'
         });
         
+        // 📢 NOTIFICATION URGENTE À L'ADMIN
+        await this.notifyAdminCriticalReport(contentOwnerId, contentType, contentId, reportCount, 'ban');
+        
         return {
           action: 'ban',
           reportCount,
@@ -1013,6 +1016,9 @@ export class VisualAIService {
           content_id: contentId,
           action: 'temporary_suspension'
         });
+        
+        // 📢 NOTIFICATION À L'ADMIN
+        await this.notifyAdminCriticalReport(contentOwnerId, contentType, contentId, reportCount, 'block');
         
         return {
           action: 'block',
@@ -1078,6 +1084,49 @@ export class VisualAIService {
       reason: 'report_threshold_reached',
       timestamp: new Date().toISOString()
     });
+  }
+
+  /**
+   * Notifie l'admin d'un signalement critique
+   */
+  private async notifyAdminCriticalReport(
+    userId: string, 
+    contentType: string, 
+    contentId: string, 
+    reportCount: number,
+    action: 'block' | 'ban'
+  ): Promise<void> {
+    try {
+      // Récupérer tous les admins
+      const admins = await storage.getUsersByRole('admin');
+      
+      const user = await storage.getUser(userId);
+      const userName = user ? `${user.firstName} ${user.lastName}` : 'Utilisateur inconnu';
+      
+      const actionText = action === 'ban' ? 
+        '🔴 EXCLUSION DÉFINITIVE' : 
+        '⚠️ BLOCAGE TEMPORAIRE';
+      
+      const actionEmoji = action === 'ban' ? '🚨' : '⚠️';
+      
+      // Créer une notification pour chaque admin
+      for (const admin of admins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: 'admin_alert',
+          title: `${actionEmoji} ${actionText} - ${reportCount} signalements`,
+          message: `Le compte de ${userName} a atteint le seuil de ${reportCount} signalements sur un contenu ${contentType}. Action automatique: ${action === 'ban' ? 'Exclusion définitive + blocage bancaire permanent' : 'Suspension 7j + blocage bancaire temporaire'}. Vous pouvez débloquer ce compte depuis le panneau admin si nécessaire.`,
+          relatedId: userId,
+          relatedType: 'user'
+        });
+      }
+      
+      console.log(`[VisualAI] 📧 ${admins.length} admin(s) notifié(s) - ${actionText} pour user ${userId}`);
+      
+    } catch (error) {
+      console.error('[VisualAI] Erreur notification admin:', error);
+      // Ne pas bloquer le processus si la notification échoue
+    }
   }
 
   /**

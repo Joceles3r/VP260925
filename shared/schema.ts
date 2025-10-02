@@ -49,7 +49,9 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'new_investment',
   'live_show_started',
   'battle_result',
-  'performance_alert'
+  'performance_alert',
+  'admin_alert',
+  'security'
 ]);
 
 // Notification priority enum

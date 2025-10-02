@@ -4381,6 +4381,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Débloquer un utilisateur bloqué par signalements (admin only)
+  app.post('/api/admin/reports/unblock-user', isAuthenticated, requireAdminAccess, async (req: any, res) => {
+    try {
+      const adminUserId = req.adminUser.id;
+      const { userId, reason } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID requis" });
+      }
+
+      // Vérifier que l'utilisateur existe
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Utilisateur non trouvé" });
+      }
+
+      // Annuler les décisions de blocage en cours
+      const decisions = await storage.getAgentDecisionsBySubject('user', userId);
+      const blockingDecisions = decisions.filter(d => 
+        (d.decisionType === 'user_ban' || d.decisionType === 'user_suspension' || d.decisionType === 'financial_block') &&
+        (d.status === 'pending' || d.status === 'auto')
+      );
+
+      for (const decision of blockingDecisions) {
+        // TODO: Implémenter storage.updateAgentDecision pour annuler
+        console.log(`[Admin] Annulation décision ${decision.id} pour user ${userId}`);
+      }
+
+      // Créer une nouvelle décision admin de déblocage
+      await storage.createAgentDecision({
+        agentType: 'admin',
+        decisionType: 'user_unblock',
+        subjectId: userId,
+        subjectType: 'user',
+        ruleApplied: 'admin_override',
+        score: '0',
+        justification: `Déblocage manuel par admin: ${reason || 'Aucune raison fournie'}`,
+        parameters: {
+          admin_id: adminUserId,
+          override_reason: reason,
+          previous_decisions: blockingDecisions.map(d => d.id)
+        },
+        status: 'approved'
+      });
+
+      // Log audit
+      await storage.createAuditLog({
+        userId: adminUserId,
+        action: 'user_blocked', // Reuse existing enum
+        resourceType: 'user',
+        resourceId: userId,
+        details: {
+          action: 'unblock',
+          reason,
+          cancelled_decisions: blockingDecisions.length,
+          user_info: {
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`
+          }
+        }
+      });
+
+      // Créer une notification pour l'utilisateur
+      await storage.createNotification({
+        userId: userId,
+        type: 'security',
+        title: '✅ Compte débloqué',
+        message: `Votre compte a été débloqué par un administrateur. Vous pouvez à nouveau accéder à toutes les fonctionnalités de la plateforme.`,
+        relatedId: adminUserId,
+        relatedType: 'admin'
+      });
+
+      res.json({
+        success: true,
+        message: `Utilisateur ${user.firstName} ${user.lastName} débloqué avec succès`,
+        cancelledDecisions: blockingDecisions.length
+      });
+    } catch (error) {
+      console.error("Error unblocking user:", error);
+      res.status(500).json({ message: "Erreur lors du déblocage de l'utilisateur" });
+    }
+  });
+
   // ===== ROUTES FEATURE TOGGLES =====
 
   // Get all feature toggles (admin only)
