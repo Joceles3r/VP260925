@@ -2509,6 +2509,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== SEO ROUTES =====
+  // Managed by VisualScoutAI, supervised by VisualAI, controlled by Admin
+
+  // Generate sitemap.xml
+  app.get('/api/seo/sitemap.xml', async (req: any, res) => {
+    try {
+      const { seoService } = await import('./services/seoService');
+      const { lang } = req.query;
+      
+      const sitemap = await seoService.generateSitemap(lang || 'fr');
+      
+      res.setHeader('Content-Type', 'application/xml');
+      res.send(sitemap);
+    } catch (error: any) {
+      console.error('Sitemap generation error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get SEO configuration (public)
+  app.get('/api/seo/config', async (req: any, res) => {
+    try {
+      const { seoService } = await import('./services/seoService');
+      const config = await seoService.getOrCreateConfig();
+      res.json(config);
+    } catch (error: any) {
+      console.error('SEO config error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update SEO configuration (admin only)
+  app.put('/api/seo/config', async (req: any, res) => {
+    try {
+      const userId = req.session?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { db } = await import('./db');
+      const { seoConfig } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const configs = await db.select().from(seoConfig).limit(1);
+      if (configs.length === 0) {
+        return res.status(404).json({ error: 'Config not found' });
+      }
+
+      const updated = await db.update(seoConfig)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(seoConfig.id, configs[0].id))
+        .returning();
+
+      res.json(updated[0]);
+    } catch (error: any) {
+      console.error('SEO config update error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get page metadata
+  app.get('/api/seo/metadata', async (req: any, res) => {
+    try {
+      const { pageSlug, locale } = req.query;
+      const { seoService } = await import('./services/seoService');
+
+      if (pageSlug) {
+        const metadata = await seoService.getPageMetadata(pageSlug, locale || 'fr');
+        res.json(metadata || null);
+      } else {
+        const allMetadata = await seoService.getAllMetadata(locale);
+        res.json(allMetadata);
+      }
+    } catch (error: any) {
+      console.error('Get metadata error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create/Update page metadata (Admin only - AI agents use internal methods)
+  app.post('/api/seo/metadata', async (req: any, res) => {
+    try {
+      const userId = req.session?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized - Admin only' });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { seoService } = await import('./services/seoService');
+      const { aiReasoning, ...metadataData } = req.body;
+
+      const metadata = await seoService.createOrUpdateMetadata(
+        metadataData,
+        'admin',
+        aiReasoning
+      );
+
+      res.json(metadata);
+    } catch (error: any) {
+      console.error('Create/update metadata error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Approve metadata (VisualAI or Admin)
+  app.post('/api/seo/approve/:id', async (req: any, res) => {
+    try {
+      const userId = req.session?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const performedBy = user.profileType === 'admin' ? 'admin' : 'visualai';
+      const { seoService } = await import('./services/seoService');
+
+      await seoService.approveMetadata(req.params.id, performedBy);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Approve metadata error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get generation logs
+  app.get('/api/seo/logs', async (req: any, res) => {
+    try {
+      const userId = req.session?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { metadataId, limit } = req.query;
+      const { seoService } = await import('./services/seoService');
+
+      const logs = await seoService.getGenerationLogs(
+        metadataId,
+        limit ? parseInt(limit as string) : 50
+      );
+
+      res.json(logs);
+    } catch (error: any) {
+      console.error('Get logs error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Auto-generate metadata for project (VisualScoutAI)
+  app.post('/api/seo/generate/project/:projectId', async (req: any, res) => {
+    try {
+      const { projectId } = req.params;
+      const { locale } = req.query;
+      const { seoService } = await import('./services/seoService');
+
+      const metadata = await seoService.generateMetadataForProject(
+        projectId,
+        (locale as string) || 'fr'
+      );
+
+      res.json(metadata);
+    } catch (error: any) {
+      console.error('Generate project metadata error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Auto-generate homepage metadata (VisualScoutAI)
+  app.post('/api/seo/generate/home', async (req: any, res) => {
+    try {
+      const { locale } = req.query;
+      const { seoService } = await import('./services/seoService');
+
+      const metadata = await seoService.generateHomePageMetadata(
+        (locale as string) || 'fr'
+      );
+
+      res.json(metadata);
+    } catch (error: any) {
+      console.error('Generate home metadata error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get('/api/platform/theme-override', async (req: any, res) => {
     try {
       const override = await storage.getPlatformSetting('theme_override');

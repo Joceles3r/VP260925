@@ -3426,3 +3426,147 @@ export type TcScore = typeof tcScores.$inferSelect;
 export type TcCampaign = typeof tcCampaigns.$inferSelect;
 export type TcCreative = typeof tcCreatives.$inferSelect;
 export type TcConsentLead = typeof tcConsentLeads.$inferSelect;
+
+// ===== SEO MODULE =====
+// Managed by VisualScoutAI under VisualAI supervision, Admin has full control
+
+// SEO page type enum
+export const seoPageTypeEnum = pgEnum('seo_page_type', [
+  'home',
+  'project',
+  'projects_list',
+  'live_show',
+  'about',
+  'blog',
+  'social_post',
+  'custom'
+]);
+
+// SEO generation status enum
+export const seoStatusEnum = pgEnum('seo_status', ['draft', 'active', 'archived', 'ai_generated', 'admin_override']);
+
+// Global SEO configuration table (managed by Admin, suggested by VisualScoutAI)
+export const seoConfig = pgTable("seo_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteName: varchar("site_name", { length: 100 }).notNull().default('VISUAL'),
+  siteUrl: varchar("site_url", { length: 255 }).notNull().default('https://visual-platform.replit.app'),
+  defaultLocale: varchar("default_locale", { length: 5 }).notNull().default('fr'),
+  supportedLocales: text("supported_locales").array().notNull().default(sql`ARRAY['fr', 'en', 'es']`),
+  ogImageDefault: varchar("og_image_default", { length: 500 }),
+  twitterHandle: varchar("twitter_handle", { length: 50 }),
+  organizationSchema: jsonb("organization_schema"), // Schema.org Organization markup
+  enableSitemap: boolean("enable_sitemap").default(true),
+  enableRobotsTxt: boolean("enable_robots_txt").default(true),
+  aiGenerationEnabled: boolean("ai_generation_enabled").default(true), // VisualScoutAI auto-generation
+  visualAIOverride: boolean("visual_ai_override").default(false), // VisualAI can override VisualScoutAI
+  adminOverrideAll: boolean("admin_override_all").default(true), // Admin always wins
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Page-specific metadata table (managed by VisualScoutAI, overridable by Admin)
+export const pageMetadata = pgTable("page_metadata", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pageType: seoPageTypeEnum("page_type").notNull(),
+  pageSlug: varchar("page_slug", { length: 255 }).notNull(), // e.g., "/projects/123", "/live-show"
+  locale: varchar("locale", { length: 5 }).notNull().default('fr'),
+  
+  // SEO Meta Tags
+  title: varchar("title", { length: 160 }).notNull(),
+  description: text("description").notNull(),
+  keywords: text("keywords").array(),
+  canonicalUrl: varchar("canonical_url", { length: 500 }),
+  
+  // Open Graph Tags
+  ogTitle: varchar("og_title", { length: 160 }),
+  ogDescription: text("og_description"),
+  ogImage: varchar("og_image", { length: 500 }),
+  ogType: varchar("og_type", { length: 50 }).default('website'),
+  
+  // Twitter Card Tags
+  twitterCard: varchar("twitter_card", { length: 50 }).default('summary_large_image'),
+  twitterTitle: varchar("twitter_title", { length: 160 }),
+  twitterDescription: text("twitter_description"),
+  twitterImage: varchar("twitter_image", { length: 500 }),
+  
+  // Schema.org structured data
+  schemaMarkup: jsonb("schema_markup"),
+  
+  // Management
+  status: seoStatusEnum("status").notNull().default('draft'),
+  generatedBy: varchar("generated_by", { length: 50 }), // 'admin', 'visualscoutai', 'visualai', 'manual'
+  adminApproved: boolean("admin_approved").default(false),
+  visualAIApproved: boolean("visual_ai_approved").default(false),
+  
+  // Metrics
+  viewCount: integer("view_count").default(0),
+  clickRate: decimal("click_rate", { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_page_metadata_slug").on(table.pageSlug),
+  index("idx_page_metadata_type").on(table.pageType),
+  index("idx_page_metadata_locale").on(table.locale),
+  index("idx_page_metadata_status").on(table.status),
+  unique("unique_page_locale").on(table.pageSlug, table.locale),
+]);
+
+// SEO generation logs (VisualScoutAI activity tracking)
+export const seoGenerationLogs = pgTable("seo_generation_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pageMetadataId: varchar("page_metadata_id").references(() => pageMetadata.id, { onDelete: 'cascade' }),
+  action: varchar("action", { length: 50 }).notNull(), // 'generated', 'updated', 'approved', 'rejected'
+  performedBy: varchar("performed_by", { length: 50 }).notNull(), // 'visualscoutai', 'visualai', 'admin'
+  previousData: jsonb("previous_data"),
+  newData: jsonb("new_data"),
+  aiReasoning: text("ai_reasoning"), // Why VisualScoutAI made this decision
+  approvalStatus: varchar("approval_status", { length: 50 }).default('pending'),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_seo_logs_page").on(table.pageMetadataId),
+  index("idx_seo_logs_action").on(table.action),
+  index("idx_seo_logs_performer").on(table.performedBy),
+]);
+
+// ===== RELATIONS SEO =====
+
+export const pageMetadataRelations = relations(pageMetadata, ({ many }) => ({
+  generationLogs: many(seoGenerationLogs),
+}));
+
+export const seoGenerationLogsRelations = relations(seoGenerationLogs, ({ one }) => ({
+  pageMetadata: one(pageMetadata, {
+    fields: [seoGenerationLogs.pageMetadataId],
+    references: [pageMetadata.id],
+  }),
+}));
+
+// ===== SCHÉMAS D'INSERTION SEO =====
+
+export const insertSeoConfigSchema = createInsertSchema(seoConfig).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPageMetadataSchema = createInsertSchema(pageMetadata).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSeoGenerationLogSchema = createInsertSchema(seoGenerationLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ===== TYPES SEO =====
+
+export type InsertSeoConfig = z.infer<typeof insertSeoConfigSchema>;
+export type InsertPageMetadata = z.infer<typeof insertPageMetadataSchema>;
+export type InsertSeoGenerationLog = z.infer<typeof insertSeoGenerationLogSchema>;
+
+export type SeoConfig = typeof seoConfig.$inferSelect;
+export type PageMetadata = typeof pageMetadata.$inferSelect;
+export type SeoGenerationLog = typeof seoGenerationLogs.$inferSelect;

@@ -27,6 +27,7 @@ The platform uses a Neon Design System with a dark theme, signature colors (#00D
 - **Live Show Weekly Battle System**: Complete 3-phase candidate selection with Friday live battles, investment tranches, Stripe integration for secure payments (Elements, 3DS, webhooks), real-time scoreboard via WebSockets, and defined distribution rules.
 - **Internationalization (i18n)**: Trilingual support (FR/EN/ES) with dynamic language switching, user preference persistence (localStorage + database), LanguageSelector component in Navigation, and translated UI across the platform.
 - **Full-Text Search**: PostgreSQL native full-text search using `plainto_tsquery` with multi-language support (french/english/spanish), SearchBar component with real-time suggestions, keyboard shortcuts (Cmd/Ctrl+K), secure wildcard escaping, and graceful error handling.
+- **SEO Module**: Comprehensive SEO system managed by VisualScoutAI under VisualAI supervision with Admin control. Features: sitemap XML generation with hreflang (FR/EN/ES), dynamic meta tags (title, description, OG, Twitter Cards), Schema.org markup, auto-generation for projects/pages, Admin UI for approval/override, generation logs with AI reasoning tracking, and hierarchical approval workflow (Admin > VisualAI > VisualScoutAI).
 
 ### System Design Choices
 - **Modularity**: Co-located components and organized imports for maintainability.

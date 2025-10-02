@@ -349,6 +349,52 @@ class VisualScoutAIService {
       suggestedBudget: Math.max(50000, Math.min(500000, Math.round(avgScore * 5000))),
     };
   }
+
+  async generateSEOForNewProject(projectId: string, locale: string = 'fr'): Promise<void> {
+    try {
+      const { seoService } = await import('./seoService');
+      await seoService.generateMetadataForProject(projectId, locale);
+      
+      logger.info('[VisualScoutAI] SEO metadata generated for project', {
+        projectId,
+        locale,
+      });
+    } catch (error) {
+      logger.error('[VisualScoutAI] Failed to generate SEO for project', error, {
+        projectId,
+        locale,
+      });
+    }
+  }
+
+  async autoGenerateSEOForAllLocales(pageSlug: string, pageType: 'home' | 'project', projectId?: string): Promise<void> {
+    const locales = this.config.locales.map(l => l.split('-')[0]);
+    
+    for (const locale of locales) {
+      try {
+        const { seoService } = await import('./seoService');
+        
+        if (pageType === 'home') {
+          await seoService.generateHomePageMetadata(locale);
+        } else if (pageType === 'project' && projectId) {
+          await seoService.generateMetadataForProject(projectId, locale);
+        }
+        
+        logger.info('[VisualScoutAI] SEO auto-generated', {
+          pageSlug,
+          locale,
+          pageType,
+          projectId,
+        });
+      } catch (error) {
+        logger.error('[VisualScoutAI] SEO auto-generation failed', error, {
+          pageSlug,
+          locale,
+          projectId,
+        });
+      }
+    }
+  }
 }
 
 export const visualScoutAI = new VisualScoutAIService();
