@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import NotificationPanel from './NotificationPanel';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSelector } from './LanguageSelector';
+import { SearchBar } from './SearchBar';
 
 export default function Navigation() {
   const [location] = useLocation();
@@ -40,6 +41,11 @@ export default function Navigation() {
                 <span className="ml-3 text-xl font-bold visual-text-gradient">VISUAL</span>
               </Link>
             </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="hidden md:flex flex-1 max-w-lg mx-8">
+            <SearchBar />
           </div>
 
           {/* Navigation Links */}

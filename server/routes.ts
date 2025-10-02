@@ -2455,6 +2455,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Search routes
+  app.get('/api/search', async (req: any, res) => {
+    try {
+      const { q, type, category, language, limit, offset } = req.query;
+
+      if (!q || typeof q !== 'string' || q.trim().length < 2) {
+        return res.status(400).json({ error: 'Query must be at least 2 characters', results: [], count: 0 });
+      }
+
+      const { searchService } = await import('./services/searchService');
+      
+      const results = await searchService.search({
+        query: q,
+        type: type as any,
+        category,
+        language: language as any || 'fr',
+        limit: limit ? parseInt(limit) : 20,
+        offset: offset ? parseInt(offset) : 0,
+      });
+
+      res.json({ results, count: results.length });
+    } catch (error: any) {
+      console.error('Search error:', error);
+      res.status(400).json({ 
+        error: error.message || 'Search query failed. Please try different search terms.',
+        results: [],
+        count: 0
+      });
+    }
+  });
+
+  app.get('/api/search/suggestions', async (req: any, res) => {
+    try {
+      const { q, language, limit } = req.query;
+
+      if (!q || typeof q !== 'string' || q.trim().length < 2) {
+        return res.json({ suggestions: [] });
+      }
+
+      const { searchService } = await import('./services/searchService');
+      
+      const suggestions = await searchService.getSuggestions(
+        q,
+        language as string || 'fr',
+        limit ? parseInt(limit) : 5
+      );
+
+      res.json({ suggestions });
+    } catch (error: any) {
+      console.error('Search suggestions error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get('/api/platform/theme-override', async (req: any, res) => {
     try {
       const override = await storage.getPlatformSetting('theme_override');
