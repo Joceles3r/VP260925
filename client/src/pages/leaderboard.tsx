@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, TrendingUp, Calendar, Share2, Download, BarChart3, History, Medal, Crown } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import { useI18n } from '@/hooks/useI18n';
+import { useI18n } from '@/lib/i18n';
 
 export default function LeaderboardPage() {
   const { t } = useI18n();
