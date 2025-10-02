@@ -102,6 +102,9 @@ export interface TranslationKeys {
   'auth.backup_code': string;
   'auth.enable_2fa': string;
   'auth.disable_2fa': string;
+  'auth.remember_me': string;
+  'auth.remember_me_description': string;
+  'auth.session_info': string;
 
   // Notifications
   'notification.investment_success': string;
@@ -242,6 +245,9 @@ const translations_fr: TranslationKeys = {
   'auth.backup_code': 'Code de secours',
   'auth.enable_2fa': 'Activer 2FA',
   'auth.disable_2fa': 'Désactiver 2FA',
+  'auth.remember_me': 'Se souvenir de moi (7 jours)',
+  'auth.remember_me_description': 'Cochez cette option sur un appareil de confiance. Décochez sur un ordinateur public.',
+  'auth.session_info': 'Session sécurisée par Replit Auth',
 
   // Notifications
   'notification.investment_success': 'Investissement réalisé avec succès !',
@@ -382,6 +388,9 @@ const translations_en: TranslationKeys = {
   'auth.backup_code': 'Backup code',
   'auth.enable_2fa': 'Enable 2FA',
   'auth.disable_2fa': 'Disable 2FA',
+  'auth.remember_me': 'Remember me (7 days)',
+  'auth.remember_me_description': 'Check this on a trusted device. Uncheck on a public computer.',
+  'auth.session_info': 'Session secured by Replit Auth',
 
   // Notifications
   'notification.investment_success': 'Investment successful!',
@@ -522,6 +531,9 @@ const translations_es: TranslationKeys = {
   'auth.backup_code': 'Código de respaldo',
   'auth.enable_2fa': 'Activar 2FA',
   'auth.disable_2fa': 'Desactivar 2FA',
+  'auth.remember_me': 'Recuérdame (7 días)',
+  'auth.remember_me_description': 'Marque esta opción en un dispositivo de confianza. Desmarque en una computadora pública.',
+  'auth.session_info': 'Sesión asegurada por Replit Auth',
 
   // Notifications
   'notification.investment_success': '¡Inversión realizada con éxito!',

@@ -18,10 +18,10 @@ export default function Landing() {
             
             <div className="flex items-center space-x-4">
               <Button variant="outline" asChild data-testid="login-button">
-                <a href="/api/login">Se connecter</a>
+                <a href="/login">Se connecter</a>
               </Button>
               <Button asChild data-testid="signup-button">
-                <a href="/api/login">S'inscrire</a>
+                <a href="/login">S'inscrire</a>
               </Button>
             </div>
           </div>
@@ -43,7 +43,7 @@ export default function Landing() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
             <Button size="lg" className="text-lg px-8 py-4" asChild data-testid="cta-primary">
-              <a href="/api/login">
+              <a href="/login">
                 Commencer maintenant
                 <ArrowRight className="ml-2 h-5 w-5" />
               </a>
@@ -173,7 +173,7 @@ export default function Landing() {
             Rejoignez la communauté VISUAL et commencez à soutenir la création audiovisuelle dès aujourd'hui.
           </p>
           <Button size="lg" variant="secondary" className="text-lg px-8 py-4" asChild data-testid="final-cta-button">
-            <a href="/api/login">
+            <a href="/login">
               S'inscrire maintenant
               <ArrowRight className="ml-2 h-5 w-5" />
             </a>

@@ -9,6 +9,7 @@ import CuriosityDock from "@/components/CuriosityDock";
 
 // Pages
 import Landing from "@/pages/landing";
+import LoginPage from "@/pages/login";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
@@ -48,6 +49,7 @@ function Router() {
           <>
             <Route path="/" component={Landing} />
             <Route path="/landing" component={Landing} />
+            <Route path="/login" component={LoginPage} />
             <Route path="/visual" component={VisualPage} />
             <Route path="/info" component={InfoPage} />
             <Route path="/accessibility" component={AccessibilityPage} />

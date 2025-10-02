@@ -103,6 +103,12 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
+    const rememberMe = req.query.rememberMe === '1';
+    
+    if (req.session) {
+      (req.session as any).rememberMe = rememberMe;
+    }
+    
     passport.authenticate(`replitauth:${req.hostname}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
@@ -110,9 +116,31 @@ export async function setupAuth(app: Express) {
   });
 
   app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
+    passport.authenticate(`replitauth:${req.hostname}`, (err: any, user: any) => {
+      if (err || !user) {
+        return res.redirect("/login");
+      }
+      
+      req.logIn(user, (loginErr: any) => {
+        if (loginErr) {
+          return res.redirect("/login");
+        }
+        
+        const rememberMe = (req.session as any).rememberMe;
+        
+        if (rememberMe) {
+          if (req.session.cookie) {
+            req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000;
+          }
+        } else {
+          if (req.session.cookie) {
+            req.session.cookie.expires = undefined;
+            req.session.cookie.maxAge = undefined;
+          }
+        }
+        
+        res.redirect("/");
+      });
     })(req, res, next);
   });
 
