@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { hasProfile } from "@shared/utils";
 import AdminLayout from "../layout/AdminLayout";
 import { CategoryTogglesCard } from "../ui/CategoryTogglesCard";
 import { ProfileModulesCard } from "../ui/ProfileModulesCard";
@@ -36,7 +37,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    if (!isLoading && isAuthenticated && user?.profileType !== 'admin') {
+    if (!isLoading && isAuthenticated && !hasProfile(user?.profileTypes, 'admin')) {
       toast({
         title: "Accès refusé",
         description: "Privilèges administrateur requis",
@@ -50,7 +51,7 @@ export default function AdminDashboard() {
   }, [isAuthenticated, isLoading, user, toast]);
   
   useEffect(() => {
-    if (isAuthenticated && user?.profileType === 'admin') {
+    if (isAuthenticated && hasProfile(user?.profileTypes, 'admin')) {
       getJSON("/api/admin/overview").then(setOverview).catch(() => {});
     }
   }, [isAuthenticated, user]);
@@ -63,7 +64,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!isAuthenticated || user?.profileType !== 'admin') {
+  if (!isAuthenticated || !hasProfile(user?.profileTypes, 'admin')) {
     return null;
   }
 

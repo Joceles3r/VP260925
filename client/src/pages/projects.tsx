@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ProjectCard from '@/components/ProjectCard';
 import InvestmentModal from '@/components/InvestmentModal';
 import VideoDepositModal from '@/components/VideoDepositModal';
+import CreateProjectModal from '@/components/CreateProjectModal';
 import { FeatureToggle } from '@/components/FeatureToggle';
 import { useAuth } from '@/hooks/useAuth';
 import { useTogglesByKind, useFeatureToggles } from '@/hooks/useFeatureToggles';
 import { useErrorLogger } from '@/lib/errorLogger';
+import { hasProfile } from '@shared/utils';
 import type { Project } from '@shared/schema';
 
 export default function Projects() {
@@ -19,6 +21,7 @@ export default function Projects() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isInvestmentModalOpen, setIsInvestmentModalOpen] = useState(false);
   const [isVideoDepositModalOpen, setIsVideoDepositModalOpen] = useState(false);
+  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   
   const { user } = useAuth();
   const { toggles: categoryToggles, isLoading: isLoadingToggles } = useTogglesByKind('category');
@@ -207,6 +210,16 @@ export default function Projects() {
           
           {/* Search and Filter Controls */}
           <div className="flex items-center space-x-3">
+            {user && hasProfile(user.profileTypes, 'creator') && (
+              <Button 
+                onClick={() => setIsCreateProjectModalOpen(true)}
+                className="bg-gradient-to-r from-[#00D1FF] to-[#7B2CFF] hover:opacity-90"
+                data-testid="create-project"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Créer un projet
+              </Button>
+            )}
             <div className="flex items-center space-x-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#00D1FF]" />
@@ -467,6 +480,16 @@ export default function Projects() {
           }}
         />
       )}
+      
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateProjectModalOpen}
+        onClose={() => setIsCreateProjectModalOpen(false)}
+        onSuccess={() => {
+          refetch();
+          setIsCreateProjectModalOpen(false);
+        }}
+      />
       </div>
     </main>
   );

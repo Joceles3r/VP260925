@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { hasProfile } from '@shared/utils';
 import AdminPanel from '@/components/AdminPanel';
 
 export default function Admin() {
@@ -21,7 +22,7 @@ export default function Admin() {
       return;
     }
 
-    if (!isLoading && isAuthenticated && user?.profileType !== 'admin') {
+    if (!isLoading && isAuthenticated && !hasProfile(user?.profileTypes, 'admin')) {
       toast({
         title: "Access Denied",
         description: "Admin privileges required to access this page",
@@ -42,7 +43,7 @@ export default function Admin() {
     );
   }
 
-  if (!isAuthenticated || user?.profileType !== 'admin') {
+  if (!isAuthenticated || !hasProfile(user?.profileTypes, 'admin')) {
     return null;
   }
 
