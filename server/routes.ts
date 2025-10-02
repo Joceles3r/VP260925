@@ -857,6 +857,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Profile management routes
+  app.get('/api/user/profiles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({ profileTypes: user.profileTypes });
+    } catch (error) {
+      console.error("Error fetching user profiles:", error);
+      res.status(500).json({ message: "Failed to fetch profiles" });
+    }
+  });
+
+  app.patch('/api/user/profiles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { profileTypes } = req.body;
+      
+      if (!profileTypes || !Array.isArray(profileTypes) || profileTypes.length === 0) {
+        return res.status(400).json({ 
+          message: "Invalid profile types. Must provide at least one profile type." 
+        });
+      }
+      
+      // Get current user to check authorization
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const validProfileTypes = ['investor', 'invested_reader', 'creator', 'admin', 'infoporteur'];
+      const invalidProfiles = profileTypes.filter((p: string) => !validProfileTypes.includes(p));
+      
+      if (invalidProfiles.length > 0) {
+        return res.status(400).json({ 
+          message: `Invalid profile types: ${invalidProfiles.join(', ')}` 
+        });
+      }
+      
+      // SECURITY: Restricted profiles can only be assigned by admins
+      const restrictedProfiles = ['admin', 'infoporteur'];
+      const requestedRestrictedProfiles = profileTypes.filter((p: string) => restrictedProfiles.includes(p));
+      const currentRestrictedProfiles = currentUser.profileTypes.filter((p: string) => restrictedProfiles.includes(p));
+      
+      // Check if user is trying to add restricted profiles they don't already have
+      const newRestrictedProfiles = requestedRestrictedProfiles.filter(
+        (p: string) => !currentRestrictedProfiles.includes(p)
+      );
+      
+      // Only admins can add restricted profiles
+      if (newRestrictedProfiles.length > 0 && !currentUser.profileTypes.includes('admin')) {
+        return res.status(403).json({ 
+          message: "Only administrators can assign admin or infoporteur profiles. Please contact an administrator." 
+        });
+      }
+      
+      // Prevent non-admins from removing their last non-restricted profile if they have restricted ones
+      // This ensures admins can't accidentally lock themselves out
+      const nonRestrictedProfiles = profileTypes.filter((p: string) => !restrictedProfiles.includes(p));
+      if (currentRestrictedProfiles.length > 0 && nonRestrictedProfiles.length === 0) {
+        return res.status(400).json({ 
+          message: "You must have at least one regular profile (investor, invested_reader, or creator)." 
+        });
+      }
+      
+      const updatedUser = await storage.updateUserProfiles(userId, profileTypes);
+      res.json({ profileTypes: updatedUser.profileTypes });
+    } catch (error) {
+      console.error("Error updating user profiles:", error);
+      res.status(500).json({ message: "Failed to update profiles" });
+    }
+  });
+
   // Project routes
   app.get('/api/projects', async (req, res) => {
     try {
@@ -1170,6 +1247,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Insufficient balance" });
       }
 
+      // Prevent self-investment: check if user is the creator of the project
+      const project = await storage.getProject(req.body.projectId);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      if (project.creatorId === userId) {
+        return res.status(403).json({ 
+          message: "You cannot invest in your own project. Self-investment is not allowed." 
+        });
+      }
+
       const investment = await storage.createInvestment(investmentData);
 
       // Create transaction record
@@ -1211,8 +1300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: amount.toString()
       });
 
-      // Check for milestone notifications
-      const project = await storage.getProject(req.body.projectId);
+      // Check for milestone notifications (reuse project from self-investment check)
       if (project) {
         const currentAmount = parseFloat(project.currentAmount || '0') + amount;
         const targetAmount = parseFloat(project.targetAmount);
@@ -5539,6 +5627,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingPurchase = await storage.getBookPurchaseByUserAndBook(userId, bookId);
       if (existingPurchase) {
         return res.status(409).json({ message: "Book already purchased" });
+      }
+
+      // Prevent self-investment: check if user is the author of the book
+      const book = await storage.getBook(bookId);
+      if (!book) {
+        return res.status(404).json({ message: "Book not found" });
+      }
+      
+      if (book.authorId === userId) {
+        return res.status(403).json({ 
+          message: "You cannot invest in your own book. Self-investment is not allowed." 
+        });
       }
 
       // Calculate votes from amount

@@ -63,7 +63,7 @@ async function upsertUser(
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
-    profileType: claims["profile_type"] || 'investor',
+    profileTypes: claims["profile_types"] ? (Array.isArray(claims["profile_types"]) ? claims["profile_types"] : [claims["profile_types"]]) : ['investor'],
   });
 }
 

@@ -1245,8 +1245,54 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(users)
-      .where(eq(users.profileType, role))
+      .where(sql`${users.profileTypes} @> ARRAY[${role}]::profile_type[]`)
       .orderBy(desc(users.createdAt));
+  }
+
+  async updateUserProfiles(userId: string, profileTypes: ('investor' | 'invested_reader' | 'creator' | 'admin' | 'infoporteur')[]): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ profileTypes, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async addUserProfile(userId: string, profileType: 'investor' | 'invested_reader' | 'creator' | 'admin' | 'infoporteur'): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    if (user.profileTypes.includes(profileType)) {
+      return user;
+    }
+    
+    const newProfiles = [...user.profileTypes, profileType];
+    return await this.updateUserProfiles(userId, newProfiles);
+  }
+
+  async removeUserProfile(userId: string, profileType: 'investor' | 'invested_reader' | 'creator' | 'admin' | 'infoporteur'): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const newProfiles = user.profileTypes.filter((p: string) => p !== profileType);
+    
+    if (newProfiles.length === 0) {
+      throw new Error('Cannot remove all profiles. User must have at least one profile.');
+    }
+    
+    return await this.updateUserProfiles(userId, newProfiles);
+  }
+
+  async hasUserProfile(userId: string, profileType: 'investor' | 'invested_reader' | 'creator' | 'admin' | 'infoporteur'): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return false;
+    }
+    return user.profileTypes.includes(profileType);
   }
 
   async getUserStats(): Promise<{ totalUsers: number; activeUsers: number; kycPending: number }> {

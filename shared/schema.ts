@@ -222,7 +222,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  profileType: profileTypeEnum("profile_type").default('investor'),
+  profileTypes: profileTypeEnum("profile_types").array().notNull().default(sql`ARRAY['investor']::profile_type[]`),
   kycVerified: boolean("kyc_verified").default(false),
   kycDocuments: jsonb("kyc_documents"),
   balanceEUR: decimal("balance_eur", { precision: 10, scale: 2 }).default('10000.00'), // Simulation mode starts with €10,000
