@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import Navigation from "@/components/Navigation";
 import CuriosityDock from "@/components/CuriosityDock";
+import { AudioJingle } from "@/components/AudioJingle";
 
 // Pages
 import Landing from "@/pages/landing";
@@ -91,6 +92,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <AudioJingle />
         <Toaster />
         <Router />
       </TooltipProvider>
