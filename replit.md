@@ -25,6 +25,8 @@ The platform uses a Neon Design System with a dark theme, signature colors (#00D
 - **Dark/Light Theme System**: User-customizable theme with global state management (Zustand), persistence priority (Admin override > User DB preference > localStorage > System), database storage, and admin override capability.
 - **Live Show Management**: Admin UI for managing weekly Live Shows, automated orchestration, database schema for finalists/alternates/notifications/audit, API routes, smart cache invalidation (TanStack Query v5), replacement logic, and OIDC admin authentication.
 - **Live Show Weekly Battle System**: Complete 3-phase candidate selection with Friday live battles, investment tranches, Stripe integration for secure payments (Elements, 3DS, webhooks), real-time scoreboard via WebSockets, and defined distribution rules.
+- **Internationalization (i18n)**: Trilingual support (FR/EN/ES) with dynamic language switching, user preference persistence (localStorage + database), LanguageSelector component in Navigation, and translated UI across the platform.
+- **Full-Text Search**: PostgreSQL native full-text search using `plainto_tsquery` with multi-language support (french/english/spanish), SearchBar component with real-time suggestions, keyboard shortcuts (Cmd/Ctrl+K), secure wildcard escaping, and graceful error handling.
 
 ### System Design Choices
 - **Modularity**: Co-located components and organized imports for maintainability.
