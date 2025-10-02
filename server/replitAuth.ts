@@ -105,6 +105,8 @@ export async function setupAuth(app: Express) {
   app.get("/api/login", (req, res, next) => {
     const rememberMe = req.query.rememberMe === '1';
     
+    console.log(`[Auth] Login request received - rememberMe: ${rememberMe ? 'YES (7 days)' : 'NO (session)'}`);
+    
     if (req.session) {
       (req.session as any).rememberMe = rememberMe;
     }
@@ -118,11 +120,13 @@ export async function setupAuth(app: Express) {
   app.get("/api/callback", (req, res, next) => {
     passport.authenticate(`replitauth:${req.hostname}`, (err: any, user: any) => {
       if (err || !user) {
+        console.log('[Auth] Callback failed - redirecting to login');
         return res.redirect("/login");
       }
       
       req.logIn(user, (loginErr: any) => {
         if (loginErr) {
+          console.log('[Auth] Login error - redirecting to login');
           return res.redirect("/login");
         }
         
@@ -132,11 +136,13 @@ export async function setupAuth(app: Express) {
           if (req.session.cookie) {
             req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000;
           }
+          console.log('[Auth] Session configured - Duration: 7 days (Remember Me: YES)');
         } else {
           if (req.session.cookie) {
             req.session.cookie.expires = undefined;
             req.session.cookie.maxAge = undefined;
           }
+          console.log('[Auth] Session configured - Duration: Browser session (Remember Me: NO)');
         }
         
         res.redirect("/");

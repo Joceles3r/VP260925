@@ -14,7 +14,7 @@ The platform uses a Neon Design System with a dark theme, signature colors (#00D
 
 ### Technical Implementations
 - **Full-Stack TypeScript**: React with Vite (frontend), Express.js (backend), shared TypeScript types.
-- **Authentication**: Replit Auth with OpenID Connect, session-based authentication using `connect-pg-simple`, role-based access (Admin/Investor/Creator), and KYC verification.
+- **Authentication**: Replit Auth with OpenID Connect, session-based authentication using `connect-pg-simple`, role-based access (Admin/Investor/Creator), KYC verification, and "Remember me" option for session persistence (browser session vs 7-day session). Login page at `/login` with full i18n support (FR/EN/ES) provides security warnings for trusted vs public devices.
 - **Database**: PostgreSQL with Neon serverless connection pooling, Drizzle ORM, and Drizzle Kit for migrations.
 - **Frontend**: React with Wouter (routing), Zustand (state management), TanStack Query (data fetching), Radix UI with Tailwind CSS.
 - **API Design**: RESTful Express routes, Multer for file uploads, centralized error handling, and robust middleware.

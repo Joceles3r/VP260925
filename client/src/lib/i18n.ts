@@ -105,6 +105,15 @@ export interface TranslationKeys {
   'auth.remember_me': string;
   'auth.remember_me_description': string;
   'auth.session_info': string;
+  'auth.session_7days': string;
+  'auth.session_short': string;
+  'auth.secure_platform': string;
+  'auth.security_details': string;
+  'auth.terms_accept_prefix': string;
+  'auth.terms_accept_connector': string;
+  'auth.terms_link': string;
+  'auth.privacy_link': string;
+  'auth.back_home': string;
 
   // Notifications
   'notification.investment_success': string;
@@ -248,6 +257,15 @@ const translations_fr: TranslationKeys = {
   'auth.remember_me': 'Se souvenir de moi (7 jours)',
   'auth.remember_me_description': 'Cochez cette option sur un appareil de confiance. Décochez sur un ordinateur public.',
   'auth.session_info': 'Session sécurisée par Replit Auth',
+  'auth.session_7days': 'Session de 7 jours (recommandé pour appareils personnels)',
+  'auth.session_short': 'Session courte - Déconnexion à la fermeture du navigateur (recommandé pour ordinateurs publics)',
+  'auth.secure_platform': 'Plateforme sécurisée',
+  'auth.security_details': 'Connexion via Replit Auth avec chiffrement SSL/TLS. Vos données financières sont protégées selon les normes AMF/ACPR.',
+  'auth.terms_accept_prefix': 'En vous connectant, vous acceptez nos',
+  'auth.terms_accept_connector': 'et notre',
+  'auth.terms_link': 'CGU',
+  'auth.privacy_link': 'Politique de confidentialité',
+  'auth.back_home': '← Retour à l\'accueil',
 
   // Notifications
   'notification.investment_success': 'Investissement réalisé avec succès !',
@@ -391,6 +409,15 @@ const translations_en: TranslationKeys = {
   'auth.remember_me': 'Remember me (7 days)',
   'auth.remember_me_description': 'Check this on a trusted device. Uncheck on a public computer.',
   'auth.session_info': 'Session secured by Replit Auth',
+  'auth.session_7days': '7-day session (recommended for personal devices)',
+  'auth.session_short': 'Short session - Logout on browser close (recommended for public computers)',
+  'auth.secure_platform': 'Secure Platform',
+  'auth.security_details': 'Login via Replit Auth with SSL/TLS encryption. Your financial data is protected according to AMF/ACPR standards.',
+  'auth.terms_accept_prefix': 'By logging in, you accept our',
+  'auth.terms_accept_connector': 'and our',
+  'auth.terms_link': 'Terms of Use',
+  'auth.privacy_link': 'Privacy Policy',
+  'auth.back_home': '← Back to home',
 
   // Notifications
   'notification.investment_success': 'Investment successful!',
@@ -534,6 +561,15 @@ const translations_es: TranslationKeys = {
   'auth.remember_me': 'Recuérdame (7 días)',
   'auth.remember_me_description': 'Marque esta opción en un dispositivo de confianza. Desmarque en una computadora pública.',
   'auth.session_info': 'Sesión asegurada por Replit Auth',
+  'auth.session_7days': 'Sesión de 7 días (recomendado para dispositivos personales)',
+  'auth.session_short': 'Sesión corta - Cierre de sesión al cerrar el navegador (recomendado para computadoras públicas)',
+  'auth.secure_platform': 'Plataforma segura',
+  'auth.security_details': 'Inicio de sesión a través de Replit Auth con cifrado SSL/TLS. Sus datos financieros están protegidos según los estándares AMF/ACPR.',
+  'auth.terms_accept_prefix': 'Al iniciar sesión, acepta nuestros',
+  'auth.terms_accept_connector': 'y nuestra',
+  'auth.terms_link': 'Términos de uso',
+  'auth.privacy_link': 'Política de privacidad',
+  'auth.back_home': '← Volver al inicio',
 
   // Notifications
   'notification.investment_success': '¡Inversión realizada con éxito!',

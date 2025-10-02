@@ -45,9 +45,9 @@ export default function LoginPage() {
             <div className="flex items-start space-x-3">
               <Shield className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <div className="text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-1">Plateforme sécurisée</p>
+                <p className="font-medium text-foreground mb-1">{t('auth.secure_platform')}</p>
                 <p className="text-xs">
-                  Connexion via Replit Auth avec chiffrement SSL/TLS. Vos données financières sont protégées selon les normes AMF/ACPR.
+                  {t('auth.security_details')}
                 </p>
               </div>
             </div>
@@ -79,11 +79,11 @@ export default function LoginPage() {
 
             {/* Info contextuelle */}
             <div className="text-xs text-muted-foreground space-y-1 px-1">
-              <p className="flex items-center">
+              <p className="flex items-center" data-testid="session-duration-info">
                 <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
                 {rememberMe 
-                  ? "Session de 7 jours (recommandé pour appareils personnels)"
-                  : "Session courte - Déconnexion à la fermeture du navigateur (recommandé pour ordinateurs publics)"
+                  ? t('auth.session_7days')
+                  : t('auth.session_short')
                 }
               </p>
             </div>
@@ -102,10 +102,10 @@ export default function LoginPage() {
           {/* Footer */}
           <div className="text-center text-xs text-muted-foreground pt-4 border-t border-border">
             <p>
-              En vous connectant, vous acceptez nos{' '}
-              <a href="/info" className="text-primary hover:underline">CGU</a>
-              {' '}et notre{' '}
-              <a href="/info" className="text-primary hover:underline">Politique de confidentialité</a>
+              {t('auth.terms_accept_prefix')}{' '}
+              <a href="/info" className="text-primary hover:underline">{t('auth.terms_link')}</a>
+              {' '}{t('auth.terms_accept_connector')}{' '}
+              <a href="/info" className="text-primary hover:underline">{t('auth.privacy_link')}</a>
             </p>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function LoginPage() {
         {/* Lien retour */}
         <div className="text-center mt-6">
           <a href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            ← Retour à l'accueil
+            {t('auth.back_home')}
           </a>
         </div>
       </div>
