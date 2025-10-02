@@ -28,6 +28,7 @@ import InfoPage from "@/pages/info";
 import LeaderboardPage from "@/pages/leaderboard";
 import AccessibilityPage from "@/pages/accessibility";
 import ProfilePage from "@/pages/profile";
+import SettingsPage from "@/pages/settings";
 import CreatorVideosPage from "@/pages/creator-videos";
 import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/admin/pages/AdminDashboard";
@@ -76,6 +77,7 @@ function Router() {
             <Route path="/fidelity" component={FidelityPage} />
             <Route path="/leaderboard" component={LeaderboardPage} />
             <Route path="/profile" component={ProfilePage} />
+            <Route path="/settings" component={SettingsPage} />
             <Route path="/creator/videos" component={CreatorVideosPage} />
             <Route path="/admin" component={Admin} />
             <Route path="/admin/dashboard" component={AdminDashboard} />

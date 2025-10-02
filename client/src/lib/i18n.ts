@@ -156,6 +156,40 @@ export interface TranslationKeys {
   'tour.previous': string;
   'tour.finish': string;
   'tour.step_of': string;
+
+  // Settings
+  'settings.title': string;
+  'settings.subtitle': string;
+  'settings.loginRequired': string;
+  'settings.theme.title': string;
+  'settings.theme.description': string;
+  'settings.theme.label': string;
+  'settings.profiles.title': string;
+  'settings.profiles.description': string;
+  'settings.profiles.available': string;
+  'settings.profiles.restricted': string;
+  'settings.profiles.restrictedNote': string;
+  'settings.profiles.save': string;
+  'settings.profiles.saving': string;
+  'settings.profiles.cancel': string;
+  'settings.profiles.success.title': string;
+  'settings.profiles.success.description': string;
+  'settings.profiles.error.title': string;
+  'settings.profiles.error.description': string;
+  'settings.profiles.minRequired.title': string;
+  'settings.profiles.minRequired.description': string;
+  'settings.profiles.investor.description': string;
+  'settings.profiles.invested_reader.description': string;
+  'settings.profiles.creator.description': string;
+  'settings.profiles.creatorWarning.title': string;
+  'settings.profiles.creatorWarning.description': string;
+
+  // Profiles
+  'profiles.investor': string;
+  'profiles.invested_reader': string;
+  'profiles.creator': string;
+  'profiles.admin': string;
+  'profiles.infoporteur': string;
 }
 
 // Traductions françaises (langue par défaut)
@@ -308,6 +342,40 @@ const translations_fr: TranslationKeys = {
   'tour.previous': 'Précédent',
   'tour.finish': 'Terminer',
   'tour.step_of': 'de',
+
+  // Settings
+  'settings.title': 'Paramètres',
+  'settings.subtitle': 'Gérez vos préférences et profils',
+  'settings.loginRequired': 'Vous devez être connecté pour accéder aux paramètres',
+  'settings.theme.title': 'Thème',
+  'settings.theme.description': 'Choisissez votre thème préféré',
+  'settings.theme.label': 'Mode sombre / clair',
+  'settings.profiles.title': 'Gestion des profils',
+  'settings.profiles.description': 'Sélectionnez les profils qui correspondent à vos activités sur la plateforme',
+  'settings.profiles.available': 'Profils disponibles',
+  'settings.profiles.restricted': 'Profils restreints',
+  'settings.profiles.restrictedNote': 'Ces profils sont attribués par les administrateurs et ne peuvent pas être modifiés.',
+  'settings.profiles.save': 'Enregistrer',
+  'settings.profiles.saving': 'Enregistrement...',
+  'settings.profiles.cancel': 'Annuler',
+  'settings.profiles.success.title': 'Profils mis à jour',
+  'settings.profiles.success.description': 'Vos profils ont été mis à jour avec succès',
+  'settings.profiles.error.title': 'Erreur',
+  'settings.profiles.error.description': 'Impossible de mettre à jour vos profils',
+  'settings.profiles.minRequired.title': 'Profil requis',
+  'settings.profiles.minRequired.description': 'Vous devez avoir au moins un profil actif',
+  'settings.profiles.investor.description': 'Investissez dans des projets créatifs et suivez votre portefeuille',
+  'settings.profiles.invested_reader.description': 'Accédez à du contenu exclusif grâce à vos investissements',
+  'settings.profiles.creator.description': 'Créez et gérez vos propres projets',
+  'settings.profiles.creatorWarning.title': 'Note pour les créateurs',
+  'settings.profiles.creatorWarning.description': 'Vous ne pouvez pas investir dans vos propres projets ou contenus pour des raisons de sécurité.',
+
+  // Profiles
+  'profiles.investor': 'Investisseur',
+  'profiles.invested_reader': 'Investi-lecteur',
+  'profiles.creator': 'Créateur',
+  'profiles.admin': 'Administrateur',
+  'profiles.infoporteur': 'Infoporteur',
 };
 
 // Traductions anglaises
@@ -460,6 +528,40 @@ const translations_en: TranslationKeys = {
   'tour.previous': 'Previous',
   'tour.finish': 'Finish',
   'tour.step_of': 'of',
+
+  // Settings
+  'settings.title': 'Settings',
+  'settings.subtitle': 'Manage your preferences and profiles',
+  'settings.loginRequired': 'You must be logged in to access settings',
+  'settings.theme.title': 'Theme',
+  'settings.theme.description': 'Choose your preferred theme',
+  'settings.theme.label': 'Dark / light mode',
+  'settings.profiles.title': 'Profile Management',
+  'settings.profiles.description': 'Select the profiles that match your activities on the platform',
+  'settings.profiles.available': 'Available profiles',
+  'settings.profiles.restricted': 'Restricted profiles',
+  'settings.profiles.restrictedNote': 'These profiles are assigned by administrators and cannot be modified.',
+  'settings.profiles.save': 'Save',
+  'settings.profiles.saving': 'Saving...',
+  'settings.profiles.cancel': 'Cancel',
+  'settings.profiles.success.title': 'Profiles updated',
+  'settings.profiles.success.description': 'Your profiles have been successfully updated',
+  'settings.profiles.error.title': 'Error',
+  'settings.profiles.error.description': 'Unable to update your profiles',
+  'settings.profiles.minRequired.title': 'Profile required',
+  'settings.profiles.minRequired.description': 'You must have at least one active profile',
+  'settings.profiles.investor.description': 'Invest in creative projects and track your portfolio',
+  'settings.profiles.invested_reader.description': 'Access exclusive content through your investments',
+  'settings.profiles.creator.description': 'Create and manage your own projects',
+  'settings.profiles.creatorWarning.title': 'Note for creators',
+  'settings.profiles.creatorWarning.description': 'You cannot invest in your own projects or content for security reasons.',
+
+  // Profiles
+  'profiles.investor': 'Investor',
+  'profiles.invested_reader': 'Invested Reader',
+  'profiles.creator': 'Creator',
+  'profiles.admin': 'Administrator',
+  'profiles.infoporteur': 'Infoporteur',
 };
 
 // Traductions espagnoles
@@ -612,6 +714,40 @@ const translations_es: TranslationKeys = {
   'tour.previous': 'Anterior',
   'tour.finish': 'Finalizar',
   'tour.step_of': 'de',
+
+  // Settings
+  'settings.title': 'Configuración',
+  'settings.subtitle': 'Gestiona tus preferencias y perfiles',
+  'settings.loginRequired': 'Debes iniciar sesión para acceder a la configuración',
+  'settings.theme.title': 'Tema',
+  'settings.theme.description': 'Elige tu tema preferido',
+  'settings.theme.label': 'Modo oscuro / claro',
+  'settings.profiles.title': 'Gestión de perfiles',
+  'settings.profiles.description': 'Selecciona los perfiles que coincidan con tus actividades en la plataforma',
+  'settings.profiles.available': 'Perfiles disponibles',
+  'settings.profiles.restricted': 'Perfiles restringidos',
+  'settings.profiles.restrictedNote': 'Estos perfiles son asignados por los administradores y no se pueden modificar.',
+  'settings.profiles.save': 'Guardar',
+  'settings.profiles.saving': 'Guardando...',
+  'settings.profiles.cancel': 'Cancelar',
+  'settings.profiles.success.title': 'Perfiles actualizados',
+  'settings.profiles.success.description': 'Tus perfiles se han actualizado correctamente',
+  'settings.profiles.error.title': 'Error',
+  'settings.profiles.error.description': 'No se pudieron actualizar tus perfiles',
+  'settings.profiles.minRequired.title': 'Perfil requerido',
+  'settings.profiles.minRequired.description': 'Debes tener al menos un perfil activo',
+  'settings.profiles.investor.description': 'Invierte en proyectos creativos y rastrea tu cartera',
+  'settings.profiles.invested_reader.description': 'Accede a contenido exclusivo a través de tus inversiones',
+  'settings.profiles.creator.description': 'Crea y gestiona tus propios proyectos',
+  'settings.profiles.creatorWarning.title': 'Nota para creadores',
+  'settings.profiles.creatorWarning.description': 'No puedes invertir en tus propios proyectos o contenidos por razones de seguridad.',
+
+  // Profiles
+  'profiles.investor': 'Inversor',
+  'profiles.invested_reader': 'Lector invertido',
+  'profiles.creator': 'Creador',
+  'profiles.admin': 'Administrador',
+  'profiles.infoporteur': 'Infoporteur',
 };
 
 // Map des traductions

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { User, Mail, Briefcase, Wallet, TrendingUp, Award, Calendar, Check, X } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Link } from "wouter";
 
 export default function ProfilePage() {
   const { user, isLoading } = useAuth();
@@ -91,13 +92,16 @@ export default function ProfilePage() {
                 <span className="text-muted-foreground" data-testid="profile-email">{user.email}</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge 
-                  className={`bg-gradient-to-r ${profileTypeColors[user.profileType || 'investor']} text-white px-3 py-1`}
-                  data-testid="profile-type"
-                >
-                  <Briefcase className="w-3 h-3 mr-1" />
-                  {profileTypeLabels[user.profileType || 'investor']}
-                </Badge>
+                {user.profileTypes.map((profileType, index) => (
+                  <Badge 
+                    key={profileType}
+                    className={`bg-gradient-to-r ${profileTypeColors[profileType]} text-white px-3 py-1`}
+                    data-testid={`profile-type-${index}`}
+                  >
+                    <Briefcase className="w-3 h-3 mr-1" />
+                    {profileTypeLabels[profileType]}
+                  </Badge>
+                ))}
                 {user.simulationMode && (
                   <Badge variant="outline" className="border-yellow-500/50 text-yellow-400" data-testid="simulation-badge">
                     Mode Simulation
@@ -240,9 +244,11 @@ export default function ProfilePage() {
           <Button variant="neon" className="flex-1" data-testid="edit-profile-button">
             Modifier le profil
           </Button>
-          <Button variant="glass" className="flex-1" data-testid="settings-button">
-            Paramètres
-          </Button>
+          <Link href="/settings">
+            <Button variant="glass" className="flex-1" data-testid="settings-button">
+              Paramètres
+            </Button>
+          </Link>
         </div>
       </div>
     </main>
