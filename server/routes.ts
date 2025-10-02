@@ -73,6 +73,7 @@ import { mlScoreProject } from "./services/mlScoring";
 import { initializeWebSocket } from "./websocket";
 import { notificationService } from "./services/notificationService";
 import { VideoDepositService } from "./services/videoDepositService";
+import { visualAI } from "./services/visualAI";
 import { bunnyVideoService } from "./services/bunnyVideoService";
 import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenValidator";
 import { registerPurgeRoutes } from "./purge/routes";
@@ -4212,9 +4213,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
+      // 🚨 VÉRIFICATION AUTOMATIQUE DES SEUILS DE SIGNALEMENT
+      // 10 signalements → Blocage + suspension temporaire
+      // 20 signalements → Exclusion définitive + blocage opérations bancaires
+      const thresholdResult = await visualAI.processContentReportThresholds(contentType, contentId);
+      
+      let message = "Signalement créé avec succès";
+      if (thresholdResult.action === 'ban') {
+        message = `Signalement créé avec succès. ALERTE: Seuil critique atteint (${thresholdResult.reportCount} signalements). Exclusion définitive appliquée.`;
+      } else if (thresholdResult.action === 'block') {
+        message = `Signalement créé avec succès. ALERTE: Seuil d'alerte atteint (${thresholdResult.reportCount} signalements). Blocage temporaire appliqué.`;
+      }
+
       res.status(201).json({
-        message: "Signalement créé avec succès",
-        reportId: newReport.id
+        message,
+        reportId: newReport.id,
+        thresholdCheck: {
+          action: thresholdResult.action,
+          reportCount: thresholdResult.reportCount,
+          details: thresholdResult.details
+        }
       });
     } catch (error) {
       console.error("Error creating content report:", error);

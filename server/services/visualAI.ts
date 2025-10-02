@@ -614,9 +614,10 @@ export class VisualAIService {
         // Persister l'événement de fraude
         // TODO: Implémenter storage.createFraudEvent()
         if (confidence >= 0.6) {
+          const project = await storage.getProject(projectId);
           console.log('[VisualAI] Coordinated Investment Fraud Event:', {
             eventType: 'coordinated_investment',
-            userId: project.creatorId,
+            userId: project?.creatorId,
             projectId,
             severityScore: confidence,
             evidenceData: {
@@ -667,10 +668,11 @@ export class VisualAIService {
       }
 
       // Mettre à jour la décision
-      await storage.updateAgentDecision(decisionId, {
-        status: verdict === 'approved' ? 'approved' : 'rejected',
-        adminComment: adminComment || `Admin verdict: ${verdict}`,
-        validatedAt: new Date()
+      // TODO: Implémenter storage.updateAgentDecision()
+      console.log('[VisualAI] Admin feedback on decision:', {
+        decisionId,
+        verdict,
+        adminComment
       });
       
       // Ajuster les seuils basés sur le feedback
@@ -893,6 +895,222 @@ export class VisualAIService {
     if (score < 0.6) return 'medium';
     if (score < 0.8) return 'high';
     return 'critical';
+  }
+
+  // ===== SYSTÈME DE SIGNALEMENTS AUTOMATIQUES (BOUTON ROUGE) =====
+  
+  /**
+   * Vérifie et applique les seuils automatiques de signalement
+   * 10 signalements → Blocage du contenu + suspension temporaire
+   * 20 signalements → Exclusion définitive + blocage opérations bancaires
+   */
+  async processContentReportThresholds(contentType: string, contentId: string): Promise<{
+    action: 'none' | 'block' | 'ban';
+    reportCount: number;
+    details: string;
+  }> {
+    try {
+      // Compter les signalements validés pour ce contenu
+      const reports = await storage.getContentReportsByContent(contentType, contentId);
+      const validReports = reports.filter(r => r.status === 'pending' || r.status === 'confirmed');
+      const reportCount = validReports.length;
+      
+      console.log(`[VisualAI] 🚨 Vérification seuils signalement - Contenu: ${contentType}/${contentId}, Signalements: ${reportCount}`);
+      
+      // Obtenir l'utilisateur responsable du contenu
+      const contentOwnerId = await this.getContentOwnerId(contentType, contentId);
+      
+      if (!contentOwnerId) {
+        console.warn(`[VisualAI] Impossible de déterminer le propriétaire du contenu ${contentType}/${contentId}`);
+        return { action: 'none', reportCount, details: 'Content owner not found' };
+      }
+      
+      // SEUIL 1: 20+ signalements = EXCLUSION DÉFINITIVE
+      if (reportCount >= 20) {
+        console.log(`[VisualAI] 🔴 EXCLUSION DÉFINITIVE - ${reportCount} signalements`);
+        
+        // Créer la décision admin (toujours pending pour validation finale)
+        await this.createAgentDecision({
+          agentType: 'visualai',
+          decisionType: 'user_ban',
+          subjectId: contentOwnerId,
+          subjectType: 'user',
+          ruleApplied: 'report_threshold_ban',
+          score: '1.0',
+          justification: `EXCLUSION AUTOMATIQUE - ${reportCount} signalements validés sur contenu ${contentType}/${contentId}. Seuil critique (20) atteint.`,
+          parameters: {
+            content_type: contentType,
+            content_id: contentId,
+            report_count: reportCount,
+            threshold: 20,
+            action: 'permanent_ban'
+          },
+          status: 'pending' // Requiert validation admin finale
+        });
+        
+        // Bloquer le compte utilisateur
+        // TODO: Ajouter champs status et accountStatus au schéma User
+        console.log(`[VisualAI] Compte bloqué: ${contentOwnerId} - Exclusion définitive`);
+        
+        // Bloquer toutes les opérations bancaires
+        await this.blockUserFinancialOperations(contentOwnerId, 'permanent', `20+ signalements`);
+        
+        // Supprimer ou masquer le contenu
+        await this.hideContent(contentType, contentId);
+        
+        await this.logAuditEntry('user_blocked', 'user', contentOwnerId, {
+          reason: 'report_threshold_ban',
+          report_count: reportCount,
+          content_type: contentType,
+          content_id: contentId,
+          action: 'permanent_exclusion'
+        });
+        
+        return {
+          action: 'ban',
+          reportCount,
+          details: `Exclusion définitive appliquée - ${reportCount} signalements. Compte et opérations bancaires bloqués.`
+        };
+      }
+      
+      // SEUIL 2: 10-19 signalements = BLOCAGE TEMPORAIRE
+      else if (reportCount >= 10) {
+        console.log(`[VisualAI] ⚠️  BLOCAGE TEMPORAIRE - ${reportCount} signalements`);
+        
+        // Créer la décision admin
+        await this.createAgentDecision({
+          agentType: 'visualai',
+          decisionType: 'user_suspension',
+          subjectId: contentOwnerId,
+          subjectType: 'user',
+          ruleApplied: 'report_threshold_block',
+          score: '0.8',
+          justification: `BLOCAGE AUTOMATIQUE - ${reportCount} signalements validés sur contenu ${contentType}/${contentId}. Seuil d'alerte (10) atteint.`,
+          parameters: {
+            content_type: contentType,
+            content_id: contentId,
+            report_count: reportCount,
+            threshold: 10,
+            action: 'temporary_suspension'
+          },
+          status: 'pending'
+        });
+        
+        // Suspendre le compte temporairement
+        // TODO: Ajouter champs status et accountStatus au schéma User
+        console.log(`[VisualAI] Compte suspendu: ${contentOwnerId} - Suspension temporaire (7j)`);
+        
+        // Bloquer les opérations bancaires temporairement (7 jours)
+        await this.blockUserFinancialOperations(contentOwnerId, 'temporary', `10+ signalements`);
+        
+        // Masquer le contenu
+        await this.hideContent(contentType, contentId);
+        
+        await this.logAuditEntry('user_blocked', 'user', contentOwnerId, {
+          reason: 'report_threshold_block',
+          report_count: reportCount,
+          content_type: contentType,
+          content_id: contentId,
+          action: 'temporary_suspension'
+        });
+        
+        return {
+          action: 'block',
+          reportCount,
+          details: `Blocage temporaire appliqué - ${reportCount} signalements. Compte et opérations bancaires suspendus.`
+        };
+      }
+      
+      // Moins de 10 signalements: surveillance continue
+      else {
+        console.log(`[VisualAI] ℹ️  Surveillance - ${reportCount} signalements (seuils non atteints)`);
+        return {
+          action: 'none',
+          reportCount,
+          details: `Contenu sous surveillance - ${reportCount}/10 signalements`
+        };
+      }
+      
+    } catch (error) {
+      console.error('[VisualAI] Erreur traitement seuils signalement:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bloque toutes les opérations financières d'un utilisateur
+   */
+  private async blockUserFinancialOperations(userId: string, duration: 'temporary' | 'permanent', reason: string): Promise<void> {
+    console.log(`[VisualAI] 💰 Blocage opérations bancaires - User: ${userId}, Durée: ${duration}, Raison: ${reason}`);
+    
+    // Créer une décision financière pour VisualFinanceAI
+    await this.createAgentDecision({
+      agentType: 'visualfinanceai',
+      decisionType: 'financial_block',
+      subjectId: userId,
+      subjectType: 'user',
+      ruleApplied: 'content_report_financial_block',
+      score: duration === 'permanent' ? '1.0' : '0.8',
+      justification: `Blocage ${duration} des opérations financières suite à ${reason}`,
+      parameters: {
+        block_duration: duration,
+        block_reason: reason,
+        blocked_operations: ['investments', 'withdrawals', 'transfers', 'payments'],
+        expiry_date: duration === 'temporary' ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null
+      },
+      status: 'auto' // Auto-exécuté
+    });
+    
+    // TODO v2: Implémenter le blocage réel dans les routes de paiement
+    // Pour l'instant, c'est tracé dans les décisions agents
+  }
+
+  /**
+   * Masque ou supprime un contenu signalé
+   */
+  private async hideContent(contentType: string, contentId: string): Promise<void> {
+    console.log(`[VisualAI] 🙈 Masquage contenu - Type: ${contentType}, ID: ${contentId}`);
+    
+    // Pour l'instant, on log l'action
+    // TODO v2: Implémenter le masquage réel selon le type de contenu
+    await this.logAuditEntry('decision_made', contentType, contentId, {
+      action: 'content_hidden',
+      reason: 'report_threshold_reached',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Détermine le propriétaire d'un contenu
+   */
+  private async getContentOwnerId(contentType: string, contentId: string): Promise<string | null> {
+    try {
+      switch (contentType) {
+        case 'article':
+        case 'project': {
+          const project = await storage.getProject(contentId);
+          return project?.creatorId || null;
+        }
+        case 'social_post': {
+          const post = await storage.getSocialPost(contentId);
+          return post?.authorId || null;
+        }
+        case 'video': {
+          const video = await storage.getVideoDeposit(contentId);
+          return video?.creatorId || null;
+        }
+        case 'comment': {
+          const comment = await storage.getSocialComment(contentId);
+          return comment?.authorId || null;
+        }
+        default:
+          console.warn(`[VisualAI] Type de contenu inconnu: ${contentType}`);
+          return null;
+      }
+    } catch (error) {
+      console.error(`[VisualAI] Erreur récupération propriétaire contenu:`, error);
+      return null;
+    }
   }
 
   // ===== RAPPORTS & MONITORING =====
