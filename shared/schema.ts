@@ -230,6 +230,7 @@ export const users = pgTable("users", {
   totalGains: decimal("total_gains", { precision: 10, scale: 2 }).default('0.00'),
   rankGlobal: integer("rank_global"),
   themePreference: varchar("theme_preference", { length: 10 }).default('dark'),
+  preferredLanguage: varchar("preferred_language", { length: 5 }).default('fr'),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

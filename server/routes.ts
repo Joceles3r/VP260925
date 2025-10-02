@@ -2438,6 +2438,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/users/preference', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { preferredLanguage } = req.body;
+
+      if (!preferredLanguage || !['fr', 'en', 'es'].includes(preferredLanguage)) {
+        return res.status(400).json({ error: 'Invalid language value' });
+      }
+
+      await storage.updateUser(userId, { preferredLanguage });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Language preference update error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get('/api/platform/theme-override', async (req: any, res) => {
     try {
       const override = await storage.getPlatformSetting('theme_override');

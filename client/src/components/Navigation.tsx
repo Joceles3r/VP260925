@@ -4,6 +4,7 @@ import { Play } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import NotificationPanel from './NotificationPanel';
 import { ThemeToggle } from './ThemeToggle';
+import { LanguageSelector } from './LanguageSelector';
 
 export default function Navigation() {
   const [location] = useLocation();
@@ -86,6 +87,9 @@ export default function Navigation() {
             
             {/* Notifications */}
             <NotificationPanel />
+            
+            {/* Language Selector */}
+            <LanguageSelector showLabel={false} />
             
             {/* Theme Toggle */}
             <ThemeToggle showLabel={false} saveToServer={true} />
