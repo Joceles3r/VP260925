@@ -25,6 +25,7 @@ import Top10Page from "@/pages/top10";
 import FidelityPage from "@/pages/fidelity";
 import VisualPage from "@/pages/visual";
 import InfoPage from "@/pages/info";
+import LeaderboardPage from "@/pages/leaderboard";
 import AccessibilityPage from "@/pages/accessibility";
 import ProfilePage from "@/pages/profile";
 import CreatorVideosPage from "@/pages/creator-videos";
@@ -73,6 +74,7 @@ function Router() {
             <Route path="/receipts" component={ReceiptsPage} />
             <Route path="/top10" component={Top10Page} />
             <Route path="/fidelity" component={FidelityPage} />
+            <Route path="/leaderboard" component={LeaderboardPage} />
             <Route path="/profile" component={ProfilePage} />
             <Route path="/creator/videos" component={CreatorVideosPage} />
             <Route path="/admin" component={Admin} />

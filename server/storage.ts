@@ -95,6 +95,8 @@ import {
   liveShowCommunityVotes,
   liveShowBattleInvestments,
   liveShowAds,
+  // Tables classement mensuel & leaderboard
+  projectMonthlyRankings,
   type User,
   type UpsertUser,
   type Project,
@@ -113,6 +115,8 @@ import {
   type InsertLiveShowCommunityVote,
   type InsertLiveShowBattleInvestment,
   type InsertLiveShowAd,
+  type ProjectMonthlyRanking,
+  type InsertProjectMonthlyRanking,
   type ComplianceReport,
   type Notification,
   type NotificationPreference,
@@ -4986,6 +4990,114 @@ export class DatabaseStorage implements IStorage {
       )
       .returning();
     return result.length;
+  }
+
+  // ===== PROJECT MONTHLY RANKINGS OPERATIONS =====
+
+  /**
+   * Créer ou mettre à jour un classement mensuel pour un projet
+   */
+  async upsertProjectMonthlyRanking(data: InsertProjectMonthlyRanking): Promise<ProjectMonthlyRanking> {
+    const [existing] = await db
+      .select()
+      .from(projectMonthlyRankings)
+      .where(
+        and(
+          eq(projectMonthlyRankings.projectId, data.projectId),
+          eq(projectMonthlyRankings.monthYear, data.monthYear)
+        )
+      );
+
+    if (existing) {
+      const [updated] = await db
+        .update(projectMonthlyRankings)
+        .set(data)
+        .where(eq(projectMonthlyRankings.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db
+      .insert(projectMonthlyRankings)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  /**
+   * Obtenir le classement d'un mois spécifique (top 10 par défaut)
+   */
+  async getMonthlyProjectRankings(monthYear: string, limit = 10): Promise<ProjectMonthlyRanking[]> {
+    return await db
+      .select()
+      .from(projectMonthlyRankings)
+      .where(eq(projectMonthlyRankings.monthYear, monthYear))
+      .orderBy(asc(projectMonthlyRankings.rank))
+      .limit(limit);
+  }
+
+  /**
+   * Obtenir l'historique des classements pour un projet (mode replay)
+   */
+  async getProjectRankingHistory(projectId: string, limit = 12): Promise<ProjectMonthlyRanking[]> {
+    return await db
+      .select()
+      .from(projectMonthlyRankings)
+      .where(eq(projectMonthlyRankings.projectId, projectId))
+      .orderBy(desc(projectMonthlyRankings.monthYear))
+      .limit(limit);
+  }
+
+  /**
+   * Obtenir les mois disponibles pour le mode replay
+   */
+  async getAvailableRankingMonths(limit = 24): Promise<string[]> {
+    const results = await db
+      .selectDistinct({ monthYear: projectMonthlyRankings.monthYear })
+      .from(projectMonthlyRankings)
+      .orderBy(desc(projectMonthlyRankings.monthYear))
+      .limit(limit);
+    
+    return results.map(r => r.monthYear);
+  }
+
+  /**
+   * Obtenir les top performers de tous les temps
+   */
+  async getTopPerformersAllTime(limit = 10): Promise<any[]> {
+    const results = await db
+      .select({
+        projectId: projectMonthlyRankings.projectId,
+        topRankCount: sql<number>`count(*) filter (where ${projectMonthlyRankings.rank} <= 3)`,
+        avgRank: sql<number>`avg(${projectMonthlyRankings.rank})`,
+        totalMonths: sql<number>`count(*)`,
+        bestRank: sql<number>`min(${projectMonthlyRankings.rank})`,
+        goldCount: sql<number>`count(*) filter (where ${projectMonthlyRankings.badge} = 'gold')`,
+        silverCount: sql<number>`count(*) filter (where ${projectMonthlyRankings.badge} = 'silver')`,
+        bronzeCount: sql<number>`count(*) filter (where ${projectMonthlyRankings.badge} = 'bronze')`,
+      })
+      .from(projectMonthlyRankings)
+      .groupBy(projectMonthlyRankings.projectId)
+      .orderBy(sql`count(*) filter (where ${projectMonthlyRankings.rank} <= 3) desc`)
+      .limit(limit);
+
+    return results;
+  }
+
+  /**
+   * Obtenir les statistiques comparatives entre plusieurs projets
+   */
+  async getProjectsComparison(projectIds: string[], monthYear: string): Promise<ProjectMonthlyRanking[]> {
+    return await db
+      .select()
+      .from(projectMonthlyRankings)
+      .where(
+        and(
+          sql`${projectMonthlyRankings.projectId} = ANY(${projectIds})`,
+          eq(projectMonthlyRankings.monthYear, monthYear)
+        )
+      )
+      .orderBy(asc(projectMonthlyRankings.rank));
   }
 }
 

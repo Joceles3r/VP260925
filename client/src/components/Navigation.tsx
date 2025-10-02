@@ -19,6 +19,7 @@ export default function Navigation() {
     { path: '/live', label: 'Live', section: 'live' },
     { path: '/wallet', label: 'Portefeuille', section: 'wallet' },
     { path: '/social', label: 'Social', section: 'social' },
+    { path: '/leaderboard', label: '🏆 Classement', section: 'leaderboard', highlight: true },
     { path: '/receipts', label: 'Reçus', section: 'receipts' },
     { path: '/info', label: 'Info', section: 'info' },
     ...(user?.profileType === 'admin' ? [

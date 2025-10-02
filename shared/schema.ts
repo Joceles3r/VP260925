@@ -3775,6 +3775,44 @@ export const seoGenerationLogsRelations = relations(seoGenerationLogs, ({ one })
   }),
 }));
 
+// ===== PROJECT MONTHLY RANKINGS (Leaderboard & Replay) =====
+
+// Table pour le classement mensuel des projets avec historique
+export const projectMonthlyRankings = pgTable("project_monthly_rankings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id),
+  monthYear: varchar("month_year", { length: 7 }).notNull(), // "2025-10" format
+  rank: integer("rank").notNull(), // Position dans le classement
+  
+  // Métriques du mois
+  totalInvestedEUR: decimal("total_invested_eur", { precision: 12, scale: 2 }).default('0.00'),
+  investorCount: integer("investor_count").default(0),
+  avgRoi: decimal("avg_roi", { precision: 5, scale: 2 }).default('0.00'),
+  visuPointsGenerated: integer("visu_points_generated").default(0),
+  
+  // Métriques de performance comparatives
+  growthRate: decimal("growth_rate", { precision: 5, scale: 2 }).default('0.00'), // % croissance vs mois précédent
+  engagementScore: integer("engagement_score").default(0), // Score d'engagement (vues, partages, etc.)
+  successScore: integer("success_score").default(0), // Score global de succès (0-100)
+  
+  // Données pour graphiques
+  dailyInvestments: jsonb("daily_investments"), // [{day: 1, amount: 100}, ...] pour graphique
+  investorGrowth: jsonb("investor_growth"), // [{day: 1, count: 5}, ...] pour graphique
+  
+  // Awards et badges
+  isTopPerformer: boolean("is_top_performer").default(false), // Top 3
+  badge: varchar("badge", { length: 50 }), // 'gold', 'silver', 'bronze', 'rising_star', etc.
+  
+  // Métadonnées
+  snapshotDate: timestamp("snapshot_date").defaultNow(), // Date de capture du classement
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_project_rankings_month").on(table.monthYear),
+  index("idx_project_rankings_project").on(table.projectId),
+  index("idx_project_rankings_rank").on(table.rank),
+  unique("unique_project_month_ranking").on(table.projectId, table.monthYear),
+]);
+
 // ===== SCHÉMAS D'INSERTION SEO =====
 
 export const insertSeoConfigSchema = createInsertSchema(seoConfig).omit({
@@ -3803,3 +3841,13 @@ export type InsertSeoGenerationLog = z.infer<typeof insertSeoGenerationLogSchema
 export type SeoConfig = typeof seoConfig.$inferSelect;
 export type PageMetadata = typeof pageMetadata.$inferSelect;
 export type SeoGenerationLog = typeof seoGenerationLogs.$inferSelect;
+
+// ===== TYPES ET SCHÉMAS LEADERBOARD =====
+
+export const insertProjectMonthlyRankingSchema = createInsertSchema(projectMonthlyRankings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ProjectMonthlyRanking = typeof projectMonthlyRankings.$inferSelect;
+export type InsertProjectMonthlyRanking = z.infer<typeof insertProjectMonthlyRankingSchema>;

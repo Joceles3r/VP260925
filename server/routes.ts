@@ -3776,6 +3776,160 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // ===== ROUTES LEADERBOARD & MONTHLY RANKINGS =====
+
+  // Get monthly project rankings (public)
+  app.get('/api/leaderboard/monthly/:monthYear?', async (req, res) => {
+    try {
+      const monthYear = req.params.monthYear || new Date().toISOString().slice(0, 7);
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      const rankings = await storage.getMonthlyProjectRankings(monthYear, limit);
+      
+      // Enrichir avec les données complètes des projets
+      const enrichedRankings = await Promise.all(
+        rankings.map(async (ranking) => {
+          const project = await storage.getProject(ranking.projectId);
+          const creator = project ? await storage.getUser(project.creatorId) : null;
+          
+          return {
+            ...ranking,
+            project,
+            creator: creator ? {
+              id: creator.id,
+              firstName: creator.firstName,
+              lastName: creator.lastName,
+              profileImageUrl: creator.profileImageUrl
+            } : null
+          };
+        })
+      );
+      
+      res.json({
+        monthYear,
+        rankings: enrichedRankings,
+        totalCount: rankings.length
+      });
+    } catch (error) {
+      console.error("Error fetching monthly rankings:", error);
+      res.status(500).json({ message: "Failed to fetch monthly rankings" });
+    }
+  });
+
+  // Get project ranking history (replay mode) - public
+  app.get('/api/leaderboard/history/:projectId', async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 12;
+      
+      const history = await storage.getProjectRankingHistory(projectId, limit);
+      const project = await storage.getProject(projectId);
+      
+      res.json({
+        projectId,
+        project: project ? {
+          id: project.id,
+          title: project.title,
+          category: project.category
+        } : null,
+        history,
+        totalMonths: history.length
+      });
+    } catch (error) {
+      console.error("Error fetching project history:", error);
+      res.status(500).json({ message: "Failed to fetch project history" });
+    }
+  });
+
+  // Get available ranking months (public)
+  app.get('/api/leaderboard/months', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 24;
+      const months = await storage.getAvailableRankingMonths(limit);
+      
+      res.json({
+        months,
+        count: months.length
+      });
+    } catch (error) {
+      console.error("Error fetching available months:", error);
+      res.status(500).json({ message: "Failed to fetch available months" });
+    }
+  });
+
+  // Get all-time top performers (public)
+  app.get('/api/leaderboard/all-time', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topPerformers = await storage.getTopPerformersAllTime(limit);
+      
+      // Enrichir avec les données des projets
+      const enrichedPerformers = await Promise.all(
+        topPerformers.map(async (perf) => {
+          const project = await storage.getProject(perf.projectId);
+          const creator = project ? await storage.getUser(project.creatorId) : null;
+          
+          return {
+            ...perf,
+            project,
+            creator: creator ? {
+              id: creator.id,
+              firstName: creator.firstName,
+              lastName: creator.lastName,
+              profileImageUrl: creator.profileImageUrl
+            } : null
+          };
+        })
+      );
+      
+      res.json({
+        topPerformers: enrichedPerformers,
+        count: enrichedPerformers.length
+      });
+    } catch (error) {
+      console.error("Error fetching all-time performers:", error);
+      res.status(500).json({ message: "Failed to fetch all-time performers" });
+    }
+  });
+
+  // Compare multiple projects (public)
+  app.get('/api/leaderboard/compare', async (req, res) => {
+    try {
+      const projectIds = (req.query.projectIds as string)?.split(',') || [];
+      const monthYear = req.query.monthYear as string || new Date().toISOString().slice(0, 7);
+      
+      if (projectIds.length === 0) {
+        return res.status(400).json({ message: "At least one projectId required" });
+      }
+      
+      if (projectIds.length > 10) {
+        return res.status(400).json({ message: "Maximum 10 projects for comparison" });
+      }
+      
+      const comparison = await storage.getProjectsComparison(projectIds, monthYear);
+      
+      // Enrichir avec données complètes
+      const enrichedComparison = await Promise.all(
+        comparison.map(async (ranking) => {
+          const project = await storage.getProject(ranking.projectId);
+          return {
+            ...ranking,
+            project
+          };
+        })
+      );
+      
+      res.json({
+        monthYear,
+        projectIds,
+        comparison: enrichedComparison
+      });
+    } catch (error) {
+      console.error("Error comparing projects:", error);
+      res.status(500).json({ message: "Failed to compare projects" });
+    }
+  });
+
   // Archive project manually
   app.post('/api/projects/:projectId/archive', isAuthenticated, async (req: any, res) => {
     try {
