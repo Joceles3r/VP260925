@@ -276,6 +276,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User>;
+  updateUserDisplay(userId: string, display: { nickname?: string; avatarUrl?: string | null }): Promise<User>;
   
   // Platform settings operations
   getPlatformSetting(key: string): Promise<string | null>;
@@ -1255,6 +1256,26 @@ export class DatabaseStorage implements IStorage {
       .set({ profileTypes, updatedAt: new Date() })
       .where(eq(users.id, userId))
       .returning();
+    return updated;
+  }
+
+  async updateUserDisplay(userId: string, display: { nickname?: string; avatarUrl?: string | null }): Promise<User> {
+    const updateData: any = { updatedAt: new Date() };
+    
+    if (display.nickname !== undefined) {
+      updateData.nickname = display.nickname;
+    }
+    
+    if (display.avatarUrl !== undefined) {
+      updateData.avatarUrl = display.avatarUrl;
+    }
+    
+    const [updated] = await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, userId))
+      .returning();
+    
     return updated;
   }
 

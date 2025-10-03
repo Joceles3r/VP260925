@@ -934,6 +934,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Nickname and avatar routes
+  app.patch('/api/user/display', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { nickname, avatarUrl } = req.body;
+      
+      // Validate nickname if provided
+      if (nickname !== undefined) {
+        if (typeof nickname !== 'string') {
+          return res.status(400).json({ 
+            message: "Nickname must be a string" 
+          });
+        }
+        
+        if (nickname.length > 50) {
+          return res.status(400).json({ 
+            message: "Nickname must be 50 characters or less" 
+          });
+        }
+        
+        // Optional: check for inappropriate content (basic check)
+        const inappropriateWords = ['admin', 'system', 'visual', 'support'];
+        const lowerNickname = nickname.toLowerCase();
+        if (inappropriateWords.some(word => lowerNickname.includes(word))) {
+          return res.status(400).json({ 
+            message: "Nickname contains reserved words" 
+          });
+        }
+      }
+      
+      // Validate avatar URL if provided
+      if (avatarUrl !== undefined && avatarUrl !== null && typeof avatarUrl !== 'string') {
+        return res.status(400).json({ 
+          message: "Avatar URL must be a string" 
+        });
+      }
+      
+      const updatedUser = await storage.updateUserDisplay(userId, { nickname, avatarUrl });
+      res.json({ 
+        nickname: updatedUser.nickname, 
+        avatarUrl: updatedUser.avatarUrl 
+      });
+    } catch (error) {
+      console.error("Error updating user display:", error);
+      res.status(500).json({ message: "Failed to update nickname/avatar" });
+    }
+  });
+
   // Project routes
   app.get('/api/projects', async (req, res) => {
     try {
