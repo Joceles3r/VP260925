@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Settings as SettingsIcon, User, Shield, CheckCircle2, Info } from "lucide-react";
+import { Settings as SettingsIcon, User, Shield, CheckCircle2, Info, UserCircle } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useI18n } from "@/lib/i18n";
 
@@ -19,6 +20,16 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const { t } = useI18n();
   const [selectedProfiles, setSelectedProfiles] = useState<ProfileType[]>([]);
+  const [nickname, setNickname] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+
+  // Sync state with user data when it loads
+  useEffect(() => {
+    if (user) {
+      setNickname(user.nickname || '');
+      setAvatarUrl(user.avatarUrl || '');
+    }
+  }, [user]);
 
   // Fetch current profiles
   const { data: currentProfiles, isLoading: profilesLoading } = useQuery<ProfileType[]>({
@@ -43,6 +54,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/user/profiles'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       toast({
         title: t('settings.profiles.success.title'),
         description: t('settings.profiles.success.description'),
@@ -53,6 +65,29 @@ export default function SettingsPage() {
       toast({
         title: t('settings.profiles.error.title'),
         description: error.message || t('settings.profiles.error.description'),
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Update display (nickname/avatar) mutation
+  const updateDisplayMutation = useMutation({
+    mutationFn: async (display: { nickname?: string; avatarUrl?: string | null }) => {
+      return await apiRequest('PATCH', '/api/user/display', display);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      toast({
+        title: "Profil mis à jour",
+        description: "Votre pseudo et avatar ont été mis à jour avec succès",
+        variant: "default"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de mettre à jour votre profil",
         variant: "destructive"
       });
     }
@@ -87,6 +122,24 @@ export default function SettingsPage() {
       return;
     }
     updateProfilesMutation.mutate(selectedProfiles);
+  };
+
+  const handleDisplaySave = () => {
+    const trimmedNickname = nickname.trim();
+    
+    if (trimmedNickname.length > 50) {
+      toast({
+        title: "Erreur",
+        description: "Le pseudo ne peut pas dépasser 50 caractères",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    updateDisplayMutation.mutate({
+      nickname: trimmedNickname || undefined,
+      avatarUrl: avatarUrl.trim() || null
+    });
   };
 
   const profileOptions: { value: ProfileType; label: string; description: string; restricted: boolean }[] = [
@@ -174,6 +227,67 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <Label htmlFor="theme-toggle">{t('settings.theme.label')}</Label>
               <ThemeToggle />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Nickname and Avatar */}
+        <Card className="glass-card border-[#7B2CFF]/30 neon-border visual-fade-in" data-testid="display-settings-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCircle className="w-5 h-5" />
+              Pseudo et Avatar
+            </CardTitle>
+            <CardDescription>
+              Personnalisez votre affichage dans l'application
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nickname">Pseudo (optionnel)</Label>
+              <Input
+                id="nickname"
+                type="text"
+                placeholder="Votre pseudo"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                maxLength={50}
+                data-testid="input-nickname"
+              />
+              <p className="text-xs text-muted-foreground">
+                {nickname.length}/50 caractères
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="avatar">URL de l'avatar (optionnel)</Label>
+              <Input
+                id="avatar"
+                type="url"
+                placeholder="https://example.com/avatar.jpg"
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
+                data-testid="input-avatar"
+              />
+              <p className="text-xs text-muted-foreground">
+                Utilisez une URL d'image pour votre avatar personnalisé
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                onClick={handleDisplaySave}
+                disabled={updateDisplayMutation.isPending}
+                className="bg-gradient-to-r from-[#7B2CFF] to-[#FF3CAC] hover:from-[#7B2CFF]/90 hover:to-[#FF3CAC]/90"
+                data-testid="button-save-display"
+              >
+                {updateDisplayMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+              {(user?.nickname || user?.avatarUrl) && (
+                <p className="text-sm text-muted-foreground">
+                  Pseudo actuel: {user?.nickname || 'Non défini'} | Avatar: {user?.avatarUrl ? '✓' : '✗'}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

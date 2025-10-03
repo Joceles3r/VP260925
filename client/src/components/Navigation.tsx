@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { Play } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { hasProfile } from '@shared/utils';
 import NotificationPanel from './NotificationPanel';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSelector } from './LanguageSelector';
@@ -22,7 +23,7 @@ export default function Navigation() {
     { path: '/leaderboard', label: '🏆 Classement', section: 'leaderboard', highlight: true },
     { path: '/receipts', label: 'Reçus', section: 'receipts' },
     { path: '/info', label: 'Info', section: 'info' },
-    ...(user?.profileType === 'admin' ? [
+    ...(hasProfile(user?.profileTypes, 'admin') ? [
       { path: '/admin', label: 'Admin', section: 'admin' },
       { path: '/admin/dashboard', label: '⚡ Dashboard', section: 'admin-dashboard', highlight: true },
     ] : []),
@@ -74,14 +75,23 @@ export default function Navigation() {
           {/* User Menu */}
           <div className="flex items-center space-x-4">
             <Link href="/profile" className="flex items-center space-x-3 px-3 py-1.5 rounded-lg glass-card smooth-transition hover:border-[#7B2CFF]/50 hover:neon-glow-violet" data-testid="user-menu">
-              <div className="w-9 h-9 bg-gradient-to-br from-[#7B2CFF] to-[#FF3CAC] rounded-full flex items-center justify-center neon-glow-violet smooth-transition hover:scale-110 cursor-pointer">
-                <span className="text-sm font-bold text-white" data-testid="user-avatar">
-                  {user?.firstName?.[0] || user?.email?.[0] || 'U'}
-                </span>
-              </div>
+              {user?.avatarUrl ? (
+                <img 
+                  src={user.avatarUrl} 
+                  alt="Avatar" 
+                  className="w-9 h-9 rounded-full object-cover neon-glow-violet smooth-transition hover:scale-110 cursor-pointer"
+                  data-testid="user-avatar-image"
+                />
+              ) : (
+                <div className="w-9 h-9 bg-gradient-to-br from-[#7B2CFF] to-[#FF3CAC] rounded-full flex items-center justify-center neon-glow-violet smooth-transition hover:scale-110 cursor-pointer">
+                  <span className="text-sm font-bold text-white" data-testid="user-avatar">
+                    {user?.nickname?.[0] || user?.firstName?.[0] || user?.email?.[0] || 'U'}
+                  </span>
+                </div>
+              )}
               <div className="hidden lg:block">
                 <span className="text-sm font-medium text-foreground block" data-testid="user-name">
-                  {user?.firstName || user?.email || 'User'}
+                  {user?.nickname || user?.firstName || user?.email || 'User'}
                 </span>
                 {user?.kycVerified && (
                   <div className="text-xs bg-gradient-to-r from-green-500/20 to-green-400/20 text-green-400 px-2 py-0.5 rounded-full inline-flex items-center mt-0.5" data-testid="kyc-verified">
