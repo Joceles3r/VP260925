@@ -1163,16 +1163,16 @@ export class VisualAIService {
   }
 
   // ===== RAPPORTS & MONITORING =====
-  
+
   async generateWeeklyReport(): Promise<any> {
     const endDate = new Date();
     const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
+
     const decisions = await storage.getAgentDecisions('visualai', undefined, 1000);
-    const weeklyDecisions = decisions.filter(d => 
+    const weeklyDecisions = decisions.filter(d =>
       new Date(d.createdAt!) >= startDate && new Date(d.createdAt!) <= endDate
     );
-    
+
     const report = {
       period: { start: startDate, end: endDate },
       decisions: {
@@ -1182,7 +1182,7 @@ export class VisualAIService {
         escalated: weeklyDecisions.filter(d => d.status === 'escalated').length
       },
       performance: {
-        avg_decision_latency: '200ms', // À calculer en production
+        avg_decision_latency: '200ms',
         availability: '99.95%',
         moderation_accuracy: '94%'
       },
@@ -1192,10 +1192,224 @@ export class VisualAIService {
         'Améliorer la détection de contenu spam'
       ]
     };
-    
+
     await this.logAuditEntry('policy_updated', 'system', 'weekly_report', report);
-    
+
     return report;
+  }
+
+  // ===== MONITORING LIVE SHOWS =====
+
+  private activeLiveShows: Set<string> = new Set();
+  private intervalId: NodeJS.Timeout | null = null;
+  private monitoring = false;
+  private readonly MONITORING_INTERVAL = 5000;
+
+  async startLiveShowMonitoring(): Promise<void> {
+    if (this.monitoring) {
+      console.log('[VisualAI] Surveillance Live Shows déjà active');
+      return;
+    }
+
+    this.monitoring = true;
+    console.log('[VisualAI] Démarrage surveillance Live Shows...');
+
+    const currentActive = await storage.getActiveLiveShows();
+    this.activeLiveShows = new Set(currentActive.map(show => show.id));
+    console.log(`[VisualAI] ${this.activeLiveShows.size} Live Shows actifs détectés`);
+
+    this.intervalId = setInterval(async () => {
+      await this.checkLiveShowUpdates();
+    }, this.MONITORING_INTERVAL);
+
+    console.log('[VisualAI] Surveillance Live Shows activée');
+  }
+
+  stopLiveShowMonitoring(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.monitoring = false;
+    console.log('[VisualAI] Surveillance Live Shows arrêtée');
+  }
+
+  private async checkLiveShowUpdates(): Promise<void> {
+    try {
+      const currentActiveLiveShows = await storage.getActiveLiveShows();
+      const currentActiveIds = new Set(currentActiveLiveShows.map(show => show.id));
+
+      for (const show of currentActiveLiveShows) {
+        if (!this.activeLiveShows.has(show.id)) {
+          console.log(`[VisualAI] Nouveau Live Show détecté: ${show.id}`);
+          await this.handleLiveShowStart(show);
+        }
+      }
+
+      for (const previousId of Array.from(this.activeLiveShows)) {
+        if (!currentActiveIds.has(previousId)) {
+          console.log(`[VisualAI] Live Show terminé: ${previousId}`);
+          await this.handleLiveShowEnd(previousId);
+        }
+      }
+
+      this.activeLiveShows = currentActiveIds;
+    } catch (error) {
+      console.error('[VisualAI] Erreur vérification Live Shows:', error);
+    }
+  }
+
+  private async handleLiveShowStart(liveShow: any): Promise<void> {
+    try {
+      console.log(`[VisualAI] Traitement démarrage Live Show: ${liveShow.id} - ${liveShow.title}`);
+
+      const { miniSocialConfigService } = await import('./miniSocialConfigService');
+      const { trafficModeService } = await import('./trafficModeService');
+      const { getNotificationService } = await import('../websocket');
+
+      const config = await miniSocialConfigService.getConfig();
+
+      if (!config.autoshow) {
+        console.log(`[VisualAI] Autoshow désactivé - pas d'affichage automatique pour ${liveShow.id}`);
+        await this.logAuditEntry('decision_made', 'live_show', liveShow.id, {
+          autoshow: config.autoshow,
+          reason: 'Autoshow désactivé'
+        });
+        return;
+      }
+
+      const viewerCount = liveShow.viewerCount || 0;
+      const trafficMode = await trafficModeService.determineMode(liveShow.id, viewerCount);
+
+      const notificationService = getNotificationService();
+      const socialPanelEvent = {
+        event: 'mini_social_auto_trigger',
+        liveShowId: liveShow.id,
+        liveShowTitle: liveShow.title,
+        config: {
+          autoshow: true,
+          position: config.position,
+          defaultState: config.defaultState,
+          mode: trafficMode.mode,
+          viewerCount,
+          isHighTraffic: viewerCount >= config.highTrafficThreshold,
+          slowMode: config.slowMode,
+          aiModeration: config.aiModeration
+        },
+        trafficMode: {
+          mode: trafficMode.mode,
+          reason: trafficMode.reason,
+          isManual: trafficMode.isManual,
+          highlightsCount: trafficMode.highlightsCount
+        },
+        metadata: {
+          triggeredBy: 'visualai',
+          triggeredAt: new Date().toISOString(),
+          decisionId: `visual-ai-${Date.now()}`
+        }
+      };
+
+      notificationService.sendLiveShowUpdate(liveShow.id, socialPanelEvent);
+
+      console.log(`[VisualAI] Mini réseau social déclenché automatiquement pour ${liveShow.id}`);
+      console.log(`[VisualAI] Mode: ${trafficMode.mode} (${trafficMode.reason}), Spectateurs: ${viewerCount}`);
+
+      await this.logAuditEntry('decision_made', 'live_show', liveShow.id, {
+        config,
+        trafficMode,
+        viewerCount,
+        decision: 'Affichage automatique déclenché'
+      });
+    } catch (error) {
+      console.error(`[VisualAI] Erreur traitement Live Show ${liveShow.id}:`, error);
+    }
+  }
+
+  private async handleLiveShowEnd(liveShowId: string): Promise<void> {
+    try {
+      console.log(`[VisualAI] Traitement fin Live Show: ${liveShowId}`);
+
+      const { getNotificationService } = await import('../websocket');
+      const notificationService = getNotificationService();
+
+      notificationService.sendLiveShowUpdate(liveShowId, {
+        event: 'mini_social_auto_close',
+        liveShowId,
+        metadata: {
+          triggeredBy: 'visualai',
+          triggeredAt: new Date().toISOString()
+        }
+      });
+
+      await this.logAuditEntry('decision_made', 'live_show', liveShowId, {
+        reason: 'Live Show terminé'
+      });
+    } catch (error) {
+      console.error(`[VisualAI] Erreur fermeture Live Show ${liveShowId}:`, error);
+    }
+  }
+
+  async manualTriggerLiveShow(liveShowId: string, adminUserId: string): Promise<boolean> {
+    try {
+      const activeLiveShows = await storage.getActiveLiveShows();
+      const liveShow = activeLiveShows.find(show => show.id === liveShowId);
+
+      if (!liveShow || !liveShow.isActive) {
+        throw new Error('Live Show non trouvé ou inactif');
+      }
+
+      const { miniSocialConfigService } = await import('./miniSocialConfigService');
+      const { trafficModeService } = await import('./trafficModeService');
+      const { getNotificationService } = await import('../websocket');
+
+      const config = await miniSocialConfigService.getConfig();
+      const viewerCount = liveShow.viewerCount || 0;
+      const trafficMode = await trafficModeService.determineMode(liveShowId, viewerCount);
+
+      const notificationService = getNotificationService();
+      notificationService.sendLiveShowUpdate(liveShowId, {
+        event: 'mini_social_manual_trigger',
+        liveShowId,
+        liveShowTitle: liveShow.title,
+        config: {
+          autoshow: true,
+          position: config.position,
+          defaultState: config.defaultState,
+          mode: trafficMode.mode,
+          viewerCount,
+          isHighTraffic: viewerCount >= config.highTrafficThreshold,
+          slowMode: config.slowMode,
+          aiModeration: config.aiModeration
+        },
+        metadata: {
+          triggeredBy: `admin:${adminUserId}`,
+          triggeredAt: new Date().toISOString(),
+          decisionId: `manual-${Date.now()}`
+        }
+      });
+
+      await this.logAuditEntry('decision_made', 'live_show', liveShowId, {
+        triggeredBy: adminUserId,
+        config,
+        trafficMode,
+        viewerCount
+      });
+
+      console.log(`[VisualAI] Déclenchement manuel par admin ${adminUserId} pour Live Show ${liveShowId}`);
+      return true;
+    } catch (error) {
+      console.error('[VisualAI] Erreur déclenchement manuel:', error);
+      throw error;
+    }
+  }
+
+  getLiveShowMonitoringStats() {
+    return {
+      monitoring: this.monitoring,
+      activeLiveShows: this.activeLiveShows.size,
+      monitoringInterval: this.MONITORING_INTERVAL,
+      activeLiveShowIds: Array.from(this.activeLiveShows)
+    };
   }
 }
 

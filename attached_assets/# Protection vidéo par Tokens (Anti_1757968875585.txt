@@ -1,8 +1,0 @@
-# Protection vidéo par Tokens (Anti-piratage)
-
-1. Chaque lecture vidéo est protégée par un Token unique (valide quelques minutes).
-2. Les Tokens sont générés par VISUAL via Bunny.net.
-3. Pas de partage possible d’un lien direct → lien inutilisable sans Token valide.
-4. Empêche le piratage, limite le téléchargement sauvage.
-5. Garantit que seuls les utilisateurs autorisés visionnent le contenu.
-6. Renforce la valeur des droits d’auteur pour les porteurs de projets.

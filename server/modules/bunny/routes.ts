@@ -1,13 +1,11 @@
 import { Router } from "express";
 import Stripe from "stripe";
-import { bunnyClient } from "../../services/bunnyClient";
-import { issuePlaybackToken, verifyAndConsume } from "../../services/bunnyTokenService";
-import { generateSignedHlsUrl, validateBunnyTokenConfig } from "../../services/bunnySignedUrl";
+import { bunnyService } from "../../services/bunnyService";
 import { getUploadFeeEUR, validateVideoType } from "./pricing";
 import { BUNNY_TARIFFS, CREATOR_CAP_EUR, MIN_ACTIVATION_EUR } from "../../../shared/constants/bunnyDeposit";
 
 // Validate Bunny.net configuration at module load
-const bunnyConfig = validateBunnyTokenConfig();
+const bunnyConfig = bunnyService.validateBunnyTokenConfig();
 console.log(`[BUNNY] ${bunnyConfig.message}`);
 
 const router = Router();
@@ -107,7 +105,7 @@ router.post("/bunny/videos/:guid/play-token", isAuthenticated, async (req: any, 
     // If Bunny CDN Token Authentication is configured, use native signed URLs
     if (!bunnyConfig.fallbackMode) {
       try {
-        const signedUrl = generateSignedHlsUrl(guid, 30 * 60, ip);
+        const signedUrl = bunnyService.generateSignedHlsUrl(guid, 30 * 60, ip);
         return res.json({
           url: signedUrl,
           type: "bunny_cdn_signed",
@@ -120,7 +118,7 @@ router.post("/bunny/videos/:guid/play-token", isAuthenticated, async (req: any, 
     }
     
     // Fallback: Use legacy token system (manifest-only protection)
-    const token = issuePlaybackToken(guid, userId, ip, ua, 3, 30 * 60);
+    const token = bunnyService.issuePlaybackToken(guid, userId, ip, ua, 3, 30 * 60);
     
     return res.json({
       token,
@@ -147,12 +145,12 @@ router.get("/bunny/videos/:guid/manifest.m3u8", async (req: any, res) => {
     const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0] || req.socket.remoteAddress || "0.0.0.0");
     const ua = req.headers["user-agent"] || "";
     
-    const verification = verifyAndConsume(token, ip, ua);
+    const verification = bunnyService.verifyAndConsumePlaybackToken(token, ip, ua);
     if (!verification.ok || verification.payload?.vid !== guid) {
       return res.status(401).send("Token invalide ou expiré");
     }
 
-    const originUrl = bunnyClient.hlsManifestUrl(guid);
+    const originUrl = bunnyService.hlsManifestUrl(guid);
     const response = await fetch(originUrl, {
       headers: { "AccessKey": process.env.BUNNY_STREAM_API_KEY! }
     });

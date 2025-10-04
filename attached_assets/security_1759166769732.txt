@@ -1,5 +1,0 @@
-# Path: public/.well-known/security.txt
-Contact: mailto:security@XXXXXXXX
-Policy: https://XXXXXXXX/security
-Preferred-Languages: fr, en
-Expires: 2099-12-31T23:59:59.000Z

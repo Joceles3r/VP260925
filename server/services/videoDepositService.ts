@@ -2,7 +2,7 @@
 // Implements the 3 modules: pricing (2€/5€/10€), technical rules, and protection
 
 import { CREATOR_QUOTAS, VIDEO_DEPOSIT_PRICING } from '@shared/constants';
-import { bunnyVideoService } from './bunnyVideoService';
+import { bunnyService } from './bunnyService';
 import { storage } from '../storage';
 import { z } from 'zod';
 import Stripe from 'stripe';
@@ -192,7 +192,7 @@ export class VideoDepositService {
     }
 
     // 3. Get pricing
-    const depositFee = bunnyVideoService.getDepositPrice(videoType);
+    const depositFee = bunnyService.getDepositPrice(videoType);
 
     try {
       // 4. Create Stripe payment intent
@@ -213,7 +213,7 @@ export class VideoDepositService {
       // 5. Create Bunny.net upload session
       let bunnyUpload;
       try {
-        bunnyUpload = await bunnyVideoService.createVideoUpload(
+        bunnyUpload = await bunnyService.createVideoUpload(
           file.originalname.split('.')[0], // Title without extension
           creatorId,
           videoType
@@ -439,7 +439,7 @@ export class VideoDepositService {
             // Delete Bunny.net video if created
             if (deposit.bunnyVideoId) {
               try {
-                await bunnyVideoService.deleteVideo(deposit.bunnyVideoId);
+                await bunnyService.deleteVideo(deposit.bunnyVideoId);
               } catch (bunnyError) {
                 console.warn(`Failed to delete Bunny video ${deposit.bunnyVideoId}:`, bunnyError);
                 errors.push(`Bunny deletion failed for ${deposit.id}: ${bunnyError}`);
@@ -558,7 +558,7 @@ export class VideoDepositService {
       // Check Bunny.net video existence
       if (deposit.bunnyVideoId && deposit.status === 'active') {
         try {
-          const videoStatus = await bunnyVideoService.getVideoStatus(deposit.bunnyVideoId);
+          const videoStatus = await bunnyService.getVideoStatus(deposit.bunnyVideoId);
           if (videoStatus.status === 'failed') {
             issues.push('Bunny.net video processing failed');
             recommendations.push('Re-upload video or mark deposit as failed');

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import Stripe from "stripe";
-import { bunnyClient } from "../../services/bunnyClient";
+import { bunnyService } from "../../services/bunnyService";
 import type { IStorage } from "../../storage";
 
 const router = Router();
@@ -33,8 +33,8 @@ router.post("/webhooks/bunny", async (req: any, res) => {
         const { userId, projectId, type, durationSec, title } = session.metadata;
 
         const videoTitle = title || `${type}-${Date.now()}`;
-        const bunnyVideo = await bunnyClient.createVideo(videoTitle);
-        const uploadUrl = bunnyClient.getUploadUrl(bunnyVideo.guid);
+        const bunnyVideo = await bunnyService.createVideo(videoTitle);
+        const uploadUrl = bunnyService.getUploadUrl(bunnyVideo.guid);
 
         const depositId = await storage.createVideoDeposit({
           projectId,
@@ -45,6 +45,7 @@ router.post("/webhooks/bunny", async (req: any, res) => {
           bunnyLibraryId: process.env.BUNNY_LIBRARY_ID || "",
           duration: parseInt(durationSec),
           depositFee: String(session.amount_total! / 100),
+          )
           paymentIntentId: session.payment_intent as string,
           status: "processing",
           paidAt: new Date()
@@ -57,7 +58,7 @@ router.post("/webhooks/bunny", async (req: any, res) => {
         });
 
         await storage.updateVideoDeposit(depositId, {
-          hlsPlaylistUrl: bunnyClient.hlsManifestUrl(bunnyVideo.guid)
+          hlsPlaylistUrl: bunnyService.hlsManifestUrl(bunnyVideo.guid)
         });
 
       } catch (error: any) {

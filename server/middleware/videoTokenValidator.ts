@@ -4,7 +4,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { storage } from '../storage';
-import { bunnyVideoService } from '../services/bunnyVideoService';
+import { bunnyService } from '../services/bunnyService';
 
 export interface VideoTokenRequest extends Request {
   videoAccess?: {

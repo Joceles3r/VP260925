@@ -1,8 +1,0 @@
-from fastapi import FastAPI
-from server.routes.admin_finance_preview import router as finance_preview_router
-from server.routes.stripe_webhooks import router as stripe_router
-
-app = FastAPI(title="VISUAL API — Revenue Engine")
-# (Monte Sentry, rate-limit, CORS, etc. ici)
-app.include_router(finance_preview_router)   # /api/admin/finance/preview-split
-app.include_router(stripe_router)            # /webhooks/stripe

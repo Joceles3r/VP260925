@@ -1,4 +1,0 @@
-# Path: public/robots.txt
-User-agent: *
-Allow: /
-Sitemap: https://XXXXXXXX/sitemaps/sitemap-index.xml

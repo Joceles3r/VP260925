@@ -74,7 +74,7 @@ import { initializeWebSocket } from "./websocket";
 import { notificationService } from "./services/notificationService";
 import { VideoDepositService } from "./services/videoDepositService";
 import { visualAI } from "./services/visualAI";
-import { bunnyVideoService } from "./services/bunnyVideoService";
+import { bunnyService } from "./services/bunnyService";
 import { validateVideoToken, checkVideoAccess } from "./middleware/videoTokenValidator";
 import { registerPurgeRoutes } from "./purge/routes";
 import { receiptsRouter } from "./receipts/routes";
@@ -3065,7 +3065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clientIp = ipAddress || req.ip || req.connection.remoteAddress;
       const clientUserAgent = userAgent || req.headers['user-agent'];
       
-      const secureToken = bunnyVideoService.generateSecureToken(
+      const secureToken = bunnyService.generateSecureToken(
         videoDepositId, 
         userId,
         clientIp,
@@ -3102,7 +3102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const videoAccess = req.videoAccess;
 
       // Get video processing status from Bunny.net
-      const videoStatus = await bunnyVideoService.getVideoStatus(videoDepositId);
+      const videoStatus = await bunnyService.getVideoStatus(videoDepositId);
       
       if (videoStatus.status !== 'completed') {
         return res.status(202).json({
@@ -5975,7 +5975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== ROUTES MINI RÉSEAU SOCIAL AUTOMATIQUE =====
 
   // Import des services
-  const { visualAIService } = await import('./services/visualAIService');
+  const { visualAI } = await import('./services/visualAI');
   const { moderationService } = await import('./services/moderationService');
   const { trafficModeService } = await import('./services/trafficModeService');
   const { highlightsService } = await import('./services/highlightsService');
@@ -6160,7 +6160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Accès réservé aux administrateurs" });
       }
 
-      const stats = visualAIService.getMonitoringStats();
+      const stats = visualAI.getLiveShowMonitoringStats();
       res.json({
         stats,
         message: "Statistiques VisualAI récupérées"
@@ -6181,7 +6181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const liveShowId = req.params.liveShowId;
       const adminUserId = req.user.claims.sub;
 
-      const success = await visualAIService.manualTrigger(liveShowId, adminUserId);
+      const success = await visualAI.manualTriggerLiveShow(liveShowId, adminUserId);
       
       if (success) {
         res.json({
@@ -6210,7 +6210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Accès réservé aux administrateurs" });
       }
 
-      visualAIService.stopMonitoring();
+      visualAI.stopLiveShowMonitoring();
       
       res.json({
         success: true,
@@ -6229,7 +6229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Accès réservé aux administrateurs" });
       }
 
-      await visualAIService.startMonitoring();
+      await visualAI.startLiveShowMonitoring();
       
       res.json({
         success: true,
