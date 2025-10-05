@@ -89,6 +89,7 @@ function Router() {
             <Route path="/contact-support" component={ContactSupportPage} />
             <Route path="/voix-info" component={VoixInfoDashboardPage} />
             <Route path="/minor-visitor-dashboard" component={MinorVisitorDashboardPage} />
+            <Route path="/wallet/overdraft" component={OverdraftManagementPage} />
             <Route path="/admin" component={Admin} />
             <Route path="/admin/dashboard" component={AdminDashboard} />
             <Route component={NotFound} />
