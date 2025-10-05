@@ -8606,21 +8606,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/minor-visitors/notifications', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const profile = await minorVisitorService.getMinorProfile(userId);
+      const { minorNotificationService } = await import('./services/minorNotificationService');
       
-      if (!profile) {
-        return res.status(404).json({ message: 'Profil mineur non trouvé' });
-      }
-
-      // TODO: Implémenter la récupération des notifications
+      const notifications = await minorNotificationService.getMinorNotifications(userId);
+      
       res.json({
         success: true,
-        notifications: [],
-        message: 'Fonctionnalité à implémenter'
+        notifications,
+        unreadCount: notifications.filter(n => !n.isRead).length
       });
     } catch (error) {
       console.error('Error getting minor notifications:', error);
+      
+      if (error.message.includes('non trouvé')) {
+        return res.status(404).json({ message: error.message });
+      }
+      
       res.status(500).json({ message: 'Erreur lors de la récupération des notifications' });
+    }
+  });
+
+  // Marquer une notification comme lue
+  app.patch('/api/minor-visitors/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notificationId = req.params.id;
+      const { minorNotificationService } = await import('./services/minorNotificationService');
+      
+      await minorNotificationService.markAsRead(userId, notificationId);
+      
+      res.json({
+        success: true,
+        message: 'Notification marquée comme lue'
+      });
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour de la notification' });
+    }
+  });
+
+  // Marquer toutes les notifications comme lues
+  app.patch('/api/minor-visitors/notifications/mark-all-read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { minorNotificationService } = await import('./services/minorNotificationService');
+      
+      const count = await minorNotificationService.markAllAsRead(userId);
+      
+      res.json({
+        success: true,
+        count,
+        message: `${count} notifications marquées comme lues`
+      });
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour des notifications' });
     }
   });
 
