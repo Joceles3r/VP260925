@@ -229,67 +229,8 @@ export const InvestiLecteurDashboard: React.FC<InvestiLecteurDashboardProps> = (
         </CardContent>
       </Card>
 
-      {/* Golden Tickets */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-yellow-500" />
-            Golden Tickets Premium
-          </CardTitle>
-          <CardDescription>
-            Paris premium mensuels avec remboursements selon classement final
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {getGoldenTicketTiers().map((tier) => (
-              <Card key={tier.tier} className={`${tier.color}`}>
-                <CardContent className="p-6 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-4">
-                    <Star className="h-6 w-6 text-yellow-600" />
-                    <p className="text-xl font-bold">Tier {tier.tier}</p>
-                  </div>
-                  
-                  <p className="text-2xl font-bold mb-2">{tier.euros}€</p>
-                  <p className="text-muted-foreground mb-4">{tier.votes} votes</p>
-                  
-                  <div className="text-sm space-y-1 mb-4">
-                    <p>• TOP 1-10 : <strong className="text-green-600">100% remboursé</strong></p>
-                    <p>• Rang 11 : <strong className="text-green-600">100% remboursé</strong></p>
-                    <p>• Rangs 12-20 : <strong className="text-orange-600">50% remboursé</strong></p>
-                    <p>• Rang 21+ : <strong className="text-red-600">0% remboursé</strong></p>
-                  </div>
-                  
-                  <Button 
-                    className="w-full" 
-                    variant={tier.tier === 2 ? 'default' : 'outline'}
-                    disabled={!profile.cautionPaid || visuPointsBalance < tier.euros * 100}
-                  >
-                    Acheter (≈ {tier.euros * 100} VP)
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          
-          <div className="mt-6 p-4 bg-muted rounded-lg">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                ℹ️
-              </div>
-              <div className="space-y-2">
-                <h4 className="font-medium">Comment ça fonctionne :</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
-                  <li>• Choisissez un infoporteur à soutenir pour le mois</li>
-                  <li>• Votre remboursement dépend de son classement final</li>
-                  <li>• Limite : 1 Golden Ticket par mois</li>
-                  <li>• Résultats et remboursements à la fin du mois</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Golden Tickets Manager */}
+      <GoldenTicketManager profile={{ id: profile.id, visuPoints: visuPointsBalance }} />
 
       {/* Actions rapides */}
       <Card>
