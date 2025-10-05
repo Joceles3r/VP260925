@@ -880,18 +880,6 @@ export const socialLikes = pgTable("social_likes", {
   unique("unique_user_comment_like").on(table.userId, table.commentId),
 ]);
 
-// VISUPoints transactions table
-export const visuPointsTransactions = pgTable("visu_points_transactions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  amount: integer("amount").notNull(), // Can be positive (earned) or negative (spent)
-  reason: varchar("reason").notNull(), // 'post_like', 'comment_helpful', 'investment', etc.
-  referenceId: varchar("reference_id"), // ID of the post/comment/project that earned points
-  referenceType: varchar("reference_type"), // 'post', 'comment', 'project', etc.
-  idempotencyKey: varchar("idempotency_key").unique(), // For preventing duplicate awards
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 // Payment receipts table
 export const paymentReceipts = pgTable("payment_receipts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
