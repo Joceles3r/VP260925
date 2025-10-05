@@ -39,7 +39,11 @@ import {
   insertAdPhotosSchema,
   // Schémas Live Show
   designateFinalistsSchema,
-  cancelParticipationSchema
+  cancelParticipationSchema,
+  // Schémas messagerie interne
+  insertInternalMessageSchema,
+  updateInternalMessageSchema,
+  insertFloatingButtonConfigSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount, getMinimumCautionAmountForUser, getMinimumWithdrawalAmountForUser, hasProfile } from "@shared/utils";
 import { 
