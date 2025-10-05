@@ -980,6 +980,61 @@ export const withdrawalRequests = pgTable("withdrawal_requests", {
 
 // ===== NOUVELLES TABLES POUR FONCTIONNALITÉS AVANCÉES =====
 
+// ===== MESSAGERIE INTERNE TABLES =====
+
+// Internal messages table - Messagerie interne pour contacter les responsables
+export const internalMessages = pgTable("internal_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  userType: varchar("user_type").notNull(), // Type de profil utilisateur au moment de l'envoi
+  subject: messageSubjectEnum("subject").notNull(),
+  subjectCustom: varchar("subject_custom"), // Pour "autre_demande"
+  message: text("message").notNull(),
+  priority: messagePriorityEnum("priority").notNull().default('low'),
+  status: messageStatusEnum("status").notNull().default('unread'),
+  adminNotes: text("admin_notes"), // Notes internes de l'admin
+  handledBy: varchar("handled_by").references(() => users.id), // Admin qui traite le message
+  handledAt: timestamp("handled_at"),
+  emailSent: boolean("email_sent").default(false), // Notification email envoyée
+  emailSentAt: timestamp("email_sent_at"),
+  ipAddress: varchar("ip_address"), // Sécurité
+  userAgent: text("user_agent"), // Sécurité
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_internal_messages_user").on(table.userId),
+  index("idx_internal_messages_status").on(table.status),
+  index("idx_internal_messages_priority").on(table.priority),
+  index("idx_internal_messages_created").on(table.createdAt),
+  index("idx_internal_messages_subject").on(table.subject),
+]);
+
+// Message rate limiting table - Anti-spam
+export const messageRateLimit = pgTable("message_rate_limit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  date: varchar("date", { length: 10 }).notNull(), // Format YYYY-MM-DD
+  messageCount: integer("message_count").default(1),
+  maxMessages: integer("max_messages").default(3), // Limite par jour
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  unique("unique_user_date_limit").on(table.userId, table.date),
+  index("idx_rate_limit_user").on(table.userId),
+  index("idx_rate_limit_date").on(table.date),
+]);
+
+// Floating button configuration table - Configuration du bouton flottant
+export const floatingButtonConfig = pgTable("floating_button_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  isEnabled: boolean("is_enabled").default(true),
+  buttonText: varchar("button_text").default('Contacter le Responsable'),
+  buttonColor: varchar("button_color").default('#dc2626'), // Rouge par défaut
+  position: varchar("position").default('bottom-right'), // bottom-right, bottom-left
+  updatedBy: varchar("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Referral system table - Système de parrainage
 export const referrals = pgTable("referrals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
