@@ -11,6 +11,7 @@ import type { FeatureToggle } from '@shared/schema';
 import LiveShowsAdminPanel from '@/components/LiveShowsAdminPanel';
 import { InternalMessagesManager } from '@/components/admin/InternalMessagesManager';
 import MinorVisitorsManagement from '@/admin/components/MinorVisitorsManagement';
+import OverdraftManagement from '@/admin/components/OverdraftManagement';
 
 interface AdminStatsProps {
   stats: any;
