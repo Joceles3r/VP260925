@@ -37,6 +37,7 @@ import AdminDashboard from "@/admin/pages/AdminDashboard";
 import ContactSupportPage from "@/pages/contact-support";
 import VoixInfoDashboardPage from "@/pages/voix-info-dashboard";
 import MinorVisitorDashboardPage from "@/pages/minor-visitor-dashboard";
+import OverdraftManagementPage from "@/pages/overdraft-management";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
