@@ -1087,6 +1087,90 @@ export const floatingButtonConfig = pgTable("floating_button_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// ===== VISITEUR MINEUR TABLES =====
+
+// Minor profiles - Profils des visiteurs mineurs (16-17 ans)
+export const minorProfiles = pgTable("minor_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  birthDate: varchar("birth_date", { length: 10 }).notNull(), // Format YYYY-MM-DD
+  parentalConsent: boolean("parental_consent").default(false),
+  parentalConsentDate: timestamp("parental_consent_date"),
+  parentEmail: varchar("parent_email"), // Email du parent/tuteur
+  socialPostingEnabled: boolean("social_posting_enabled").default(false),
+  visuPointsEarned: integer("visu_points_earned").default(0), // VP gagnés depuis inscription
+  visuPointsCap: integer("visu_points_cap").default(20000), // Cap à 200€ = 20000 VP
+  status: minorStatusEnum("status").default('active'),
+  // Transition vers majorité
+  majorityDate: varchar("majority_date", { length: 10 }), // Calcul automatique: birthDate + 18 ans
+  transitionedAt: timestamp("transitioned_at"),
+  lockUntil: timestamp("lock_until"), // Verrou 6 mois si cap atteint
+  requiredAccountType: accountTypeEnum("required_account_type"), // Obligatoire post-majorité
+  accountTypeChosen: accountTypeEnum("account_type_chosen"), // Choix effectué
+  accountTypeChosenAt: timestamp("account_type_chosen_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_minor_profiles_user").on(table.userId),
+  index("idx_minor_profiles_status").on(table.status),
+  index("idx_minor_profiles_majority_date").on(table.majorityDate),
+  index("idx_minor_profiles_lock_until").on(table.lockUntil),
+]);
+
+// Minor VISUpoints transactions - Historique des gains VP des mineurs
+export const minorVisuPointsTransactions = pgTable("minor_visu_points_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  minorProfileId: varchar("minor_profile_id").notNull().references(() => minorProfiles.id),
+  amount: integer("amount").notNull(), // VP gagnés (toujours positif pour mineurs)
+  balanceBefore: integer("balance_before").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  source: varchar("source").notNull(), // 'quiz', 'viewing', 'mission', 'educational', etc.
+  sourceId: varchar("source_id"), // ID de l'activité source
+  description: text("description").notNull(),
+  wasBlocked: boolean("was_blocked").default(false), // true si gain bloqué par cap
+  euroEquivalent: decimal("euro_equivalent", { precision: 8, scale: 2 }), // Équivalent en euros
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_minor_vp_transactions_user").on(table.userId),
+  index("idx_minor_vp_transactions_profile").on(table.minorProfileId),
+  index("idx_minor_vp_transactions_source").on(table.source),
+  index("idx_minor_vp_transactions_date").on(table.createdAt),
+]);
+
+// Minor notifications - Notifications automatiques pour les mineurs
+export const minorNotifications = pgTable("minor_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  minorProfileId: varchar("minor_profile_id").notNull().references(() => minorProfiles.id),
+  type: varchar("type").notNull(), // 'cap_warning_80', 'cap_reached', 'majority_reminder', 'lock_expired'
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  triggerDate: timestamp("trigger_date"), // Date de déclenchement programmé
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_minor_notifications_user").on(table.userId),
+  index("idx_minor_notifications_type").on(table.type),
+  index("idx_minor_notifications_trigger").on(table.triggerDate),
+  index("idx_minor_notifications_read").on(table.isRead),
+]);
+
+// Minor admin settings - Paramètres admin pour les visiteurs mineurs
+export const minorAdminSettings = pgTable("minor_admin_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settingKey: varchar("setting_key", { length: 100 }).notNull().unique(),
+  settingValue: text("setting_value").notNull(),
+  settingType: varchar("setting_type").notNull(), // 'boolean', 'number', 'string'
+  description: text("description"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_minor_settings_key").on(table.settingKey),
+]);
+
 // ===== VOIX DE L'INFO TABLES =====
 
 // Infoporteur profiles - Profils des créateurs de contenu
