@@ -51,7 +51,12 @@ import {
   updateArticleSchema,
   insertArticlePurchaseSchema,
   insertGoldenTicketSchema,
-  visuPointsPackSchema
+  visuPointsPackSchema,
+  // Schémas Visiteur Mineur
+  createMinorProfileSchema,
+  updateMinorProfileSchema,
+  awardMinorVisuPointsSchema,
+  updateMinorAdminSettingsSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount, getMinimumCautionAmountForUser, getMinimumWithdrawalAmountForUser, hasProfile } from "@shared/utils";
 import { 
