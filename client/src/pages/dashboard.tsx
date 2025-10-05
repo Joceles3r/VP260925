@@ -54,7 +54,7 @@ export default function Dashboard() {
           <DashboardStats />
         </div>
 
-        {/* Widget Visiteur Mineur */}
+        {/* Widget/Setup Visiteur Mineur */}
         <div className="mt-8">
           <MinorStatusWidget />
         </div>
