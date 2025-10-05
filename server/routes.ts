@@ -108,6 +108,7 @@ import { ObjectStorageService } from "./objectStorage";
 import { internalMessageService } from "./services/internalMessageService";
 import { voixInfoService } from "./services/voixInfoService";
 import { voixInfoRankingService } from "./services/voixInfoRankingService";
+import { minorVisitorService } from "./services/minorVisitorService";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
