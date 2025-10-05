@@ -2921,7 +2921,6 @@ export type InsertVideoAnalytics = z.infer<typeof insertVideoAnalyticsSchema>;
 export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
 export type InsertSocialComment = z.infer<typeof insertSocialCommentSchema>;
 export type InsertSocialLike = z.infer<typeof insertSocialLikeSchema>;
-export type InsertVisuPointsTransaction = z.infer<typeof insertVisuPointsTransactionSchema>;
 export type InsertPaymentReceipt = z.infer<typeof insertPaymentReceiptSchema>;
 export type InsertVideoCategory = z.infer<typeof insertVideoCategorySchema>;
 export type InsertProjectExtension = z.infer<typeof insertProjectExtensionSchema>;
