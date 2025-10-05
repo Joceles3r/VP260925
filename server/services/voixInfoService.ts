@@ -583,6 +583,14 @@ export class VoixInfoService {
       .orderBy(dailyRankings.rank);
   }
 
+  async getUserGoldenTickets(investiLecteurId: string): Promise<GoldenTicket[]> {
+    return await db
+      .select()
+      .from(goldenTickets)
+      .where(eq(goldenTickets.investiLecteurId, investiLecteurId))
+      .orderBy(desc(goldenTickets.createdAt));
+  }
+
   // ===== UTILITAIRES =====
 
   private generateSlug(title: string): string {
