@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { FeatureToggle } from '@shared/schema';
 import LiveShowsAdminPanel from '@/components/LiveShowsAdminPanel';
 import { InternalMessagesManager } from '@/components/admin/InternalMessagesManager';
+import MinorVisitorsManagement from '@/admin/components/MinorVisitorsManagement';
 
 interface AdminStatsProps {
   stats: any;
