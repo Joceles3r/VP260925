@@ -416,6 +416,12 @@ const MinorVisitorDashboardPage: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Activités pour gagner des VISUpoints */}
+      <MinorActivitiesPanel />
+
+      {/* Centre de notifications */}
+      <MinorNotificationCenter />
+
       {/* Actions rapides */}
       <Card className="mt-6">
         <CardHeader>
