@@ -21,6 +21,8 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import MinorActivitiesPanel from '@/components/minor/MinorActivitiesPanel';
+import MinorNotificationCenter from '@/components/minor/MinorNotificationCenter';
 
 interface MinorStatus {
   isMinor: boolean;
