@@ -94,6 +94,9 @@ function Router() {
       
       {/* Curiosity Dock - visible uniquement pour les utilisateurs connectés */}
       {isAuthenticated && !isLoading && <CuriosityDock />}
+      
+      {/* Bouton flottant de contact - visible uniquement pour les utilisateurs connectés */}
+      {isAuthenticated && !isLoading && <FloatingContactButton />}
     </div>
   );
 }
