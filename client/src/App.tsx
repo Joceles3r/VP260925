@@ -35,6 +35,7 @@ import LegalPage from "@/pages/legal";
 import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/admin/pages/AdminDashboard";
 import ContactSupportPage from "@/pages/contact-support";
+import VoixInfoDashboardPage from "@/pages/voix-info-dashboard";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
