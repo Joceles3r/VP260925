@@ -86,6 +86,7 @@ function Router() {
             <Route path="/settings" component={SettingsPage} />
             <Route path="/creator/videos" component={CreatorVideosPage} />
             <Route path="/contact-support" component={ContactSupportPage} />
+            <Route path="/voix-info" component={VoixInfoDashboardPage} />
             <Route path="/admin" component={Admin} />
             <Route path="/admin/dashboard" component={AdminDashboard} />
             <Route component={NotFound} />
