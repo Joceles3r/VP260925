@@ -14,6 +14,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { GoldenTicketManager } from './GoldenTicketManager';
 
 interface InvestiLecteurProfile {
   id: string;
