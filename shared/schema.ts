@@ -3939,3 +3939,46 @@ export const insertProjectMonthlyRankingSchema = createInsertSchema(projectMonth
 
 export type ProjectMonthlyRanking = typeof projectMonthlyRankings.$inferSelect;
 export type InsertProjectMonthlyRanking = z.infer<typeof insertProjectMonthlyRankingSchema>;
+
+// ===== MESSAGERIE INTERNE SCHEMAS =====
+
+export const insertInternalMessageSchema = createInsertSchema(internalMessages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  handledAt: true,
+  emailSentAt: true,
+}).extend({
+  message: z.string().min(10, "Le message doit contenir au moins 10 caractères").max(2000, "Le message ne peut pas dépasser 2000 caractères"),
+  subjectCustom: z.string().optional(),
+});
+
+export const insertMessageRateLimitSchema = createInsertSchema(messageRateLimit).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFloatingButtonConfigSchema = createInsertSchema(floatingButtonConfig).omit({
+  id: true,
+  updatedAt: true,
+});
+
+// Update internal message schema (for admin use)
+export const updateInternalMessageSchema = z.object({
+  status: z.enum(['unread', 'read', 'in_progress', 'resolved', 'archived']).optional(),
+  adminNotes: z.string().optional(),
+  handledBy: z.string().optional(),
+});
+
+// ===== MESSAGERIE INTERNE TYPES =====
+
+export type InternalMessage = typeof internalMessages.$inferSelect;
+export type InsertInternalMessage = z.infer<typeof insertInternalMessageSchema>;
+export type UpdateInternalMessage = z.infer<typeof updateInternalMessageSchema>;
+
+export type MessageRateLimit = typeof messageRateLimit.$inferSelect;
+export type InsertMessageRateLimit = z.infer<typeof insertMessageRateLimitSchema>;
+
+export type FloatingButtonConfig = typeof floatingButtonConfig.$inferSelect;
+export type InsertFloatingButtonConfig = z.infer<typeof insertFloatingButtonConfigSchema>;
