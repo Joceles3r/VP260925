@@ -8757,6 +8757,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   console.log('✅ Routes des visiteurs mineurs initialisées');
 
+  // Import des services mineurs
+  const { minorVisitorService } = await import('./services/minorVisitorService');
+  const { minorNotificationService } = await import('./services/minorNotificationService');
+
   // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
