@@ -8019,6 +8019,419 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ Routes de messagerie interne initialisées');
 
   // =======================
+  // MODULE VOIX DE L'INFO
+  // =======================
+
+  // ===== PROFILS UTILISATEURS =====
+
+  // Créer un profil infoporteur
+  app.post('/api/voix-info/infoporteur/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = insertInfoporteurProfileSchema.safeParse({
+        ...req.body,
+        userId
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const profile = await voixInfoService.createInfoporteurProfile(validation.data);
+      
+      res.status(201).json({
+        success: true,
+        profile
+      });
+    } catch (error) {
+      console.error('Error creating infoporteur profile:', error);
+      
+      if (error.message.includes('déjà existant')) {
+        return res.status(409).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: 'Erreur lors de la création du profil' });
+    }
+  });
+
+  // Créer un profil investi-lecteur
+  app.post('/api/voix-info/investi-lecteur/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = insertInvestiLecteurProfileSchema.safeParse({
+        ...req.body,
+        userId
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const profile = await voixInfoService.createInvestiLecteurProfile(validation.data);
+      
+      res.status(201).json({
+        success: true,
+        profile
+      });
+    } catch (error) {
+      console.error('Error creating investi-lecteur profile:', error);
+      
+      if (error.message.includes('déjà existant')) {
+        return res.status(409).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: 'Erreur lors de la création du profil' });
+    }
+  });
+
+  // Récupérer son profil infoporteur
+  app.get('/api/voix-info/infoporteur/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await voixInfoService.getInfoporteurProfile(userId);
+      
+      if (!profile) {
+        return res.status(404).json({ message: 'Profil infoporteur non trouvé' });
+      }
+
+      res.json({ success: true, profile });
+    } catch (error) {
+      console.error('Error getting infoporteur profile:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du profil' });
+    }
+  });
+
+  // Récupérer son profil investi-lecteur
+  app.get('/api/voix-info/investi-lecteur/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await voixInfoService.getInvestiLecteurProfile(userId);
+      
+      if (!profile) {
+        return res.status(404).json({ message: 'Profil investi-lecteur non trouvé' });
+      }
+
+      res.json({ success: true, profile });
+    } catch (error) {
+      console.error('Error getting investi-lecteur profile:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du profil' });
+    }
+  });
+
+  // ===== VISUPOINTS =====
+
+  // Acheter un pack VISUpoints
+  app.post('/api/voix-info/visu-points/buy-pack', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = visuPointsPackSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Pack invalide',
+          errors: validation.error.errors
+        });
+      }
+
+      const { packEuros } = validation.data;
+      const paymentIntentId = req.body.paymentIntentId;
+
+      if (!paymentIntentId) {
+        return res.status(400).json({ message: 'Payment Intent ID requis' });
+      }
+
+      const result = await voixInfoService.buyVisuPointsPack({
+        userId,
+        packEuros,
+        paymentIntentId
+      });
+
+      res.json({
+        success: true,
+        transaction: result.transaction,
+        newBalance: result.newBalance
+      });
+    } catch (error) {
+      console.error('Error buying VISUpoints pack:', error);
+      res.status(400).json({ message: error.message || 'Erreur lors de l\'achat du pack' });
+    }
+  });
+
+  // Récupérer le solde VISUpoints
+  app.get('/api/voix-info/visu-points/balance', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const balance = await voixInfoService.getVisuPointsBalance(userId);
+
+      res.json({
+        success: true,
+        balance,
+        balanceEuros: balance * 0.01 // Conversion en euros
+      });
+    } catch (error) {
+      console.error('Error getting VISUpoints balance:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du solde' });
+    }
+  });
+
+  // ===== ARTICLES =====
+
+  // Créer un article (infoporteur)
+  app.post('/api/voix-info/articles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Vérifier que l'utilisateur a un profil infoporteur
+      const infoporteurProfile = await voixInfoService.getInfoporteurProfile(userId);
+      if (!infoporteurProfile) {
+        return res.status(403).json({ message: 'Profil infoporteur requis' });
+      }
+
+      const validation = insertArticleSchema.safeParse({
+        ...req.body,
+        infoporteurId: infoporteurProfile.id
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données d\'article invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const article = await voixInfoService.createArticle(validation.data);
+      
+      res.status(201).json({
+        success: true,
+        article
+      });
+    } catch (error) {
+      console.error('Error creating article:', error);
+      res.status(400).json({ message: error.message || 'Erreur lors de la création de l\'article' });
+    }
+  });
+
+  // Publier un article (infoporteur)
+  app.patch('/api/voix-info/articles/:articleId/publish', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const articleId = req.params.articleId;
+      
+      // Vérifier que l'utilisateur a un profil infoporteur
+      const infoporteurProfile = await voixInfoService.getInfoporteurProfile(userId);
+      if (!infoporteurProfile) {
+        return res.status(403).json({ message: 'Profil infoporteur requis' });
+      }
+
+      const article = await voixInfoService.publishArticle(articleId, infoporteurProfile.id);
+      
+      res.json({
+        success: true,
+        article
+      });
+    } catch (error) {
+      console.error('Error publishing article:', error);
+      res.status(400).json({ message: error.message || 'Erreur lors de la publication' });
+    }
+  });
+
+  // Récupérer les articles d'un infoporteur
+  app.get('/api/voix-info/infoporteur/articles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const status = req.query.status as string;
+      
+      // Vérifier que l'utilisateur a un profil infoporteur
+      const infoporteurProfile = await voixInfoService.getInfoporteurProfile(userId);
+      if (!infoporteurProfile) {
+        return res.status(403).json({ message: 'Profil infoporteur requis' });
+      }
+
+      const articles = await voixInfoService.getArticlesByInfoporteur(infoporteurProfile.id, status);
+      
+      res.json({
+        success: true,
+        articles
+      });
+    } catch (error) {
+      console.error('Error getting infoporteur articles:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des articles' });
+    }
+  });
+
+  // Récupérer les articles publics (avec pagination)
+  app.get('/api/voix-info/articles/public', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const articles = await voixInfoService.getPublicArticles(limit, offset);
+      
+      res.json({
+        success: true,
+        articles,
+        pagination: {
+          limit,
+          offset,
+          hasMore: articles.length === limit
+        }
+      });
+    } catch (error) {
+      console.error('Error getting public articles:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des articles' });
+    }
+  });
+
+  // Acheter un article (investi-lecteur)
+  app.post('/api/voix-info/articles/:articleId/purchase', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const articleId = req.params.articleId;
+      
+      // Vérifier que l'utilisateur a un profil investi-lecteur
+      const investiLecteurProfile = await voixInfoService.getInvestiLecteurProfile(userId);
+      if (!investiLecteurProfile) {
+        return res.status(403).json({ message: 'Profil investi-lecteur requis' });
+      }
+
+      const validation = insertArticlePurchaseSchema.safeParse({
+        ...req.body,
+        articleId,
+        investiLecteurId: investiLecteurProfile.id
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données d\'achat invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const purchase = await voixInfoService.purchaseArticle(validation.data);
+      
+      res.status(201).json({
+        success: true,
+        purchase
+      });
+    } catch (error) {
+      console.error('Error purchasing article:', error);
+      res.status(400).json({ message: error.message || 'Erreur lors de l\'achat de l\'article' });
+    }
+  });
+
+  // ===== GOLDEN TICKETS =====
+
+  // Acheter un Golden Ticket (investi-lecteur)
+  app.post('/api/voix-info/golden-tickets', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Vérifier que l'utilisateur a un profil investi-lecteur
+      const investiLecteurProfile = await voixInfoService.getInvestiLecteurProfile(userId);
+      if (!investiLecteurProfile) {
+        return res.status(403).json({ message: 'Profil investi-lecteur requis' });
+      }
+
+      const validation = insertGoldenTicketSchema.safeParse({
+        ...req.body,
+        investiLecteurId: investiLecteurProfile.id
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données de Golden Ticket invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const ticket = await voixInfoService.purchaseGoldenTicket(validation.data);
+      
+      res.status(201).json({
+        success: true,
+        ticket
+      });
+    } catch (error) {
+      console.error('Error purchasing golden ticket:', error);
+      res.status(400).json({ message: error.message || 'Erreur lors de l\'achat du Golden Ticket' });
+    }
+  });
+
+  // ===== CLASSEMENTS =====
+
+  // Récupérer les classements quotidiens actuels
+  app.get('/api/voix-info/rankings/current', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const rankings = await voixInfoRankingService.getLatestRankings(limit);
+      
+      res.json({
+        success: true,
+        rankings
+      });
+    } catch (error) {
+      console.error('Error getting current rankings:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des classements' });
+    }
+  });
+
+  // Récupérer l'historique des classements pour un infoporteur
+  app.get('/api/voix-info/rankings/history/:infoporteurId', async (req, res) => {
+    try {
+      const infoporteurId = req.params.infoporteurId;
+      const days = parseInt(req.query.days as string) || 30;
+      
+      const history = await voixInfoRankingService.getRankingHistory(infoporteurId, days);
+      
+      res.json({
+        success: true,
+        history
+      });
+    } catch (error) {
+      console.error('Error getting ranking history:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique' });
+    }
+  });
+
+  // Routes ADMIN pour la gestion du module Voix de l'Info
+
+  // Calculer manuellement les classements quotidiens (ADMIN)
+  app.post('/api/admin/voix-info/calculate-rankings/:date', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const date = req.params.date; // Format YYYY-MM-DD
+      
+      // Valider le format de date
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: 'Format de date invalide (YYYY-MM-DD requis)' });
+      }
+
+      const rankings = await voixInfoRankingService.calculateAndStoreDailyRankings(date);
+      
+      res.json({
+        success: true,
+        message: `Classements calculés pour ${date}`,
+        rankings: rankings.length,
+        top10: rankings.filter(r => r.isTop10)
+      });
+    } catch (error) {
+      console.error('Error calculating rankings:', error);
+      res.status(500).json({ message: 'Erreur lors du calcul des classements' });
+    }
+  });
+
+  console.log('✅ Routes du module Voix de l\'Info initialisées');
+
+  // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
 
