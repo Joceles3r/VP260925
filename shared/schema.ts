@@ -1079,6 +1079,190 @@ export const floatingButtonConfig = pgTable("floating_button_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// ===== VOIX DE L'INFO TABLES =====
+
+// Infoporteur profiles - Profils des créateurs de contenu
+export const infoporteurProfiles = pgTable("infoporteur_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  bio: text("bio"),
+  avatar: varchar("avatar"), // URL de l'avatar
+  specialties: text("specialties"), // JSON array des spécialités
+  cautionPaid: boolean("caution_paid").default(false),
+  cautionAmount: decimal("caution_amount", { precision: 10, scale: 2 }).default('10.00'),
+  cautionPaidAt: timestamp("caution_paid_at"),
+  totalArticles: integer("total_articles").default(0),
+  totalSales: decimal("total_sales", { precision: 12, scale: 2 }).default('0.00'),
+  top10Count: integer("top10_count").default(0), // Nombre de fois dans le TOP 10
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_infoporteur_user").on(table.userId),
+  index("idx_infoporteur_active").on(table.isActive),
+  index("idx_infoporteur_top10").on(table.top10Count),
+]);
+
+// Investi-lecteur profiles - Profils des investisseurs/lecteurs
+export const investiLecteurProfiles = pgTable("investi_lecteur_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  avatar: varchar("avatar"), // URL de l'avatar
+  cautionPaid: boolean("caution_paid").default(false),
+  cautionAmount: decimal("caution_amount", { precision: 10, scale: 2 }).default('20.00'),
+  cautionPaidAt: timestamp("caution_paid_at"),
+  visuPoints: integer("visu_points").default(0), // Solde VISUpoints
+  totalInvested: decimal("total_invested", { precision: 12, scale: 2 }).default('0.00'),
+  totalWinnings: decimal("total_winnings", { precision: 12, scale: 2 }).default('0.00'),
+  winningStreaks: integer("winning_streaks").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_investi_lecteur_user").on(table.userId),
+  index("idx_investi_lecteur_active").on(table.isActive),
+  index("idx_investi_lecteur_points").on(table.visuPoints),
+]);
+
+// Articles créés par les infoporteurs
+export const voixInfoArticles = pgTable("voix_info_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  infoporteurId: varchar("infoporteur_id").notNull().references(() => infoporteurProfiles.id),
+  title: varchar("title", { length: 200 }).notNull(),
+  slug: varchar("slug", { length: 250 }).notNull().unique(),
+  excerpt: varchar("excerpt", { length: 500 }),
+  content: text("content").notNull(),
+  category: articleCategoryEnum("category").notNull(),
+  priceEuros: decimal("price_euros", { precision: 5, scale: 2 }).notNull(), // 0.2 à 5.00
+  coverImage: varchar("cover_image"), // URL image de couverture
+  tags: text("tags"), // JSON array des tags
+  status: articleStatusEnum("status").default('draft'),
+  moderatedBy: varchar("moderated_by").references(() => users.id),
+  moderatedAt: timestamp("moderated_at"),
+  moderationNotes: text("moderation_notes"),
+  readingTime: integer("reading_time"), // Minutes estimées
+  totalSales: integer("total_sales").default(0),
+  totalRevenue: decimal("total_revenue", { precision: 10, scale: 2 }).default('0.00'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  publishedAt: timestamp("published_at"),
+}, (table) => [
+  index("idx_articles_infoporteur").on(table.infoporteurId),
+  index("idx_articles_status").on(table.status),
+  index("idx_articles_category").on(table.category),
+  index("idx_articles_price").on(table.priceEuros),
+  index("idx_articles_sales").on(table.totalSales),
+  index("idx_articles_published").on(table.publishedAt),
+]);
+
+// Achats d'articles par les investi-lecteurs
+export const articlePurchases = pgTable("article_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").notNull().references(() => voixInfoArticles.id),
+  investiLecteurId: varchar("investi_lecteur_id").notNull().references(() => investiLecteurProfiles.id),
+  priceEuros: decimal("price_euros", { precision: 5, scale: 2 }).notNull(),
+  visuPointsSpent: integer("visu_points_spent").notNull(),
+  votes: integer("votes").notNull(), // Calculé selon le barème
+  paymentIntentId: varchar("payment_intent_id"), // Stripe payment intent
+  refunded: boolean("refunded").default(false),
+  refundedAt: timestamp("refunded_at"),
+  refundAmount: decimal("refund_amount", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_purchases_article").on(table.articleId),
+  index("idx_purchases_investi").on(table.investiLecteurId),
+  index("idx_purchases_date").on(table.createdAt),
+  unique("unique_article_investi").on(table.articleId, table.investiLecteurId), // Un achat par article par utilisateur
+]);
+
+// Daily rankings - Classements quotidiens TOP 10
+export const dailyRankings = pgTable("daily_rankings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rankingDate: varchar("ranking_date", { length: 10 }).notNull(), // Format YYYY-MM-DD
+  infoporteurId: varchar("infoporteur_id").notNull().references(() => infoporteurProfiles.id),
+  rank: integer("rank").notNull(), // 1 à 100+
+  totalSales: integer("total_sales").notNull(), // Nombre de ventes
+  totalRevenue: decimal("total_revenue", { precision: 10, scale: 2 }).notNull(),
+  isTop10: boolean("is_top10").notNull().default(false),
+  bonusEarned: decimal("bonus_earned", { precision: 10, scale: 2 }).default('0.00'),
+  status: rankingStatusEnum("status").default('ongoing'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_rankings_date").on(table.rankingDate),
+  index("idx_rankings_infoporteur").on(table.infoporteurId),
+  index("idx_rankings_rank").on(table.rank),
+  index("idx_rankings_top10").on(table.isTop10),
+  unique("unique_ranking_date_infoporteur").on(table.rankingDate, table.infoporteurId),
+]);
+
+// Golden tickets - Tickets premium mensuels
+export const goldenTickets = pgTable("golden_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  investiLecteurId: varchar("investi_lecteur_id").notNull().references(() => investiLecteurProfiles.id),
+  monthYear: varchar("month_year", { length: 7 }).notNull(), // Format YYYY-MM
+  tier: integer("tier").notNull(), // 1=50€, 2=75€, 3=100€
+  amountEuros: decimal("amount_euros", { precision: 5, scale: 2 }).notNull(),
+  votes: integer("votes").notNull(), // 20, 30, ou 40 selon le tier
+  visuPointsSpent: integer("visu_points_spent").notNull(),
+  targetInfoporteurId: varchar("target_infoporteur_id").references(() => infoporteurProfiles.id),
+  finalRank: integer("final_rank"), // Rang final de l'infoporteur ciblé
+  refundPercentage: integer("refund_percentage").default(0), // 0, 50, ou 100%
+  refundAmount: decimal("refund_amount", { precision: 5, scale: 2 }).default('0.00'),
+  status: goldenTicketStatusEnum("status").default('active'),
+  paymentIntentId: varchar("payment_intent_id"), // Stripe payment intent
+  refundedAt: timestamp("refunded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_golden_tickets_investi").on(table.investiLecteurId),
+  index("idx_golden_tickets_month").on(table.monthYear),
+  index("idx_golden_tickets_tier").on(table.tier),
+  index("idx_golden_tickets_status").on(table.status),
+  unique("unique_ticket_user_month").on(table.investiLecteurId, table.monthYear), // Un ticket par mois par utilisateur
+]);
+
+// VISUpoints transactions - Historique des achats/dépenses de VISUpoints
+export const visuPointsTransactions = pgTable("visu_points_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  type: varchar("type").notNull(), // 'purchase', 'spend', 'refund', 'bonus', 'cashout'
+  amount: integer("amount").notNull(), // Peut être négatif pour les dépenses
+  balanceBefore: integer("balance_before").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  euroAmount: decimal("euro_amount", { precision: 10, scale: 2 }), // Montant en euros si applicable
+  description: text("description").notNull(),
+  relatedId: varchar("related_id"), // ID de l'élément associé (achat, article, etc.)
+  relatedType: varchar("related_type"), // 'article_purchase', 'golden_ticket', 'pack_purchase', etc.
+  paymentIntentId: varchar("payment_intent_id"), // Stripe payment intent si applicable
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_vp_transactions_user").on(table.userId),
+  index("idx_vp_transactions_type").on(table.type),
+  index("idx_vp_transactions_date").on(table.createdAt),
+  index("idx_vp_transactions_related").on(table.relatedId, table.relatedType),
+]);
+
+// Daily pot distribution - Distribution quotidienne des gains
+export const dailyPotDistribution = pgTable("daily_pot_distribution", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  distributionDate: varchar("distribution_date", { length: 10 }).notNull(), // Format YYYY-MM-DD
+  totalPotEuros: decimal("total_pot_euros", { precision: 12, scale: 2 }).notNull(),
+  top10InfoporteurShare: decimal("top10_infoporteur_share", { precision: 12, scale: 2 }).notNull(), // 50%
+  investiLecteurShare: decimal("investi_lecteur_share", { precision: 12, scale: 2 }).notNull(), // 50%
+  totalWinningVotes: integer("total_winning_votes").notNull(),
+  totalWinningInvestiLecteurs: integer("total_winning_investi_lecteurs").notNull(),
+  visualCommission: decimal("visual_commission", { precision: 12, scale: 2 }).default('0.00'), // 0% selon validation
+  status: rankingStatusEnum("status").default('calculating'),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_pot_distribution_date").on(table.distributionDate),
+  index("idx_pot_distribution_status").on(table.status),
+]);
+
 // Referral system table - Système de parrainage
 export const referrals = pgTable("referrals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
