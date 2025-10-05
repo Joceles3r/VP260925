@@ -8461,6 +8461,263 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ Routes du module Voix de l\'Info initialisées');
 
   // =======================
+  // VISITEURS MINEURS (16-17 ANS)
+  // =======================
+
+  // Créer un profil mineur
+  app.post('/api/minor-visitors/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = createMinorProfileSchema.safeParse({
+        ...req.body,
+        userId
+      });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const profile = await minorVisitorService.createMinorProfile(validation.data);
+      
+      res.status(201).json({
+        success: true,
+        profile,
+        message: 'Profil mineur créé avec succès'
+      });
+    } catch (error) {
+      console.error('Error creating minor profile:', error);
+      
+      if (error.message.includes('existe déjà') || error.message.includes('Âge invalide')) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: 'Erreur lors de la création du profil mineur' });
+    }
+  });
+
+  // Récupérer le statut du visiteur mineur
+  app.get('/api/minor-visitors/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const status = await minorVisitorService.getMinorStatus(userId);
+      
+      res.json({
+        success: true,
+        status
+      });
+    } catch (error) {
+      console.error('Error getting minor status:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du statut' });
+    }
+  });
+
+  // Mettre à jour le profil mineur
+  app.patch('/api/minor-visitors/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = updateMinorProfileSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const profile = await minorVisitorService.updateMinorProfile(userId, validation.data);
+      
+      res.json({
+        success: true,
+        profile,
+        message: 'Profil mineur mis à jour'
+      });
+    } catch (error) {
+      console.error('Error updating minor profile:', error);
+      
+      if (error.message.includes('non trouvé')) {
+        return res.status(404).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: 'Erreur lors de la mise à jour du profil' });
+    }
+  });
+
+  // Attribuer des VISUpoints à un mineur
+  app.post('/api/minor-visitors/award-points', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = awardMinorVisuPointsSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const result = await minorVisitorService.awardVisuPoints(userId, validation.data);
+      
+      res.json({
+        success: true,
+        result,
+        message: result.granted > 0 ? 
+          `${result.granted} VISUpoints attribués` : 
+          'Aucun point attribué (limite atteinte)'
+      });
+    } catch (error) {
+      console.error('Error awarding points to minor:', error);
+      
+      if (error.message.includes('requis') || error.message.includes('autorisée')) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: 'Erreur lors de l\'attribution des points' });
+    }
+  });
+
+  // Traiter la transition vers la majorité
+  app.post('/api/minor-visitors/transition-to-majority', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await minorVisitorService.processMinorToMajorityTransition(userId);
+      
+      res.json({
+        success: true,
+        result,
+        message: result.lockUntil ? 
+          'Transition effectuée. Verrou de 6 mois appliqué.' : 
+          'Transition effectuée. Vous pouvez maintenant utiliser vos VISUpoints.'
+      });
+    } catch (error) {
+      console.error('Error processing majority transition:', error);
+      
+      if (error.message.includes('non trouvé') || error.message.includes('encore mineur')) {
+        return res.status(400).json({ message: error.message });
+      }
+      
+      res.status(500).json({ message: 'Erreur lors de la transition vers la majorité' });
+    }
+  });
+
+  // Récupérer les notifications d'un mineur
+  app.get('/api/minor-visitors/notifications', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await minorVisitorService.getMinorProfile(userId);
+      
+      if (!profile) {
+        return res.status(404).json({ message: 'Profil mineur non trouvé' });
+      }
+
+      // TODO: Implémenter la récupération des notifications
+      res.json({
+        success: true,
+        notifications: [],
+        message: 'Fonctionnalité à implémenter'
+      });
+    } catch (error) {
+      console.error('Error getting minor notifications:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des notifications' });
+    }
+  });
+
+  // Routes ADMIN pour la gestion des visiteurs mineurs
+
+  // Statistiques des visiteurs mineurs (ADMIN)
+  app.get('/api/admin/minor-visitors/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const stats = await minorVisitorService.getMinorStats();
+      
+      res.json({
+        success: true,
+        stats
+      });
+    } catch (error) {
+      console.error('Error getting minor stats:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des statistiques' });
+    }
+  });
+
+  // Traiter les transitions quotidiennes (ADMIN)
+  app.post('/api/admin/minor-visitors/process-daily-transitions', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const result = await minorVisitorService.checkAndProcessDailyTransitions();
+      
+      res.json({
+        success: true,
+        result,
+        message: `${result.processed} transitions traitées`
+      });
+    } catch (error) {
+      console.error('Error processing daily transitions:', error);
+      res.status(500).json({ message: 'Erreur lors du traitement des transitions' });
+    }
+  });
+
+  // Paramètres admin pour les visiteurs mineurs (ADMIN)
+  app.get('/api/admin/minor-visitors/settings', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const settings = await minorVisitorService.getAdminSettings();
+      
+      res.json({
+        success: true,
+        settings
+      });
+    } catch (error) {
+      console.error('Error getting minor admin settings:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des paramètres' });
+    }
+  });
+
+  // Mettre à jour les paramètres admin (ADMIN)
+  app.patch('/api/admin/minor-visitors/settings', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const validation = updateMinorAdminSettingsSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      await minorVisitorService.updateAdminSettings(validation.data, user.id);
+      
+      res.json({
+        success: true,
+        message: 'Paramètres mis à jour avec succès'
+      });
+    } catch (error) {
+      console.error('Error updating minor admin settings:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour des paramètres' });
+    }
+  });
+
+  console.log('✅ Routes des visiteurs mineurs initialisées');
+
+  // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
 
