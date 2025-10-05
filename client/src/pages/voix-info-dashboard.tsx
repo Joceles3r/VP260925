@@ -19,6 +19,7 @@ import { InfoporteurDashboard } from '@/components/voix-info/InfoporteurDashboar
 import { InvestiLecteurDashboard } from '@/components/voix-info/InvestiLecteurDashboard';
 import { VoixInfoRankings } from '@/components/voix-info/VoixInfoRankings';
 import { VoixInfoArticles } from '@/components/voix-info/VoixInfoArticles';
+import { GoldenTicketManager } from '@/components/voix-info/GoldenTicketManager';
 
 interface UserProfiles {
   infoporteur?: any;
