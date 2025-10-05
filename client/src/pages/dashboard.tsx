@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import DashboardStats from '@/components/DashboardStats';
 import MinorStatusWidget from '@/components/minor/MinorStatusWidget';
+import OverdraftStatusWidget from '@/components/overdraft/OverdraftStatusWidget';
 import { BarChart3, TrendingUp } from 'lucide-react';
 
 export default function Dashboard() {
