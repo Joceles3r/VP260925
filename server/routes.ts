@@ -7754,6 +7754,261 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('✅ Routes de conformité légale initialisées');
 
   // =======================
+  // MESSAGERIE INTERNE
+  // =======================
+
+  // Envoyer un message interne (utilisateurs connectés)
+  app.post('/api/internal-messages', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const validation = insertInternalMessageSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      // Vérifier la limite de messages
+      const rateCheck = await internalMessageService.checkRateLimit(userId);
+      if (!rateCheck.allowed) {
+        return res.status(429).json({
+          message: 'Limite de messages atteinte',
+          details: `Vous pouvez envoyer maximum 3 messages par jour. Prochaine réinitialisation demain.`,
+          remainingToday: rateCheck.remainingToday,
+          resetDate: rateCheck.resetDate
+        });
+      }
+
+      const result = await internalMessageService.sendMessage({
+        userId,
+        subject: validation.data.subject,
+        subjectCustom: validation.data.subjectCustom,
+        message: validation.data.message,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      if (result.success) {
+        res.status(201).json({
+          success: true,
+          message: 'Message envoyé avec succès',
+          messageId: result.message?.id,
+          remainingToday: rateCheck.remainingToday
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.error || 'Erreur lors de l\'envoi'
+        });
+      }
+    } catch (error) {
+      console.error('Error sending internal message:', error);
+      res.status(500).json({ message: 'Erreur serveur lors de l\'envoi du message' });
+    }
+  });
+
+  // Vérifier la limite de messages pour l'utilisateur connecté
+  app.get('/api/internal-messages/rate-limit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rateCheck = await internalMessageService.checkRateLimit(userId);
+      
+      res.json({
+        allowed: rateCheck.allowed,
+        remainingToday: rateCheck.remainingToday,
+        resetDate: rateCheck.resetDate,
+        maxPerDay: 3
+      });
+    } catch (error) {
+      console.error('Error checking rate limit:', error);
+      res.status(500).json({ message: 'Erreur lors de la vérification des limites' });
+    }
+  });
+
+  // Récupérer la configuration du bouton flottant
+  app.get('/api/internal-messages/floating-button-config', async (req, res) => {
+    try {
+      const config = await internalMessageService.getFloatingButtonConfig();
+      
+      res.json({
+        isEnabled: config?.isEnabled ?? true,
+        buttonText: config?.buttonText ?? 'Contacter le Responsable',
+        buttonColor: config?.buttonColor ?? '#dc2626',
+        position: config?.position ?? 'bottom-right'
+      });
+    } catch (error) {
+      console.error('Error getting floating button config:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération de la configuration' });
+    }
+  });
+
+  // Routes ADMIN pour la gestion des messages
+
+  // Récupérer tous les messages avec filtres (ADMIN)
+  app.get('/api/admin/internal-messages', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const filters = {
+        status: req.query.status as string,
+        priority: req.query.priority as string,
+        subject: req.query.subject as string,
+        dateFrom: req.query.dateFrom as string,
+        dateTo: req.query.dateTo as string,
+        userId: req.query.userId as string,
+        limit: parseInt(req.query.limit as string) || 50,
+        offset: parseInt(req.query.offset as string) || 0
+      };
+
+      const result = await internalMessageService.getMessages(filters);
+      
+      res.json({
+        success: true,
+        messages: result.messages,
+        total: result.total,
+        pagination: {
+          limit: filters.limit,
+          offset: filters.offset,
+          hasMore: (filters.offset + filters.limit) < result.total
+        }
+      });
+    } catch (error) {
+      console.error('Error getting internal messages:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des messages' });
+    }
+  });
+
+  // Récupérer un message spécifique (ADMIN)
+  app.get('/api/admin/internal-messages/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const messageId = req.params.id;
+      const message = await internalMessageService.getMessage(messageId);
+      
+      if (!message) {
+        return res.status(404).json({ message: 'Message non trouvé' });
+      }
+
+      res.json({
+        success: true,
+        message
+      });
+    } catch (error) {
+      console.error('Error getting internal message:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du message' });
+    }
+  });
+
+  // Mettre à jour un message (ADMIN)
+  app.patch('/api/admin/internal-messages/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const validation = updateInternalMessageSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const messageId = req.params.id;
+      const result = await internalMessageService.updateMessage(
+        messageId, 
+        validation.data, 
+        user.id
+      );
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Message mis à jour avec succès'
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.error || 'Erreur lors de la mise à jour'
+        });
+      }
+    } catch (error) {
+      console.error('Error updating internal message:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour du message' });
+    }
+  });
+
+  // Statistiques des messages (ADMIN)
+  app.get('/api/admin/internal-messages/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const stats = await internalMessageService.getMessageStats();
+      
+      res.json({
+        success: true,
+        stats
+      });
+    } catch (error) {
+      console.error('Error getting message stats:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des statistiques' });
+    }
+  });
+
+  // Mettre à jour la configuration du bouton flottant (ADMIN)
+  app.patch('/api/admin/internal-messages/floating-button-config', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const validation = insertFloatingButtonConfigSchema.partial().safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({
+          message: 'Données invalides',
+          errors: validation.error.errors
+        });
+      }
+
+      const result = await internalMessageService.updateFloatingButtonConfig(
+        validation.data,
+        user.id
+      );
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Configuration mise à jour avec succès'
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.error || 'Erreur lors de la mise à jour'
+        });
+      }
+    } catch (error) {
+      console.error('Error updating floating button config:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour de la configuration' });
+    }
+  });
+
+  console.log('✅ Routes de messagerie interne initialisées');
+
+  // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
 
