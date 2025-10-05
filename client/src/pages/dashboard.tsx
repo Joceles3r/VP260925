@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import DashboardStats from '@/components/DashboardStats';
+import MinorStatusWidget from '@/components/minor/MinorStatusWidget';
 import { BarChart3, TrendingUp } from 'lucide-react';
 
 export default function Dashboard() {
