@@ -2634,7 +2634,7 @@ export const insertVisitorOfMonthSchema = createInsertSchema(visitorsOfMonth).om
   updatedAt: true,
 });
 
-export const insertArticleSchema = createInsertSchema(articles).omit({
+export const insertArticleSchema = createInsertSchema(voixInfoArticles).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
