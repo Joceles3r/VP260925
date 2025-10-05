@@ -278,6 +278,26 @@ export const rankingStatusEnum = pgEnum('ranking_status', [
   'distributed' // Gains distribués
 ]);
 
+// ===== VISITEUR MINEUR ENUMS =====
+
+// Account types for minors transitioning to majority
+export const accountTypeEnum = pgEnum('account_type', [
+  'visitor_minor',     // Mineur 16-17 ans
+  'visitor_major',     // Majeur sans profil spécialisé
+  'investor',          // Investisseur (obligatoire post-majorité)
+  'investi_lecteur',   // Investi-lecteur (obligatoire post-majorité)
+  'infoporteur'        // Créateur de contenu
+]);
+
+// Minor restriction status
+export const minorStatusEnum = pgEnum('minor_status', [
+  'active',           // Mineur actif, gains autorisés
+  'capped',           // Mineur ayant atteint le plafond de 200€
+  'transitioning',    // En cours de transition vers majorité
+  'locked',           // Verrou 6 mois post-majorité
+  'unlocked'          // Verrou levé, conversion possible
+]);
+
 // Platform settings table for admin overrides  
 export const platformSettings = pgTable("platform_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
