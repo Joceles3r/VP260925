@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Shield, FileText, Cookie, AlertTriangle, Scale, BookOpen, FileCheck } from 'lucide-react';
+import { Shield, FileText, Cookie, TriangleAlert as AlertTriangle, Scale, BookOpen, FileCheck } from 'lucide-react';
 
 interface LegalTerm {
   id: string;

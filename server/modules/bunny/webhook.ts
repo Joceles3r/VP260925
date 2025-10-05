@@ -45,6 +45,7 @@ router.post("/webhooks/bunny", async (req: any, res) => {
           bunnyLibraryId: process.env.BUNNY_LIBRARY_ID || "",
           duration: parseInt(durationSec),
           depositFee: String(session.amount_total! / 100),
+          )
           paymentIntentId: session.payment_intent as string,
           status: "processing",
           paidAt: new Date()
