@@ -674,6 +674,10 @@ export default function AdminPanel() {
           <MinorVisitorsManagement />
         </TabsContent>
 
+        <TabsContent value="overdraft" className="space-y-4">
+          <OverdraftManagement />
+        </TabsContent>
+
         <TabsContent value="toggles" className="space-y-4">
           <div className="bg-card rounded-lg border border-border overflow-hidden">
             <div className="px-6 py-4 border-b border-border">
