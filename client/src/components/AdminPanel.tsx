@@ -211,7 +211,7 @@ export default function AdminPanel() {
       <AdminStats stats={adminStats} />
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="grid w-full grid-cols-10">
           <TabsTrigger value="users" data-testid="tab-users">Utilisateurs</TabsTrigger>
           <TabsTrigger value="projects" data-testid="tab-projects">Projets</TabsTrigger>
           <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
@@ -220,6 +220,7 @@ export default function AdminPanel() {
           <TabsTrigger value="liveshows" data-testid="tab-liveshows">Live Shows</TabsTrigger>
           <TabsTrigger value="messages" data-testid="tab-messages">💬 Messagerie</TabsTrigger>
           <TabsTrigger value="minors" data-testid="tab-minors">👤 Mineurs</TabsTrigger>
+          <TabsTrigger value="overdraft" data-testid="tab-overdraft">💳 Découvert</TabsTrigger>
           <TabsTrigger value="toggles" data-testid="tab-toggles">Boutons ON/OFF</TabsTrigger>
         </TabsList>
 
