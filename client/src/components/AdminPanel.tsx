@@ -668,6 +668,10 @@ export default function AdminPanel() {
           <InternalMessagesManager />
         </TabsContent>
 
+        <TabsContent value="minors" className="space-y-4">
+          <MinorVisitorsManagement />
+        </TabsContent>
+
         <TabsContent value="toggles" className="space-y-4">
           <div className="bg-card rounded-lg border border-border overflow-hidden">
             <div className="px-6 py-4 border-b border-border">
