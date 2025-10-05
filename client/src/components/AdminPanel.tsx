@@ -9,6 +9,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import type { FeatureToggle } from '@shared/schema';
 import LiveShowsAdminPanel from '@/components/LiveShowsAdminPanel';
+import { InternalMessagesManager } from '@/components/admin/InternalMessagesManager';
 
 interface AdminStatsProps {
   stats: any;
