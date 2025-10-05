@@ -418,6 +418,12 @@ const VoixInfoDashboardPage: React.FC = () => {
             <VoixInfoArticles />
           </TabsContent>
 
+          {hasInvestiLecteurProfile && (
+            <TabsContent value="golden-tickets">
+              <GoldenTicketManager profile={{ id: profiles?.investiLecteur?.id || '', visuPoints: profiles?.investiLecteur?.visuPoints || 0 }} />
+            </TabsContent>
+          )}
+
           {hasInfoporteurProfile && (
             <TabsContent value="infoporteur">
               <InfoporteurDashboard profile={profiles.infoporteur} />
