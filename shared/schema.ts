@@ -234,6 +234,50 @@ export const messageStatusEnum = pgEnum('message_status', [
   'archived'     // Archivé
 ]);
 
+// ===== VOIX DE L'INFO ENUMS =====
+
+// Article category enum for infoporteurs
+export const articleCategoryEnum = pgEnum('article_category', [
+  'actualite',        // Actualités
+  'politique',        // Politique
+  'economie',         // Économie
+  'tech',            // Technologie
+  'sport',           // Sport
+  'culture',         // Culture
+  'science',         // Science
+  'sante',           // Santé
+  'environnement',   // Environnement
+  'societe',         // Société
+  'international',   // International
+  'autre'            // Autre
+]);
+
+// Article status enum
+export const articleStatusEnum = pgEnum('article_status', [
+  'draft',      // Brouillon
+  'pending',    // En attente de modération
+  'active',     // Actif et visible
+  'paused',     // Mis en pause par l'auteur
+  'rejected',   // Rejeté par modération
+  'archived'    // Archivé
+]);
+
+// Golden ticket status enum
+export const goldenTicketStatusEnum = pgEnum('golden_ticket_status', [
+  'active',     // Ticket actif dans la compétition
+  'completed',  // Compétition terminée - en attente de résultats
+  'refunded',   // Ticket remboursé selon classement
+  'expired'     // Ticket expiré
+]);
+
+// Daily ranking status enum
+export const rankingStatusEnum = pgEnum('ranking_status', [
+  'ongoing',    // Journée en cours
+  'calculating', // Calcul en cours
+  'completed',  // Classement finalisé
+  'distributed' // Gains distribués
+]);
+
 // Platform settings table for admin overrides  
 export const platformSettings = pgTable("platform_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
