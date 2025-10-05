@@ -662,6 +662,10 @@ export default function AdminPanel() {
           <LiveShowsAdminPanel />
         </TabsContent>
 
+        <TabsContent value="messages" className="space-y-4">
+          <InternalMessagesManager />
+        </TabsContent>
+
         <TabsContent value="toggles" className="space-y-4">
           <div className="bg-card rounded-lg border border-border overflow-hidden">
             <div className="px-6 py-4 border-b border-border">
