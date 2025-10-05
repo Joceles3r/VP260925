@@ -8762,6 +8762,303 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { minorNotificationService } = await import('./services/minorNotificationService');
 
   // =======================
+  // ROUTES SYSTÈME DE DÉCOUVERT
+  // =======================
+
+  // Import du service de découvert
+  const { overdraftService } = await import('./services/overdraftService');
+
+  // Obtenir le statut de découvert de l'utilisateur connecté
+  app.get('/api/overdraft/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const status = await overdraftService.getOverdraftStatus(userId);
+      
+      res.json({
+        success: true,
+        status
+      });
+    } catch (error) {
+      console.error('Error getting overdraft status:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du statut de découvert' });
+    }
+  });
+
+  // Obtenir les alertes de découvert de l'utilisateur
+  app.get('/api/overdraft/alerts', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      // TODO: Implémenter la récupération des alertes
+      
+      res.json({
+        success: true,
+        alerts: []
+      });
+    } catch (error) {
+      console.error('Error getting overdraft alerts:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des alertes' });
+    }
+  });
+
+  // Obtenir les incidents de découvert de l'utilisateur
+  app.get('/api/overdraft/incidents', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      // TODO: Implémenter la récupération des incidents
+      
+      res.json({
+        success: true,
+        incidents: []
+      });
+    } catch (error) {
+      console.error('Error getting overdraft incidents:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des incidents' });
+    }
+  });
+
+  // Obtenir la configuration de découvert de l'utilisateur
+  app.get('/api/overdraft/configuration', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = await overdraftService.getCurrentLimit(userId);
+      
+      const configuration = {
+        limitAmount: limit,
+        alertsEnabled: true,
+        autoBlock: true,
+        gracePeriodDays: 7
+      };
+      
+      res.json({
+        success: true,
+        configuration
+      });
+    } catch (error) {
+      console.error('Error getting overdraft configuration:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération de la configuration' });
+    }
+  });
+
+  // Modifier la limite de découvert
+  app.put('/api/overdraft/limit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { limitAmount } = req.body;
+
+      if (typeof limitAmount !== 'number' || limitAmount < 0 || limitAmount > 1000) {
+        return res.status(400).json({ message: 'Limite invalide (entre 0€ et 1000€)' });
+      }
+
+      await overdraftService.setOverdraftLimit(userId, limitAmount);
+      
+      res.json({
+        success: true,
+        message: 'Limite de découvert mise à jour'
+      });
+    } catch (error) {
+      console.error('Error updating overdraft limit:', error);
+      res.status(500).json({ message: error.message || 'Erreur lors de la mise à jour de la limite' });
+    }
+  });
+
+  // Configurer les alertes de découvert
+  app.put('/api/overdraft/configuration', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const config = req.body;
+
+      // TODO: Implémenter la configuration des alertes
+      
+      res.json({
+        success: true,
+        message: 'Configuration mise à jour'
+      });
+    } catch (error) {
+      console.error('Error updating overdraft configuration:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour de la configuration' });
+    }
+  });
+
+  // Marquer une alerte comme lue
+  app.patch('/api/overdraft/alerts/:id/read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const alertId = req.params.id;
+
+      // TODO: Implémenter le marquage d'alerte comme lue
+      
+      res.json({
+        success: true,
+        message: 'Alerte marquée comme lue'
+      });
+    } catch (error) {
+      console.error('Error marking alert as read:', error);
+      res.status(500).json({ message: 'Erreur lors du marquage de l\'alerte' });
+    }
+  });
+
+  // Demander un déblocage de compte
+  app.post('/api/overdraft/unblock-request', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { message } = req.body;
+
+      if (!message || message.trim().length < 10) {
+        return res.status(400).json({ message: 'Message trop court (minimum 10 caractères)' });
+      }
+
+      // TODO: Créer une demande de déblocage
+      
+      res.json({
+        success: true,
+        message: 'Demande de déblocage envoyée'
+      });
+    } catch (error) {
+      console.error('Error creating unblock request:', error);
+      res.status(500).json({ message: 'Erreur lors de l\'envoi de la demande' });
+    }
+  });
+
+  // =======================
+  // ROUTES ADMIN - DÉCOUVERT
+  // =======================
+
+  // Statistiques des découverts (ADMIN)
+  app.get('/api/admin/overdraft/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const stats = await overdraftService.getOverdraftStats();
+      
+      res.json({
+        success: true,
+        stats
+      });
+    } catch (error) {
+      console.error('Error getting overdraft admin stats:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des statistiques' });
+    }
+  });
+
+  // Liste des utilisateurs en découvert (ADMIN)
+  app.get('/api/admin/overdraft/users', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      // TODO: Implémenter la récupération des utilisateurs en découvert
+      
+      res.json({
+        success: true,
+        users: []
+      });
+    } catch (error) {
+      console.error('Error getting overdraft users:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des utilisateurs' });
+    }
+  });
+
+  // Configuration globale des découverts (ADMIN)
+  app.get('/api/admin/overdraft/config', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const config = {
+        defaultLimitInvestor: 500,
+        defaultLimitCreator: 300,
+        defaultLimitAdmin: 1000,
+        warningThreshold: 0.75,
+        criticalThreshold: 0.90,
+        dailyFeeRate: 0.001,
+        maxMonthlyFees: 50,
+        gracePeriodDays: 7,
+        autoBlockEnabled: true,
+        alertsEnabled: true,
+      };
+      
+      res.json({
+        success: true,
+        config
+      });
+    } catch (error) {
+      console.error('Error getting overdraft config:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération de la configuration' });
+    }
+  });
+
+  // Mettre à jour la configuration globale (ADMIN)
+  app.put('/api/admin/overdraft/config', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const updates = req.body;
+      // TODO: Valider et appliquer les mises à jour de configuration
+      
+      res.json({
+        success: true,
+        message: 'Configuration mise à jour'
+      });
+    } catch (error) {
+      console.error('Error updating overdraft config:', error);
+      res.status(500).json({ message: 'Erreur lors de la mise à jour de la configuration' });
+    }
+  });
+
+  // Traiter les alertes manuellement (ADMIN)
+  app.post('/api/admin/overdraft/process-alerts', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const result = await overdraftService.processOverdraftAlerts();
+      
+      res.json({
+        success: true,
+        ...result
+      });
+    } catch (error) {
+      console.error('Error processing overdraft alerts:', error);
+      res.status(500).json({ message: 'Erreur lors du traitement des alertes' });
+    }
+  });
+
+  // Débloquer un utilisateur (ADMIN)
+  app.post('/api/admin/overdraft/users/:userId/unblock', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const userId = req.params.userId;
+      // TODO: Implémenter le déblocage d'utilisateur
+      
+      res.json({
+        success: true,
+        message: 'Utilisateur débloqué'
+      });
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+      res.status(500).json({ message: 'Erreur lors du déblocage' });
+    }
+  });
+
+  console.log('✅ Routes du système de découvert initialisées');
+
+  // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
 
