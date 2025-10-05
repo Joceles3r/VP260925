@@ -4210,3 +4210,137 @@ export type InsertMessageRateLimit = z.infer<typeof insertMessageRateLimitSchema
 
 export type FloatingButtonConfig = typeof floatingButtonConfig.$inferSelect;
 export type InsertFloatingButtonConfig = z.infer<typeof insertFloatingButtonConfigSchema>;
+
+// ===== VOIX DE L'INFO SCHEMAS =====
+
+// Infoporteur profile schemas
+export const insertInfoporteurProfileSchema = createInsertSchema(infoporteurProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  displayName: z.string().min(2, "Le nom d'affichage doit contenir au moins 2 caractères").max(100),
+  bio: z.string().max(500, "La bio ne peut pas dépasser 500 caractères").optional(),
+  specialties: z.string().optional(),
+});
+
+// Investi-lecteur profile schemas  
+export const insertInvestiLecteurProfileSchema = createInsertSchema(investiLecteurProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  displayName: z.string().min(2, "Le nom d'affichage doit contenir au moins 2 caractères").max(100),
+});
+
+// Article schemas
+export const insertArticleSchema = createInsertSchema(voixInfoArticles).omit({
+  id: true,
+  slug: true,
+  createdAt: true,
+  updatedAt: true,
+  publishedAt: true,
+  totalSales: true,
+  totalRevenue: true,
+}).extend({
+  title: z.string().min(10, "Le titre doit contenir au moins 10 caractères").max(200),
+  excerpt: z.string().max(500, "L'extrait ne peut pas dépasser 500 caractères").optional(),
+  content: z.string().min(100, "Le contenu doit contenir au moins 100 caractères"),
+  priceEuros: z.number().refine(val => [0.2, 0.5, 1, 2, 3, 4, 5].includes(val), {
+    message: "Prix autorisés : 0.2, 0.5, 1, 2, 3, 4, 5 euros"
+  }),
+  tags: z.string().optional(),
+});
+
+export const updateArticleSchema = createInsertSchema(voixInfoArticles).omit({
+  id: true,
+  infoporteurId: true,
+  slug: true,
+  createdAt: true,
+  totalSales: true,
+  totalRevenue: true,
+}).partial();
+
+// Article purchase schema
+export const insertArticlePurchaseSchema = createInsertSchema(articlePurchases).omit({
+  id: true,
+  votes: true,
+  createdAt: true,
+  refunded: true,
+  refundedAt: true,
+  refundAmount: true,
+}).extend({
+  priceEuros: z.number().min(0.2).max(10),
+  visuPointsSpent: z.number().min(20).max(1000),
+});
+
+// Golden ticket schema
+export const insertGoldenTicketSchema = createInsertSchema(goldenTickets).omit({
+  id: true,
+  votes: true,
+  finalRank: true,
+  refundPercentage: true,
+  refundAmount: true,
+  status: true,
+  refundedAt: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tier: z.number().int().min(1).max(3, "Tier doit être 1, 2, ou 3"),
+  amountEuros: z.number().refine(val => [50, 75, 100].includes(val), {
+    message: "Montants autorisés : 50, 75, 100 euros"
+  }),
+  visuPointsSpent: z.number().refine(val => [5000, 7500, 10000].includes(val), {
+    message: "VISUpoints requis : 5000, 7500, 10000"
+  }),
+});
+
+// VISUpoints transaction schema
+export const insertVisuPointsTransactionSchema = createInsertSchema(visuPointsTransactions).omit({
+  id: true,
+  balanceBefore: true,
+  balanceAfter: true,
+  createdAt: true,
+}).extend({
+  amount: z.number().int(),
+  euroAmount: z.number().optional(),
+  description: z.string().min(1, "Description requise"),
+  relatedId: z.string().optional(),
+  relatedType: z.string().optional(),
+});
+
+// VISUpoints pack schema
+export const visuPointsPackSchema = z.object({
+  packEuros: z.number().refine(val => [5, 10, 20].includes(val), {
+    message: "Packs disponibles : 5, 10, 20 euros"
+  }),
+  visuPoints: z.number().refine(val => [500, 1000, 2000].includes(val), {
+    message: "VISUpoints : 500, 1000, 2000"
+  }),
+});
+
+// ===== VOIX DE L'INFO TYPES =====
+
+export type InfoporteurProfile = typeof infoporteurProfiles.$inferSelect;
+export type InsertInfoporteurProfile = z.infer<typeof insertInfoporteurProfileSchema>;
+
+export type InvestiLecteurProfile = typeof investiLecteurProfiles.$inferSelect;
+export type InsertInvestiLecteurProfile = z.infer<typeof insertInvestiLecteurProfileSchema>;
+
+export type VoixInfoArticle = typeof voixInfoArticles.$inferSelect;
+export type InsertVoixInfoArticle = z.infer<typeof insertArticleSchema>;
+export type UpdateVoixInfoArticle = z.infer<typeof updateArticleSchema>;
+
+export type ArticlePurchase = typeof articlePurchases.$inferSelect;
+export type InsertArticlePurchase = z.infer<typeof insertArticlePurchaseSchema>;
+
+export type DailyRanking = typeof dailyRankings.$inferSelect;
+export type DailyPotDistribution = typeof dailyPotDistribution.$inferSelect;
+
+export type GoldenTicket = typeof goldenTickets.$inferSelect;
+export type InsertGoldenTicket = z.infer<typeof insertGoldenTicketSchema>;
+
+export type VisuPointsTransaction = typeof visuPointsTransactions.$inferSelect;
+export type InsertVisuPointsTransaction = z.infer<typeof insertVisuPointsTransactionSchema>;
+
+export type VisuPointsPack = z.infer<typeof visuPointsPackSchema>;
