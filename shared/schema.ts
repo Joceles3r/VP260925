@@ -2549,11 +2549,6 @@ export const insertSocialLikeSchema = createInsertSchema(socialLikes).omit({
   createdAt: true,
 });
 
-export const insertVisuPointsTransactionSchema = createInsertSchema(visuPointsTransactions).omit({
-  id: true,
-  createdAt: true,
-});
-
 export const insertPaymentReceiptSchema = createInsertSchema(paymentReceipts).omit({
   id: true,
   createdAt: true,
