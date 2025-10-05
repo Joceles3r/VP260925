@@ -2874,7 +2874,6 @@ export type VideoAnalytics = typeof videoAnalytics.$inferSelect;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type SocialComment = typeof socialComments.$inferSelect;
 export type SocialLike = typeof socialLikes.$inferSelect;
-export type VisuPointsTransaction = typeof visuPointsTransactions.$inferSelect;
 export type PaymentReceipt = typeof paymentReceipts.$inferSelect;
 export type VideoCategory = typeof videoCategories.$inferSelect;
 export type ProjectExtension = typeof projectExtensions.$inferSelect;
