@@ -203,6 +203,37 @@ export const annonceSanctionEnum = pgEnum('annonce_sanction', [
   'permanent_ban'      // Bannissement définitif
 ]);
 
+// ===== MESSAGERIE INTERNE ENUMS =====
+
+// Internal message subject enum with priority levels
+export const messageSubjectEnum = pgEnum('message_subject', [
+  'probleme_paiement',        // URGENT - Problème de paiement/virement
+  'escroquerie_fraude',       // URGENT - Signalement d'escroquerie/fraude  
+  'erreur_prelevement',       // URGENT - Erreur de prélèvement/remboursement
+  'probleme_compte',          // URGENT - Problème d'accès compte
+  'signalement_bug',          // MOYEN - Signalement de bug
+  'question_projet',          // BAS - Question sur un projet
+  'question_investissement',  // BAS - Question sur un investissement
+  'demande_aide',            // BAS - Demande d'aide générale
+  'autre_demande'            // BAS - Autre demande
+]);
+
+// Internal message priority enum
+export const messagePriorityEnum = pgEnum('message_priority', [
+  'urgent',    // Rouge - Problèmes financiers critiques
+  'medium',    // Orange - Bugs techniques
+  'low'        // Vert - Questions générales
+]);
+
+// Internal message status enum
+export const messageStatusEnum = pgEnum('message_status', [
+  'unread',      // Non lu
+  'read',        // Lu
+  'in_progress', // En cours de traitement
+  'resolved',    // Résolu
+  'archived'     // Archivé
+]);
+
 // Platform settings table for admin overrides  
 export const platformSettings = pgTable("platform_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
