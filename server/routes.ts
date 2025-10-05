@@ -43,7 +43,15 @@ import {
   // Schémas messagerie interne
   insertInternalMessageSchema,
   updateInternalMessageSchema,
-  insertFloatingButtonConfigSchema
+  insertFloatingButtonConfigSchema,
+  // Schémas Voix de l'Info
+  insertInfoporteurProfileSchema,
+  insertInvestiLecteurProfileSchema,
+  insertArticleSchema,
+  updateArticleSchema,
+  insertArticlePurchaseSchema,
+  insertGoldenTicketSchema,
+  visuPointsPackSchema
 } from "@shared/schema";
 import { getMinimumCautionAmount, getMinimumWithdrawalAmount, getMinimumCautionAmountForUser, getMinimumWithdrawalAmountForUser, hasProfile } from "@shared/utils";
 import { 
