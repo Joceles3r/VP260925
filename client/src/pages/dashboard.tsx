@@ -54,6 +54,11 @@ export default function Dashboard() {
           <DashboardStats />
         </div>
 
+        {/* Widget Visiteur Mineur */}
+        <div className="mt-8">
+          <MinorStatusWidget />
+        </div>
+
         {/* Recent Activity & Portfolio Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
           {/* Portfolio Performance Chart */}
