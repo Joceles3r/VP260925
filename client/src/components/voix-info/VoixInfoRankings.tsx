@@ -124,7 +124,7 @@ export const VoixInfoRankings: React.FC = () => {
             <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
               <Coins className="h-6 w-6 text-green-500 mx-auto mb-2" />
               <div className="text-2xl font-bold text-green-700">
-                {rankings.reduce((sum, r) => sum + parseInt(r.totalSales), 0)}
+                {rankings.reduce((sum, r) => sum + parseInt(r.totalSales.toString()), 0)}
               </div>
               <div className="text-sm text-green-600">Ventes totales</div>
             </div>
