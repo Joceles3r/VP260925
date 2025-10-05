@@ -8362,6 +8362,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Récupérer les Golden Tickets de l'utilisateur connecté
+  app.get('/api/voix-info/golden-tickets/my-tickets', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Vérifier que l'utilisateur a un profil investi-lecteur
+      const investiLecteurProfile = await voixInfoService.getInvestiLecteurProfile(userId);
+      if (!investiLecteurProfile) {
+        return res.status(403).json({ message: 'Profil investi-lecteur requis' });
+      }
+
+      const tickets = await voixInfoService.getUserGoldenTickets(investiLecteurProfile.id);
+      
+      res.json({
+        success: true,
+        tickets
+      });
+    } catch (error) {
+      console.error('Error getting user golden tickets:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des Golden Tickets' });
+    }
+  });
+
   // ===== CLASSEMENTS =====
 
   // Récupérer les classements quotidiens actuels
