@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Navigation from "@/components/Navigation";
 import CuriosityDock from "@/components/CuriosityDock";
 import { AudioJingle } from "@/components/AudioJingle";
+import { FloatingContactButton } from "@/components/FloatingContactButton";
 
 // Pages
 import Landing from "@/pages/landing";
