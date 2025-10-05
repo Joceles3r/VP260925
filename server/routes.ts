@@ -97,6 +97,7 @@ import { FidelityService } from "./services/fidelityService.js";
 import { miniSocialConfigService } from "./services/miniSocialConfigService";
 import { liveSocialService } from "./services/liveSocialService";
 import { ObjectStorageService } from "./objectStorage";
+import { internalMessageService } from "./services/internalMessageService";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
