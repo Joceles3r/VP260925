@@ -274,10 +274,13 @@ const VoixInfoDashboardPage: React.FC = () => {
       ) : (
         // Interface principale pour utilisateurs avec profils
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
             <TabsTrigger value="rankings">Classements</TabsTrigger>
             <TabsTrigger value="articles">Articles</TabsTrigger>
+            {hasInvestiLecteurProfile && (
+              <TabsTrigger value="golden-tickets">🎫 Golden Tickets</TabsTrigger>
+            )}
             {hasInfoporteurProfile && (
               <TabsTrigger value="infoporteur">Mon Espace Créateur</TabsTrigger>
             )}
