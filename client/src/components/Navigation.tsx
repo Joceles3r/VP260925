@@ -23,6 +23,7 @@ export default function Navigation() {
     { path: '/leaderboard', label: '🏆 Classement', section: 'leaderboard', highlight: true },
     { path: '/receipts', label: 'Reçus', section: 'receipts' },
     { path: '/contact-support', label: '💬 Support', section: 'contact-support', highlight: true },
+    { path: '/voix-info', label: '📰 Voix de l\'Info', section: 'voix-info', highlight: true },
     { path: '/info', label: 'Info', section: 'info' },
     ...(hasProfile(user?.profileTypes, 'admin') ? [
       { path: '/admin', label: 'Admin', section: 'admin' },
