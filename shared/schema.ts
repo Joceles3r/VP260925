@@ -4429,3 +4429,85 @@ export type VisuPointsTransaction = typeof visuPointsTransactions.$inferSelect;
 export type InsertVisuPointsTransaction = z.infer<typeof insertVisuPointsTransactionSchema>;
 
 export type VisuPointsPack = z.infer<typeof visuPointsPackSchema>;
+
+// ===== VISITEUR MINEUR SCHEMAS =====
+
+export const createMinorProfileSchema = z.object({
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format de date invalide (YYYY-MM-DD)"),
+  parentEmail: z.string().email("Email parent invalide").optional(),
+  parentalConsent: z.boolean().default(false),
+}).refine(data => {
+  // Vérifier que l'âge est entre 16 et 17 ans
+  const birthDate = new Date(data.birthDate);
+  const now = new Date();
+  const age = now.getFullYear() - birthDate.getFullYear();
+  const monthDiff = now.getMonth() - birthDate.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  
+  return age >= 16 && age <= 17;
+}, {
+  message: "L'âge doit être entre 16 et 17 ans",
+  path: ["birthDate"]
+});
+
+export const updateMinorProfileSchema = z.object({
+  parentEmail: z.string().email().optional(),
+  parentalConsent: z.boolean().optional(),
+  socialPostingEnabled: z.boolean().optional(),
+  accountTypeChosen: z.enum(['investor', 'investi_lecteur']).optional(),
+}).partial();
+
+export const awardMinorVisuPointsSchema = z.object({
+  amount: z.number().min(1, "Montant doit être positif").max(1000, "Montant maximum: 1000 VP"),
+  source: z.string().min(1, "Source requise"),
+  sourceId: z.string().optional(),
+  description: z.string().min(1, "Description requise"),
+});
+
+export const createMinorNotificationSchema = z.object({
+  type: z.enum(['cap_warning_80', 'cap_reached', 'majority_reminder', 'lock_expired']),
+  title: z.string().max(200, "Titre trop long"),
+  message: z.string().min(1, "Message requis"),
+  triggerDate: z.date().optional(),
+});
+
+// Minor admin settings schema
+export const updateMinorAdminSettingsSchema = z.object({
+  minor_social_posting_enabled: z.boolean().optional(),
+  minor_points_cap_value_eur: z.number().min(50).max(500).optional(), // 50€ - 500€
+  minor_points_accrual_pause_on_cap: z.boolean().optional(),
+  post_majority_required_account: z.enum(['investor', 'investi_lecteur', 'both']).optional(),
+  post_majority_lock_months: z.number().min(0).max(12).optional(), // 0-12 mois
+  reminders_enabled: z.boolean().optional(),
+  parental_consent_mode: z.boolean().optional(),
+});
+
+// ===== VISITEUR MINEUR TYPES =====
+
+export type MinorProfile = typeof minorProfiles.$inferSelect;
+export type CreateMinorProfile = z.infer<typeof createMinorProfileSchema>;
+export type UpdateMinorProfile = z.infer<typeof updateMinorProfileSchema>;
+
+export type MinorVisuPointsTransaction = typeof minorVisuPointsTransactions.$inferSelect;
+export type AwardMinorVisuPoints = z.infer<typeof awardMinorVisuPointsSchema>;
+
+export type MinorNotification = typeof minorNotifications.$inferSelect;
+export type CreateMinorNotification = z.infer<typeof createMinorNotificationSchema>;
+
+export type MinorAdminSettings = typeof minorAdminSettings.$inferSelect;
+export type UpdateMinorAdminSettings = z.infer<typeof updateMinorAdminSettingsSchema>;
+
+// Constants for minor system
+export const MINOR_SYSTEM_CONSTANTS = {
+  VP_PER_EURO: 100,
+  DEFAULT_CAP_EUR: 200,
+  DEFAULT_CAP_VP: 20000,
+  MIN_AGE: 16,
+  MAX_AGE: 17,
+  MAJORITY_AGE: 18,
+  DEFAULT_LOCK_MONTHS: 6,
+  CAP_WARNING_THRESHOLD: 0.8, // 80% du cap
+} as const;
