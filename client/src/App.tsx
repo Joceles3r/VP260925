@@ -30,6 +30,7 @@ import AccessibilityPage from "@/pages/accessibility";
 import ProfilePage from "@/pages/profile";
 import SettingsPage from "@/pages/settings";
 import CreatorVideosPage from "@/pages/creator-videos";
+import LegalPage from "@/pages/legal";
 import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/admin/pages/AdminDashboard";
 
@@ -56,6 +57,7 @@ function Router() {
             <Route path="/visual" component={VisualPage} />
             <Route path="/info" component={InfoPage} />
             <Route path="/accessibility" component={AccessibilityPage} />
+            <Route path="/legal" component={LegalPage} />
             <Route path="/projects" component={Projects} />
             <Route component={Landing} />
           </>
@@ -67,6 +69,7 @@ function Router() {
             <Route path="/visual" component={VisualPage} />
             <Route path="/info" component={InfoPage} />
             <Route path="/accessibility" component={AccessibilityPage} />
+            <Route path="/legal" component={LegalPage} />
             <Route path="/projects" component={Projects} />
             <Route path="/portfolio" component={Portfolio} />
             <Route path="/live" component={Live} />

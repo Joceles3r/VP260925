@@ -7539,13 +7539,222 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   console.log('✅ VisualScoutAI endpoints initialisés');
 
+  // ========================================
+  // ROUTES CONFORMITÉ LÉGALE (RGPD, LCEN, AMF)
+  // ========================================
+
+  const { legalComplianceService } = await import('./services/legalComplianceService');
+
+  // Récupérer tous les règlements actuels (PUBLIC - transparence légale)
+  app.get('/api/legal/terms', async (req: any, res) => {
+    try {
+      const language = (req.query.language as string) || 'fr';
+      const terms = await legalComplianceService.getAllCurrentTerms(language);
+
+      res.json({
+        success: true,
+        terms,
+        count: terms.length
+      });
+    } catch (error) {
+      console.error('[Legal] Error fetching terms:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des règlements' });
+    }
+  });
+
+  // Récupérer un type de règlement spécifique (PUBLIC)
+  app.get('/api/legal/terms/:type', async (req: any, res) => {
+    try {
+      const { type } = req.params;
+      const language = (req.query.language as string) || 'fr';
+
+      const term = await legalComplianceService.getCurrentLegalTerms(
+        type as any,
+        language
+      );
+
+      if (!term) {
+        return res.status(404).json({ message: 'Règlement non trouvé' });
+      }
+
+      res.json({
+        success: true,
+        term
+      });
+    } catch (error) {
+      console.error('[Legal] Error fetching term:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération du règlement' });
+    }
+  });
+
+  // Récupérer l'historique des versions (PUBLIC - transparence)
+  app.get('/api/legal/terms/:type/history', async (req: any, res) => {
+    try {
+      const { type } = req.params;
+      const language = (req.query.language as string) || 'fr';
+
+      const history = await legalComplianceService.getTermsHistory(
+        type as any,
+        language
+      );
+
+      res.json({
+        success: true,
+        history,
+        count: history.length
+      });
+    } catch (error) {
+      console.error('[Legal] Error fetching history:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique' });
+    }
+  });
+
+  // Enregistrer le consentement de l'utilisateur (AUTHENTIFIÉ)
+  app.post('/api/legal/consent', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { contentType } = req.body;
+
+      if (!contentType) {
+        return res.status(400).json({ message: 'Type de contenu requis' });
+      }
+
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.headers['user-agent'];
+
+      const consent = await legalComplianceService.recordUserConsent(
+        userId,
+        contentType,
+        ipAddress,
+        userAgent
+      );
+
+      res.json({
+        success: true,
+        message: 'Consentement enregistré',
+        consent
+      });
+    } catch (error) {
+      console.error('[Legal] Error recording consent:', error);
+      res.status(500).json({ message: 'Erreur lors de l\'enregistrement du consentement' });
+    }
+  });
+
+  // Vérifier la conformité de l'utilisateur (AUTHENTIFIÉ)
+  app.get('/api/legal/compliance/check', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const compliance = await legalComplianceService.checkUserCompliance(userId);
+
+      res.json({
+        success: true,
+        compliance
+      });
+    } catch (error) {
+      console.error('[Legal] Error checking compliance:', error);
+      res.status(500).json({ message: 'Erreur lors de la vérification de conformité' });
+    }
+  });
+
+  // Récupérer les consentements de l'utilisateur (AUTHENTIFIÉ)
+  app.get('/api/legal/consents', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      const consents = await legalComplianceService.getUserConsents(userId);
+
+      res.json({
+        success: true,
+        consents,
+        count: consents.length
+      });
+    } catch (error) {
+      console.error('[Legal] Error fetching consents:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des consentements' });
+    }
+  });
+
+  // Retirer le consentement (DROIT RGPD - AUTHENTIFIÉ)
+  app.post('/api/legal/consent/withdraw', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { contentType } = req.body;
+
+      if (!contentType) {
+        return res.status(400).json({ message: 'Type de contenu requis' });
+      }
+
+      await legalComplianceService.withdrawConsent(userId, contentType);
+
+      res.json({
+        success: true,
+        message: 'Consentement retiré avec succès'
+      });
+    } catch (error) {
+      console.error('[Legal] Error withdrawing consent:', error);
+      res.status(500).json({ message: 'Erreur lors du retrait du consentement' });
+    }
+  });
+
+  // Avertissement sur les risques (PUBLIC - obligatoire AMF)
+  app.get('/api/legal/risk-warning', async (req: any, res) => {
+    try {
+      const language = (req.query.language as string) || 'fr';
+
+      const warning = legalComplianceService.getRiskWarning(language);
+
+      res.json({
+        success: true,
+        warning
+      });
+    } catch (error) {
+      console.error('[Legal] Error fetching risk warning:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération de l\'avertissement' });
+    }
+  });
+
+  // Rapport de conformité (ADMIN UNIQUEMENT)
+  app.get('/api/admin/legal/compliance/report', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+
+      if (!user || user.profileType !== 'admin') {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const startDate = req.query.startDate
+        ? new Date(req.query.startDate as string)
+        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const endDate = req.query.endDate
+        ? new Date(req.query.endDate as string)
+        : new Date();
+
+      const report = await legalComplianceService.generateComplianceReport(
+        startDate,
+        endDate
+      );
+
+      res.json({
+        success: true,
+        report
+      });
+    } catch (error) {
+      console.error('[Legal] Error generating report:', error);
+      res.status(500).json({ message: 'Erreur lors de la génération du rapport' });
+    }
+  });
+
+  console.log('✅ Routes de conformité légale initialisées');
+
   // =======================
   // ENDPOINTS DE SANTÉ SYSTÈME
   // =======================
-  
+
   // Imports pour les endpoints de santé
   const { healthzHandler, readyzHandler, metricsHandler, statusHandler } = await import('./health/endpoints');
-  
+
   // Health check endpoints avec protection appropriée
   app.get('/healthz', healthzHandler); // Public - pour load balancers
   app.get('/readyz', requireMonitoringAccess, readyzHandler); // Protégé - détails internes
