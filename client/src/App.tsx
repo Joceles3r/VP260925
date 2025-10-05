@@ -34,6 +34,7 @@ import CreatorVideosPage from "@/pages/creator-videos";
 import LegalPage from "@/pages/legal";
 import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/admin/pages/AdminDashboard";
+import ContactSupportPage from "@/pages/contact-support";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
