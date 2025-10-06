@@ -3,6 +3,7 @@ import { Play, TrendingUp, Shield, Users, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/lib/i18n';
 import { VISUAL_SLOGAN, VISUAL_BASELINE } from '@shared/constants';
+import OfficialLogo, { OfficialBadge } from '@/components/OfficialLogo';
 
 export default function Landing() {
   const { locale, t } = useLanguage();
