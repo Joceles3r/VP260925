@@ -1,38 +1,85 @@
-# Docker Compose configuration for VISUAL Platform
-# Production-ready setup with Nginx reverse proxy
+# ==============================================
+# VISUAL Platform - Docker Compose Configuration
+# Production-ready setup with security hardening
+# ==============================================
 version: '3.8'
 
 services:
-  # VISUAL Platform Application
+  # ==============================================
+  # 🚀 VISUAL Platform Application
+  # ==============================================
   visual-app:
     build:
       context: .
       dockerfile: Dockerfile
+      target: production
     container_name: visual-platform
     restart: unless-stopped
+    user: "node"  # Non-root user
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/log
     environment:
       - NODE_ENV=production
-      - PORT=5000
-      # Database configuration (use external service or add postgres service)
+      - PORT=8001
+      - HOST=0.0.0.0
+      # Database
       - DATABASE_URL=${DATABASE_URL}
-      # Stripe configuration
+      - MONGO_URL=${DATABASE_URL}  # Compatibility
+      # Authentication
+      - REPLIT_AUTH_DOMAIN=${REPLIT_AUTH_DOMAIN}
+      - REPLIT_AUTH_CLIENT_ID=${REPLIT_AUTH_CLIENT_ID}
+      - REPLIT_AUTH_CLIENT_SECRET=${REPLIT_AUTH_CLIENT_SECRET}
+      # Stripe
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - VITE_STRIPE_PUBLIC_KEY=${VITE_STRIPE_PUBLIC_KEY}
-      # Object storage
-      - DEFAULT_OBJECT_STORAGE_BUCKET_ID=${DEFAULT_OBJECT_STORAGE_BUCKET_ID}
-      - PRIVATE_OBJECT_DIR=${PRIVATE_OBJECT_DIR}
-      - PUBLIC_OBJECT_SEARCH_PATHS=${PUBLIC_OBJECT_SEARCH_PATHS}
+      - REACT_APP_STRIPE_PUBLISHABLE_KEY=${REACT_APP_STRIPE_PUBLISHABLE_KEY}
+      # Object Storage
+      - OBJECT_STORAGE_ENDPOINT=${OBJECT_STORAGE_ENDPOINT}
+      - OBJECT_STORAGE_ACCESS_KEY=${OBJECT_STORAGE_ACCESS_KEY}
+      - OBJECT_STORAGE_SECRET_KEY=${OBJECT_STORAGE_SECRET_KEY}
+      - OBJECT_STORAGE_BUCKET=${OBJECT_STORAGE_BUCKET}
+      # Security
+      - SESSION_SECRET=${SESSION_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # URLs
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      # Monitoring
+      - SENTRY_DSN=${SENTRY_DSN}
+      - LOG_LEVEL=info
     volumes:
-      - uploads_data:/app/uploads
+      - uploads_data:/app/uploads:rw
+      - logs_data:/var/log:rw
     networks:
       - visual_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/healthz', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8001/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
 
   # Nginx Reverse Proxy with Security Headers
   nginx:
