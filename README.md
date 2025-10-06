@@ -302,6 +302,7 @@ L'application sera accessible sur `http://localhost:5000`
 - **Live Shows:** Battles artistes en temps réel (WebSocket)
 - **Mini réseau social:** Posts, likes, commentaires
 - **VISUpoints:** Système de récompenses gamifié
+- **Mini-Tickets Scratch:** Récompenses automatiques tous les 100 VP
 - **Tickets Or:** Compétitions mensuelles
 - **Voix de l'Info:** Articles payants infoporteurs
 - **Petites annonces:** Marketplace audiovisuelle
