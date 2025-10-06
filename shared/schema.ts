@@ -3414,6 +3414,26 @@ export const insertAgentParameterSchema = createInsertSchema(agentParameters).om
   lastModifiedAt: true
 });
 
+// Scratch tickets - Mini-tickets "Scratch" pour utilisateurs réguliers
+export const scratchTicketStatusEnum = pgEnum('scratch_ticket_status', ['pending', 'scratched', 'expired']);
+export const scratchTicketRewardEnum = pgEnum('scratch_ticket_reward', ['5vp', '10vp', '20vp', '50vp', 'nothing']);
+
+export const scratchTickets = pgTable("scratch_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  status: scratchTicketStatusEnum("status").default('pending').notNull(),
+  triggeredAtVP: integer("triggered_at_vp").notNull(), // VISUpoints quand déclenché (100, 200, 300, etc.)
+  reward: scratchTicketRewardEnum("reward"), // Récompense obtenue (null si pending)
+  rewardVP: integer("reward_vp"), // Montant VISUpoints gagnés
+  scratchedAt: timestamp("scratched_at"),
+  expiresAt: timestamp("expires_at").notNull(), // 30 jours pour gratter
+  ipAddress: varchar("ip_address"),
+  userAgent: varchar("user_agent"),
+  validatedByAI: boolean("validated_by_ai").default(false), // IA VISUAL validation
+  aiValidationData: jsonb("ai_validation_data"), // Données IA pour anti-triche
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Schéma d'insertion pour feature toggles avec validation des clés
 export const insertFeatureToggleSchema = createInsertSchema(featureToggles).omit({
   id: true,
@@ -3425,6 +3445,12 @@ export const insertFeatureToggleSchema = createInsertSchema(featureToggles).omit
 }, {
   message: "Clé de toggle non autorisée. Clés valides: films, videos, documentaires, voix_info, live_show, livres, petites_annonces",
   path: ["key"]
+});
+
+export const insertScratchTicketSchema = createInsertSchema(scratchTickets).omit({
+  id: true,
+  createdAt: true,
+  scratchedAt: true,
 });
 
 // Types d'insertion et de sélection pour agents IA
