@@ -40,6 +40,8 @@ export interface TranslationKeys {
   'visual.title': string;
   'visual.subtitle': string;
   'visual.description': string;
+  'visual.slogan': string;
+  'visual.baseline': string;
   'visual.categories.film': string;
   'visual.categories.music': string;
   'visual.categories.game': string;
