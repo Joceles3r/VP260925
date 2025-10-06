@@ -100,24 +100,56 @@ services:
     networks:
       - visual_network
 
-  # PostgreSQL Database (optional - use external service for production)
+  # ==============================================
+  # 🗄️ PostgreSQL Database
+  # ==============================================
   postgres:
     image: postgres:15-alpine
     container_name: visual-postgres
     restart: unless-stopped
+    user: postgres
     environment:
-      - POSTGRES_DB=visual_prod
-      - POSTGRES_USER=visual_user
+      - POSTGRES_DB=${POSTGRES_DB:-visual_prod}
+      - POSTGRES_USER=${POSTGRES_USER:-visual_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:rw
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     networks:
       - visual_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U visual_user -d visual_prod"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-visual_user} -d ${POSTGRES_DB:-visual_prod}"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
 
   # Redis for Session Store (optional)
   redis:
