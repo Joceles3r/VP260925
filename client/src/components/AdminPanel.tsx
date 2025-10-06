@@ -12,6 +12,7 @@ import LiveShowsAdminPanel from '@/components/LiveShowsAdminPanel';
 import { InternalMessagesManager } from '@/components/admin/InternalMessagesManager';
 import MinorVisitorsManagement from '@/admin/components/MinorVisitorsManagement';
 import OverdraftManagement from '@/admin/components/OverdraftManagement';
+import LogoVisibilityControl from '@/components/admin/LogoVisibilityControl';
 
 interface AdminStatsProps {
   stats: any;
