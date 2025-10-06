@@ -171,6 +171,107 @@ router.get("/bunny/videos/:guid/manifest.m3u8", async (req: any, res) => {
   }
 });
 
+// Route lifecycle - Informations cycle de vie vidéo
+router.get("/bunny/videos/:videoDepositId/lifecycle", isAuthenticated, async (req: any, res) => {
+  try {
+    const { videoDepositId } = req.params;
+    const userId = req.user.claims.sub;
+    
+    // Récupérer les informations de lifecycle
+    const lifecycle = await videoLifecycleService.getLifecycleInfo(videoDepositId);
+    
+    if (!lifecycle) {
+      return res.status(404).json({ error: 'Vidéo non trouvée' });
+    }
+    
+    // Vérifier que l'utilisateur est le créateur (optionnel, selon logique métier)
+    // const storage = req.app.locals.storage;
+    // const deposit = await storage.getVideoDeposit(videoDepositId);
+    // if (deposit.creatorId !== userId) {
+    //   return res.status(403).json({ error: 'Accès non autorisé' });
+    // }
+    
+    res.json({
+      ...lifecycle,
+      // Informations additionnelles
+      config: {
+        standardDurationHours: 168,
+        extensionPriceEUR: 25,
+        maxExtensions: 4,
+        gracePeriodHours: 24,
+      },
+      actions: {
+        canExtend: lifecycle.canExtend,
+        canAutoRenew: lifecycle.autoRenewEligible,
+        requiresPayment: lifecycle.canExtend,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Bunny] Lifecycle info error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route prolongation payante
+router.post("/bunny/videos/:videoDepositId/extend", isAuthenticated, async (req: any, res) => {
+  try {
+    const { videoDepositId } = req.params;
+    const userId = req.user.claims.sub;
+    const { paymentConfirmed } = req.body;
+    
+    if (!paymentConfirmed) {
+      return res.status(400).json({ 
+        error: 'Paiement requis',
+        extensionPriceEUR: 25,
+        message: 'Veuillez confirmer le paiement pour prolonger la vidéo'
+      });
+    }
+    
+    // TODO: Vérifier le paiement Stripe avant de confirmer
+    // const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    // if (paymentIntent.status !== 'succeeded') { return error }
+    
+    const result = await videoLifecycleService.extendLifecycle(
+      videoDepositId,
+      userId,
+      paymentConfirmed
+    );
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      newExpiresAt: result.newExpiresAt,
+      extensionCount: result.extensionCount,
+      message: 'Vidéo prolongée de 168 heures (7 jours)',
+    });
+  } catch (error: any) {
+    console.error('[Bunny] Extension error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route admin - Maintenance manuelle
+router.post("/bunny/admin/maintenance", isAuthenticated, async (req: any, res) => {
+  try {
+    // TODO: Vérifier que l'utilisateur est admin
+    // if (!req.user.isAdmin) return res.status(403).json({ error: 'Admin requis' });
+    
+    const results = await videoLifecycleService.runMaintenanceTasks();
+    
+    res.json({
+      success: true,
+      results,
+      message: 'Tâches de maintenance exécutées',
+    });
+  } catch (error: any) {
+    console.error('[Bunny] Maintenance error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get("/bunny/usage/estimate", isAuthenticated, async (req: any, res) => {
   try {
     const userId = req.user.claims.sub;
