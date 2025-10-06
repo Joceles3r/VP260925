@@ -604,6 +604,8 @@ const translations_es: TranslationKeys = {
   'visual.title': 'Plataforma VISUAL',
   'visual.subtitle': 'Inversión Creativa Híbrida',
   'visual.description': 'Plataforma de financiación colectiva para proyectos audiovisuales y creativos',
+  'visual.slogan': 'Mira-Invierte-Gana',
+  'visual.baseline': 'Invierte en proyectos visuales desde 2€ y comparte las ganancias',
   'visual.categories.film': 'Películas y Videos',
   'visual.categories.music': 'Música y Audio',
   'visual.categories.game': 'Videojuegos',
