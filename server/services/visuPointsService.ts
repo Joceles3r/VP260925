@@ -50,6 +50,19 @@ export class VISUPointsService {
       // For now, the transactions table serves as the authoritative audit trail
       
       console.log(`VISUpoints awarded: ${amount} VP to user ${userId} for: ${reason}`);
+      
+      // ✨ NOUVEAU: Vérifier et créer ticket scratch tous les 100 VP
+      try {
+        const { scratchTicketService } = await import('./scratchTicketService');
+        
+        // Calculer total VISUpoints utilisateur
+        const userBalance = await storage.getUserVisuPoints(userId);
+        await scratchTicketService.checkAndCreateTicket(userId, userBalance || 0);
+      } catch (scratchError) {
+        console.error('[VISUPoints] Error checking scratch ticket:', scratchError);
+        // Ne pas bloquer la transaction principale si erreur scratch
+      }
+      
       return transaction;
     } catch (error) {
       console.error(`Error awarding VISUpoints to user ${userId}:`, error);
