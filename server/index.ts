@@ -12,6 +12,12 @@ validateSecrets(false); // Set to true to enforce strict validation in developme
 
 const app = express();
 
+// 🔒 SÉCURITÉ: Configuration complète de sécurité
+setupSecurity(app);
+
+// 🛡️ RGPD: Conformité et protection des données
+setupGDPRCompliance(app);
+
 // 🌍 CORS: Enable Cross-Origin Resource Sharing with environment-aware settings
 app.use(setupCORS());
 
