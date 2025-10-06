@@ -440,6 +440,22 @@ export const VIDEO_LIFECYCLE = {
   AUTO_ARCHIVE_DELAY_HOURS: 24, // Délai avant archivage automatique
 } as const;
 
+// Scratch Ticket - Mini-ticket "Scratch" pour utilisateurs réguliers
+export const SCRATCH_TICKET_CONFIG = {
+  TRIGGER_VP_THRESHOLD: 100, // Déclenché tous les 100 VISUpoints cumulés
+  EXPIRY_DAYS: 30, // 30 jours pour gratter le ticket
+  REWARDS: {
+    FIVE_VP: { value: 5, weight: 40 },      // 40% de chances
+    TEN_VP: { value: 10, weight: 30 },      // 30% de chances
+    TWENTY_VP: { value: 20, weight: 20 },   // 20% de chances
+    FIFTY_VP: { value: 50, weight: 5 },     // 5% de chances
+    NOTHING: { value: 0, weight: 5 },       // 5% de chances (rien gagné)
+  },
+  MAX_PENDING_TICKETS: 5, // Maximum 5 tickets non grattés
+  AI_VALIDATION_ENABLED: true, // IA VISUAL valide chaque scratch
+  ANTI_CHEAT_COOLDOWN_HOURS: 1, // Minimum 1h entre 2 scratches
+} as const;
+
 // Quêtes quotidiennes - "Surprise du jour"
 export const DAILY_QUESTS = {
   defaultReward: 20, // VISUpoints par défaut pour une quête complétée
