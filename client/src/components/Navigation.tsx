@@ -7,6 +7,7 @@ import NotificationPanel from './NotificationPanel';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSelector } from './LanguageSelector';
 import { SearchBar } from './SearchBar';
+import OfficialLogo from './OfficialLogo';
 
 export default function Navigation() {
   const [location] = useLocation();
