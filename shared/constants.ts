@@ -428,6 +428,18 @@ export const STREAK_REWARDS = {
   maxStreakReward: 500, // Récompense maximale pour un streak
 } as const;
 
+// Video lifecycle configuration (cycle de vie des vidéos)
+export const VIDEO_LIFECYCLE = {
+  STANDARD_DURATION_HOURS: 168, // 7 jours (168 heures)
+  EXTENSION_PRICE_EUR: 25, // Prix prolongation (harmonisation VISUAL)
+  TOP10_AUTO_RENEW: true, // Reconduction automatique si TOP 10
+  ARCHIVE_IF_NOT_TOP10: true, // Archivage automatique si hors TOP 10
+  MAX_EXTENSIONS: 4, // Maximum 4 prolongations (1 mois total = 168h x 5)
+  GRACE_PERIOD_HOURS: 24, // 24h de grâce avant archivage définitif
+  NOTIFICATION_BEFORE_EXPIRY_HOURS: 48, // Notifier 48h avant expiration
+  AUTO_ARCHIVE_DELAY_HOURS: 24, // Délai avant archivage automatique
+} as const;
+
 // Quêtes quotidiennes - "Surprise du jour"
 export const DAILY_QUESTS = {
   defaultReward: 20, // VISUpoints par défaut pour une quête complétée
