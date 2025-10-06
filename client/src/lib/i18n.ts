@@ -416,6 +416,8 @@ const translations_en: TranslationKeys = {
   'visual.title': 'VISUAL Platform',
   'visual.subtitle': 'Hybrid Creative Investment',
   'visual.description': 'Crowdfunding platform for audiovisual and creative projects',
+  'visual.slogan': 'Watch-Invest-Win',
+  'visual.baseline': 'Invest in visual projects from €2 and share the profits',
   'visual.categories.film': 'Films & Videos',
   'visual.categories.music': 'Music & Audio',
   'visual.categories.game': 'Video Games',
