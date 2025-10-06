@@ -16,12 +16,13 @@ export default function Landing() {
       <nav className="bg-card border-b border-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                <Play className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <div className="ml-3">
-                <span className="text-xl font-bold text-foreground block">VISUAL</span>
+            <div className="flex items-center gap-2">
+              <OfficialLogo size="md" showFallback />
+              <div className="ml-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-foreground">VISUAL</span>
+                  <OfficialBadge />
+                </div>
                 <span className="text-[10px] text-muted-foreground font-medium tracking-tight">{slogan}</span>
               </div>
             </div>
