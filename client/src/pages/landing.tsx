@@ -5,6 +5,10 @@ import { useLanguage } from '@/lib/i18n';
 import { VISUAL_SLOGAN, VISUAL_BASELINE } from '@shared/constants';
 
 export default function Landing() {
+  const { locale, t } = useLanguage();
+  const slogan = VISUAL_SLOGAN[locale] || VISUAL_SLOGAN.fr;
+  const baseline = VISUAL_BASELINE[locale] || VISUAL_BASELINE.fr;
+
   return (
     <div className="min-h-screen bg-background" data-testid="landing-page">
       {/* Navigation for logged out users */}
@@ -15,7 +19,10 @@ export default function Landing() {
               <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                 <Play className="h-6 w-6 text-primary-foreground" />
               </div>
-              <span className="ml-3 text-xl font-bold text-foreground">VISUAL</span>
+              <div className="ml-3">
+                <span className="text-xl font-bold text-foreground block">VISUAL</span>
+                <span className="text-[10px] text-muted-foreground font-medium tracking-tight">{slogan}</span>
+              </div>
             </div>
             
             <div className="flex items-center space-x-4">
