@@ -228,6 +228,8 @@ const translations_fr: TranslationKeys = {
   'visual.title': 'VISUAL Platform',
   'visual.subtitle': 'Investissement Créatif Hybride',
   'visual.description': 'Plateforme de financement participatif pour projets audiovisuels et créatifs',
+  'visual.slogan': 'Regarde-Investis-Gagne',
+  'visual.baseline': 'Investissez dans des projets visuels dès 2€ et participez aux gains',
   'visual.categories.film': 'Films & Vidéos',
   'visual.categories.music': 'Musique & Audio',
   'visual.categories.game': 'Jeux Vidéo',
