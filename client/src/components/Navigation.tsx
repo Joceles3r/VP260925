@@ -39,11 +39,11 @@ export default function Navigation() {
           {/* Logo */}
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Link href="/dashboard" className="flex items-center group" data-testid="logo-link">
-                <div className="w-10 h-10 bg-gradient-to-br from-[#00D1FF] to-[#7B2CFF] rounded-lg flex items-center justify-center neon-glow-blue smooth-transition group-hover:scale-110">
-                  <Play className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-3">
+              <Link href="/dashboard" className="flex items-center gap-3 group" data-testid="logo-link">
+                {/* Logo officiel (si visible) ou placeholder */}
+                <OfficialLogo size="md" showFallback className="smooth-transition group-hover:scale-110" />
+                
+                <div className="ml-1">
                   <span className="text-xl font-bold visual-text-gradient block">VISUAL</span>
                   <span className="text-[10px] text-muted-foreground font-medium tracking-tight hidden lg:block">Regarde-Investis-Gagne</span>
                 </div>
