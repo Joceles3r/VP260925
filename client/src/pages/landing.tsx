@@ -40,14 +40,14 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary/5 via-background to-secondary/5 py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground mb-6" data-testid="hero-title">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground mb-4" data-testid="hero-title">
+            <span className="text-primary block mb-2">{slogan}</span>
             Soutenez des projets visuels,<br />
-            <span className="text-primary">votez avec vos euros</span>
+            votez avec vos euros
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto mb-8" data-testid="hero-subtitle">
-            Investissez par tranches de **2–20 €** (vidéos/livres) et influencez le classement grâce aux VISUpoints. 
-            Découvrez une nouvelle façon de soutenir la création audiovisuelle.
+            {baseline}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
