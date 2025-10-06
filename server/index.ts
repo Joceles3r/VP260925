@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { validateSecrets } from "./config/secretsValidator";
 import { setupCORS } from "./config/corsConfig";
+import { setupSecurity } from "./config/security";
+import { setupGDPRCompliance } from "./middleware/gdprCompliance";
 
 // 🔒 SECURITY: Validate all critical secrets before starting server
 // In production, this will block startup if default/insecure secrets are detected
