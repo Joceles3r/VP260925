@@ -42,8 +42,15 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary/5 via-background to-secondary/5 py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="flex items-center justify-center mb-4">
+            <OfficialLogo size="xl" showFallback />
+          </div>
+          
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground mb-4" data-testid="hero-title">
-            <span className="text-primary block mb-2">{slogan}</span>
+            <span className="text-primary block mb-2 flex items-center justify-center gap-2">
+              {slogan}
+              <OfficialBadge />
+            </span>
             Soutenez des projets visuels,<br />
             votez avec vos euros
           </h1>
