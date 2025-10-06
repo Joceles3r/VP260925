@@ -1,0 +1,90 @@
+{
+  "name": "visual-platform",
+  "version": "1.0.0",
+  "description": "VISUAL - Plateforme d'investissement de contenu créatif",
+  "main": "server/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"yarn dev:server\" \"yarn dev:client\"",
+    "dev:server": "cd server && yarn dev",
+    "dev:client": "cd client && yarn dev",
+    "build": "yarn build:client && yarn build:server",
+    "build:client": "cd client && yarn build",
+    "build:server": "cd server && yarn build",
+    "start": "cd server && yarn start",
+    "test": "yarn test:unit && yarn test:integration",
+    "test:unit": "vitest run",
+    "test:integration": "playwright test",
+    "test:e2e": "playwright test --project=chromium",
+    "test:coverage": "vitest run --coverage",
+    "lint": "yarn lint:ts && yarn lint:py",
+    "lint:ts": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "lint:py": "ruff check .",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix && ruff --fix .",
+    "format": "prettier --write . && black .",
+    "format:check": "prettier --check . && black --check .",
+    "type-check": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate:pg",
+    "db:migrate": "drizzle-kit push:pg",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "node scripts/seed-database.js",
+    "db:reset": "node scripts/reset-database.js",
+    "security:audit": "yarn audit && detect-secrets scan --all-files --force-use-all-plugins",
+    "security:rotate-keys": "node scripts/security/rotate-keys.js",
+    "lighthouse": "lhci autorun",
+    "a11y": "pa11y-ci --sitemap http://localhost:3000/sitemap.xml",
+    "docs:generate": "typedoc --out docs src",
+    "docs:serve": "serve docs -p 8080",
+    "clean": "rimraf node_modules client/node_modules server/node_modules client/dist server/dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/votre-org/visual-platform.git"
+  },
+  "keywords": [
+    "investment",
+    "creative",
+    "platform",
+    "content",
+    "stripe",
+    "react",
+    "typescript",
+    "postgresql"
+  ],
+  "author": "VISUAL Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "yarn": ">=1.22.0"
+  },
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.0.0",
+    "eslint": "^8.45.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react": "^7.33.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "lighthouse": "^11.0.0",
+    "@lhci/cli": "^0.12.0",
+    "pa11y-ci": "^3.1.0",
+    "prettier": "^3.0.0",
+    "rimraf": "^5.0.0",
+    "serve": "^14.0.0",
+    "typedoc": "^0.25.0",
+    "typescript": "^5.0.0",
+    "vitest": "^0.34.0",
+    "@vitest/coverage-c8": "^0.33.0"
+  },
+  "dependencies": {
+    "drizzle-kit": "^0.20.0",
+    "drizzle-orm": "^0.29.0"
+  }
+}
