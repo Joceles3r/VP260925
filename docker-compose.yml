@@ -151,30 +151,132 @@ services:
       -c min_wal_size=1GB
       -c max_wal_size=4GB
 
-  # Redis for Session Store (optional)
+  # ==============================================
+  # 🚀 Redis for Caching & Sessions
+  # ==============================================
   redis:
     image: redis:7-alpine
     container_name: visual-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    user: redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
     volumes:
-      - redis_data:/data
+      - redis_data:/data:rw
     networks:
       - visual_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
 
+  # ==============================================
+  # 🔍 Monitoring (Optional)
+  # ==============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: visual-prometheus
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus:rw
+    networks:
+      - visual_network
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: visual-grafana
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana:rw
+    networks:
+      - visual_network
+    ports:
+      - "3001:3000"
+
+# ==============================================
+# 📦 VOLUMES PERSISTANTS
+# ==============================================
 volumes:
   postgres_data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/postgres
+
   redis_data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/redis
+
   uploads_data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/uploads
 
+  logs_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/logs
+
+  prometheus_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/prometheus
+
+  grafana_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/grafana
+
+# ==============================================
+# 🌐 RÉSEAU
+# ==============================================
 networks:
   visual_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
