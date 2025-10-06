@@ -8814,6 +8814,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   console.log('✅ Routes des visiteurs mineurs initialisées');
 
+  // ===== MODULE MINI-TICKET "SCRATCH" =====
+
+  // Import du service scratch tickets
+  const { scratchTicketService } = await import('./services/scratchTicketService');
+
+  // Récupérer les tickets scratch d'un utilisateur
+  app.get('/api/scratch-tickets', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const tickets = await scratchTicketService.getUserTickets(userId);
+      
+      res.json({
+        success: true,
+        tickets,
+        count: tickets.length,
+        pending: tickets.filter(t => t.canScratch).length
+      });
+    } catch (error) {
+      console.error('Error getting user scratch tickets:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des tickets' });
+    }
+  });
+
+  // Gratter un ticket scratch
+  app.post('/api/scratch-tickets/:id/scratch', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const ticketId = req.params.id;
+      const ipAddress = req.ip || req.connection.remoteAddress;
+      const userAgent = req.get('User-Agent');
+
+      const result = await scratchTicketService.scratchTicket(
+        ticketId,
+        userId,
+        ipAddress,
+        userAgent
+      );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message
+        });
+      }
+
+      // Log de l'audit pour le grattage
+      await storage.createAuditLog({
+        userId,
+        action: 'scratch_ticket_scratched',
+        resourceType: 'scratch_ticket',
+        resourceId: ticketId,
+        details: {
+          reward: result.reward,
+          rewardVP: result.rewardVP,
+          ipAddress,
+          userAgent: userAgent?.substring(0, 255)
+        },
+        ipAddress,
+        userAgent: userAgent?.substring(0, 255)
+      });
+
+      res.json({
+        success: true,
+        reward: result.reward,
+        rewardVP: result.rewardVP,
+        message: result.message,
+        newBalance: result.newBalance
+      });
+    } catch (error) {
+      console.error('Error scratching ticket:', error);
+      res.status(500).json({ message: 'Erreur lors du grattage du ticket' });
+    }
+  });
+
+  // Routes ADMIN pour les scratch tickets
+
+  // Statistiques des scratch tickets (ADMIN)
+  app.get('/api/admin/scratch-tickets/stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const stats = await scratchTicketService.getStatistics();
+      
+      res.json({
+        success: true,
+        stats
+      });
+    } catch (error) {
+      console.error('Error getting scratch ticket stats:', error);
+      res.status(500).json({ message: 'Erreur lors de la récupération des statistiques' });
+    }
+  });
+
+  // Nettoyer les tickets expirés (ADMIN)
+  app.post('/api/admin/scratch-tickets/cleanup-expired', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (!user || !hasProfile(user.profileTypes, 'admin')) {
+        return res.status(403).json({ message: 'Accès réservé aux administrateurs' });
+      }
+
+      const result = await scratchTicketService.expireOldTickets();
+      
+      // Log de l'audit
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'scratch_tickets_cleanup',
+        resourceType: 'scratch_ticket',
+        details: { expiredCount: result.expired },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')?.substring(0, 255)
+      });
+
+      res.json({
+        success: true,
+        expired: result.expired,
+        message: `${result.expired} tickets expirés nettoyés`
+      });
+    } catch (error) {
+      console.error('Error cleaning up expired tickets:', error);
+      res.status(500).json({ message: 'Erreur lors du nettoyage des tickets' });
+    }
+  });
+
+  console.log('✅ Routes des Mini-Tickets Scratch initialisées');
+
   // Import des services mineurs
   const { minorVisitorService } = await import('./services/minorVisitorService');
   const { minorNotificationService } = await import('./services/minorNotificationService');
