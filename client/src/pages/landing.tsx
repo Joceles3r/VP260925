@@ -1,6 +1,8 @@
 import React from 'react';
 import { Play, TrendingUp, Shield, Users, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/lib/i18n';
+import { VISUAL_SLOGAN, VISUAL_BASELINE } from '@shared/constants';
 
 export default function Landing() {
   return (
