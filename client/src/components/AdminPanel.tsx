@@ -223,6 +223,7 @@ export default function AdminPanel() {
           <TabsTrigger value="minors" data-testid="tab-minors">👤 Mineurs</TabsTrigger>
           <TabsTrigger value="overdraft" data-testid="tab-overdraft">💳 Découvert</TabsTrigger>
           <TabsTrigger value="toggles" data-testid="tab-toggles">Boutons ON/OFF</TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings">⚙️ Paramètres</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="space-y-4">
