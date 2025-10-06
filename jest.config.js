@@ -7,19 +7,7 @@ export default {
     '^@/(.*)$': '<rootDir>/client/src/$1',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  transform: {
-    '^.+\\.tsx?$': [
-      'ts-jest',
-      {
-        useESM: true,
-        tsconfig: {
-          module: 'ESNext',
-          moduleResolution: 'bundler',
-          allowImportingTsExtensions: true,
-        },
-      },
-    ],
-  },
+  transform: {},
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx',
