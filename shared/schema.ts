@@ -799,6 +799,8 @@ export const videoDeposits = pgTable("video_deposits", {
   processingData: jsonb("processing_data"), // Bunny.net processing info
   paidAt: timestamp("paid_at"), // When payment was confirmed
   rejectionReason: varchar("rejection_reason"), // Reason for rejection if applicable
+  extensionCount: integer("extension_count").default(0), // Nombre de prolongations effectuées
+  archivedAt: timestamp("archived_at"), // Date d'archivage
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
