@@ -1,6 +1,33 @@
 // Centralized constants for VISUAL platform
 // Updated with video deposit modules - 2024
 
+// ===== BRANDING & SLOGAN =====
+
+// Slogan officiel VISUAL (trilingue)
+export const VISUAL_SLOGAN = {
+  fr: 'Regarde-Investis-Gagne',
+  en: 'Watch-Invest-Win',
+  es: 'Mira-Invierte-Gana'
+} as const;
+
+// Baseline explicatif
+export const VISUAL_BASELINE = {
+  fr: 'Investissez dans des projets visuels dès 2€ et participez aux gains',
+  en: 'Invest in visual projects from €2 and share the profits',
+  es: 'Invierte en proyectos visuales desde 2€ y comparte las ganancias'
+} as const;
+
+// Logo et branding
+export const VISUAL_BRANDING = {
+  logoPath: '/logo.svg',
+  logoAlt: 'VISUAL Platform',
+  colors: {
+    primary: '#00D1FF',
+    secondary: '#7B2CFF',
+    accent: '#FF3CAC'
+  }
+} as const;
+
 // Stripe API configuration
 export const STRIPE_CONFIG = {
   // Version par défaut stable - utilise la version stable pour éviter les problèmes de compatibilité
