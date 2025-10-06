@@ -895,6 +895,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Platform Settings routes
+  app.get('/api/platform-settings', async (req, res) => {
+    try {
+      const { default: platformSettingsService } = await import('./services/platformSettingsService');
+      const settings = await platformSettingsService.getAllSettings();
+      
+      // Convert to boolean format for client
+      const formattedSettings = {
+        logo_official_visible: settings.logo_official_visible === 'true',
+        maintenance_mode: settings.maintenance_mode === 'true',
+        new_registration_enabled: settings.new_registration_enabled === 'true',
+        live_shows_enabled: settings.live_shows_enabled === 'true',
+        voix_info_enabled: settings.voix_info_enabled === 'true',
+        petites_annonces_enabled: settings.petites_annonces_enabled === 'true',
+      };
+      
+      res.json(formattedSettings);
+    } catch (error) {
+      console.error('Error fetching platform settings:', error);
+      res.status(500).json({ error: 'Failed to fetch platform settings' });
+    }
+  });
+
+  app.put('/api/platform-settings', isAuthenticated, async (req: any, res) => {
+    try {
+      const { key, value } = req.body;
+      
+      if (!key) {
+        return res.status(400).json({ error: 'Missing key' });
+      }
+      
+      const userId = req.user?.claims?.sub || 'admin';
+      const { default: platformSettingsService } = await import('./services/platformSettingsService');
+      
+      await platformSettingsService.setSetting(key, value, userId);
+      
+      res.json({ 
+        success: true,
+        message: 'Setting updated successfully' 
+      });
+    } catch (error) {
+      console.error('Error updating platform setting:', error);
+      res.status(500).json({ error: 'Failed to update platform setting' });
+    }
+  });
+
+  app.get('/api/platform-settings/logo-visible', async (req, res) => {
+    try {
+      const { default: platformSettingsService } = await import('./services/platformSettingsService');
+      const isVisible = await platformSettingsService.isLogoVisible();
+      res.json({ visible: isVisible });
+    } catch (error) {
+      console.error('Error checking logo visibility:', error);
+      res.status(500).json({ error: 'Failed to check logo visibility' });
+    }
+  });
+
   app.patch('/api/user/profiles', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
