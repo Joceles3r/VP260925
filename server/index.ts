@@ -86,6 +86,15 @@ app.use((req, res, next) => {
   }, async () => {
     log(`serving on port ${port}`);
     
+    // Initialiser les paramètres de plateforme
+    try {
+      const { default: platformSettingsService } = await import('./services/platformSettingsService');
+      await platformSettingsService.initializeDefaultSettings();
+      log('[Platform] Paramètres de plateforme initialisés');
+    } catch (error) {
+      console.error('[Platform] Erreur lors de l\'initialisation des paramètres:', error);
+    }
+
     // Initialiser les paramètres par défaut du mini réseau social
     try {
       const { miniSocialConfigService } = await import('./services/miniSocialConfigService');
