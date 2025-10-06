@@ -839,6 +839,31 @@ export default function AdminPanel() {
             </div>
           </div>
         </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <div className="grid gap-6">
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <Settings className="h-6 w-6 text-primary" />
+                Paramètres de Plateforme
+              </h3>
+              <p className="text-muted-foreground">
+                Contrôlez les paramètres globaux de la plateforme VISUAL
+              </p>
+            </div>
+
+            {/* Logo Visibility Control */}
+            <LogoVisibilityControl />
+
+            {/* Autres paramètres à venir */}
+            <div className="text-center p-8 border border-dashed rounded-lg">
+              <Settings className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+              <p className="text-muted-foreground">
+                Plus de paramètres à venir...
+              </p>
+            </div>
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   );
