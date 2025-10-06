@@ -135,6 +135,26 @@ start: ## 🚀 Démarre en mode production
 	@echo "$(GREEN)🚀 Démarrage en production...$(NC)"
 	$(YARN) start
 
+deploy: ## 🚀 Déploiement avec backup automatique et rollback
+	@echo "$(GREEN)🚀 Déploiement avec sauvegarde...$(NC)"
+	@bash scripts/deploy-with-rollback.sh deploy
+
+deploy-version: ## 🚀 Déploiement d'une version spécifique (usage: make deploy-version VERSION=v1.2.3)
+	@echo "$(GREEN)🚀 Déploiement version $(VERSION)...$(NC)"
+	@bash scripts/deploy-with-rollback.sh deploy $(VERSION)
+
+rollback: ## ⏮️  Rollback vers le dernier backup
+	@echo "$(YELLOW)⚠️  ROLLBACK vers le dernier backup...$(NC)"
+	@bash scripts/quick-rollback.sh
+
+rollback-to: ## ⏮️  Rollback vers un backup spécifique (usage: make rollback-to TIMESTAMP=20250120_1430)
+	@echo "$(YELLOW)⚠️  ROLLBACK vers $(TIMESTAMP)...$(NC)"
+	@bash scripts/deploy-with-rollback.sh rollback $(TIMESTAMP)
+
+list-backups: ## 📋 Liste tous les backups disponibles
+	@echo "$(GREEN)📋 Backups disponibles:$(NC)"
+	@ls -lh .backups/backup_*.tar.gz 2>/dev/null || echo "$(YELLOW)Aucun backup trouvé$(NC)"
+
 # ==============================================
 # 🐳 DOCKER
 # ==============================================
