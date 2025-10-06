@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { bunnyService } from "../../services/bunnyService";
 import { getUploadFeeEUR, validateVideoType } from "./pricing";
 import { BUNNY_TARIFFS, CREATOR_CAP_EUR, MIN_ACTIVATION_EUR } from "../../../shared/constants/bunnyDeposit";
+import { videoLifecycleService } from "../../services/videoLifecycleService";
 
 // Validate Bunny.net configuration at module load
 const bunnyConfig = bunnyService.validateBunnyTokenConfig();
